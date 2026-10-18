@@ -2,7 +2,11 @@
 
 Une tâche par ligne. Claude les traite dans l'ordre et coche `[x]` quand c'est fait.
 
-- [ ] 
+- [ ] Accueil fiable : potentiel du jour = Planning safe (pas la somme des 5 meilleurs crafts) ; « prix habituel » qui écarte les périodes de pic (médiane 7 j hors jours en pic) ; ventes comptées sur les disparitions au prix plancher suivies d'une hausse du plancher (vrais achats), pas sur toutes les disparitions
+- [ ] Accueil orienté action : une seule liste « à faire maintenant » (plan du jour, annonces à ajuster, alertes importantes, ventes à poster ce soir)
+- [ ] Suivi des vrais gains : captures de l'historique des ventes en jeu → kinah réellement gagnés comparés aux estimations, pour calibrer l'outil (dont l'hypothèse des 20 % de part de marché)
+- [ ] Alertes plus calmes : couper les « bonne affaire », garder mes annonces, achat → craft au vert, notes de patch ; option « résumé quotidien uniquement »
+- [ ] Code consolidé : JavaScript du site sorti dans un fichier à part (comme scan.js) + tests automatiques des calculs clés (sûreté, ventes, chaînes, transmutation)
 
 ## Fait
 - [x] Transmutation intégrée (Od → ressource de même rareté, gratuite, sans échec, non liée) : Quoi récolter, Achat → craft (Od si moins cher), Mon stock, Planning safe (marchés partagés)
