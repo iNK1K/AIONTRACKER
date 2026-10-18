@@ -387,3 +387,14 @@ Vérifié en jeu par toi : la transmutation donne des ressources **non liées**,
 - **Téléchargements en parallèle** : 3 à la fois (a2-tracker), 2 pour aion2.exchange (source fragile), toujours au moins 0,35 s entre deux départs de requête. Aucun effet sur la justesse des données (mêmes réponses, écritures en base faites une par une).
 
 **Résultat** : `daily` complet en **~6 min** (recettes 1 s, activité 5 min, serveurs 29 s, images 6 s, analyse 9 s), contre ~35 min.
+
+---
+
+# Onglets réorganisés — 19/10/2026
+
+- **🌲 Récolte** remplace « Mes crafts » et « Quoi récolter » (doublon) : sélecteur **Par ressource** (récolte/heure, kinah/heure, heures avant saturation, meilleurs crafts ; bouton « crafts » pour le détail) / **Par craft** (le tableau complet, triable). L'accueil garde « ② Quoi récolter ».
+- **Achat → craft** : deux sous-catégories, calculées séparément pour chaque craft :
+  - **🏪 Achat à l'HDV → craft → vente** : ingrédients récoltables achetés directement ;
+  - **🔁 Achat d'Od → transmutation → craft → vente** : ingrédients récoltables remplacés par l'Od de même rareté (seulement les crafts où l'Od sert).
+  Pour chaque craft présent dans les deux : **barre et badge verts** (« ✔ mieux que via Od / que l'achat à l'HDV, +X/u ») du côté qui rapporte le plus, **rouges** de l'autre. Exemple : Pièce de bois d'Asvata −16 496/u en achetant le Bois à l'HDV, +1 304/u via Od ; Potion de soin supérieure : mieux à l'HDV.
+- Ordre des onglets : Aujourd'hui · Planning · Récolte · Achat → craft · Flip · Uniques · Mes métiers · Mon stock · Autres serveurs · Marché · Carte.

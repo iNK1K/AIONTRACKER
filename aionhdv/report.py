@@ -51,6 +51,10 @@ th.n{text-align:right}th[title]{cursor:help}th:hover{color:var(--txt)}
 td{padding:10px 12px;border-bottom:1px solid var(--line2);vertical-align:middle}
 tbody tr:nth-child(even){background:#ffffff04}tbody tr:hover{background:#ffffff0b}
 tr.dim td{opacity:.6}
+tr.better td:first-child{box-shadow:inset 3px 0 0 var(--ok)}tr.worse td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;margin:0 0 12px}
+.seg button{background:var(--card);color:var(--mut);border:0;padding:8px 16px;font:inherit;font-size:14px;font-weight:600;cursor:pointer}
+.seg button.on{background:var(--card2);color:var(--acc)}
 tr.grp td{background:var(--bg2);color:var(--warn);font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.05em;padding:8px 12px}
 td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 td.big{font-weight:700;font-size:15.5px}td.rank{color:var(--mut);width:36px}
@@ -316,7 +320,7 @@ function planSafe(save){const box=document.getElementById('psafe');if(!box||!win
   +'<div class="kpi"><div class="l">Mise en vente</div><div class="v" style="font-size:20px">'+PLANDATA.best+'</div><div class="s">meilleur moment pour poster</div></div></div>'
   +'<div class="uses">'+rows.map(([r,p],k)=>`<div class="card" style="padding:12px 16px"><b>${k+1}. Récolter <span class="nm" title="Cliquer pour copier">${escH(r)}</span> pendant ${fmtH(p.h)}</b> <span class="sub">(≈ ${NF.format(Math.round(p.res))} ressources)</span>`
    +p.c.filter(c=>c.units>0).map(c=>`<div class="row"><span>→ fabriquer <b>${NF.format(c.units)}</b> × <span class="nm" title="Cliquer pour copier">${escH(c.o)}</span>${c.lot?' · '+Math.max(1,Math.round(c.units/Math.min(c.lot,c.units)))+' annonce(s) de '+NF.format(Math.min(c.lot,c.units)):''}</span><b class="pos">${kf(c.k)}</b></div>`).join('')+'</div>').join('')+'</div>'
-  +(Object.keys(R).length?'':'<p class="sub">Récolte par heure : 100 par défaut pour chaque ressource ; indique tes vraies valeurs dans « Quoi récolter ».</p>')}
+  +(Object.keys(R).length?'':'<p class="sub">Récolte par heure : 100 par défaut pour chaque ressource ; indique tes vraies valeurs dans « 🌲 Récolte ».</p>')}
 function planGamble(save){const box=document.getElementById('pgamble');if(!box||!window.PLANDATA)return;
  const cEl=document.getElementById('pcombo'),oEl=document.getElementById('popp');
  const def=PLANDATA.chains.length?Math.round(PLANDATA.chains[0].steps[0].c*100):25;
@@ -355,6 +359,10 @@ function planGamble(save){const box=document.getElementById('pgamble');if(!box||
      +`<td>${k===o.S.length-1?'Vendre':(s.go?'<span class="badge b-ok">Tenter l’étape '+(k+2)+'</span><div class="sub">espérance '+sg(s.cont)+' contre vente '+kf(s.ecl.v)+'</div>':'<span class="badge b-warn">Vendre l’éclatant</span><div class="sub">tenter plus haut : '+(s.cont===-Infinity?'impossible (niveau)':sg(s.cont))+'</div>')}</td></tr>`}).join('')
    +'</tbody></table></div><p class="sub" style="margin-top:6px">Espérance = gain moyen par essai de l’étape 1 en suivant les conseils. Jackpot = chance de passer toutes les étapes avec combo, et gain si ça arrive (valeur finale − coûts de tous les essais).</p></details>'}).join('')
   ||'<p class="mut">Aucune chaîne avec des prix connus.</p>'}
+function segShow(btn,id){const seg=btn.parentNode;seg.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===btn));
+ const sec=seg.closest('section');sec.querySelectorAll('.segp').forEach(p=>p.style.display=p.id===id?'':'none')}
+function resCrafts(name){const sec=document.getElementById('harvest');segShow(sec.querySelectorAll('.seg button')[1],'hcraft');
+ const inp=document.querySelector('#hcraft input.search');inp.value=name;filt(inp,'th');inp.scrollIntoView({block:'center'})}
 function clearStock(){document.querySelectorAll('#stock input[data-r]').forEach(i=>i.value='');calc()}
 document.addEventListener('DOMContentLoaded',()=>{let t='home';try{t=localStorage.getItem('tab')||t;
  if(localStorage.getItem('detail')){document.body.classList.add('detail');document.querySelectorAll('input.dt').forEach(x=>x.checked=true)}}catch(e){}
@@ -542,7 +550,7 @@ def planning_tab(cfg, my):
     data = json.dumps(dict(targets=targets, chains=my.get("chains") or [], best=best), ensure_ascii=False,
                       separators=(",", ":"))
     return ("<h2>Planning de la journée</h2><p class='lead'>Deux façons de jouer ta récolte (jamais vendue brute). "
-            "Les calculs utilisent tes niveaux de métier (🛠️ Mes métiers), ta récolte par heure (Quoi récolter, "
+            "Les calculs utilisent tes niveaux de métier (🛠️ Mes métiers), ta récolte par heure (🌲 Récolte, "
             "100 par défaut) et ton stock (🧮 Mon stock).</p>"
             "<h3>🛡️ Planning safe : récolter ce qui rapporte et se vend</h3>"
             '<div class="toolbar"><label class="tg">Temps de jeu aujourd’hui : <input type="number" id="phours" min="0.5" '
@@ -605,7 +613,33 @@ def metiers_tab(con, my):
             + f"<script>window.CRAFTDATA={data};</script>")
 
 
-def table_crafts(ctx, rows, tid, harvest):
+def cmp_class(compare, e):
+    c = (compare or {}).get(e["item_id"])
+    return "" if not c else ("better" if c[0] else "worse")
+
+
+def cmp_badge(compare, e):
+    c = (compare or {}).get(e["item_id"])
+    if not c:
+        return ""
+    better, diff, other = c
+    return (f'<span class="badge b-ok">✔ mieux que {esc(other)} (+{fmt(diff)}/u)</span>' if better
+            else f'<span class="badge b-bad">✖ moins bien que {esc(other)} (−{fmt(diff)}/u)</span>')
+
+
+def compare_ways(a, b, label_b):
+    """Pour chaque craft present dans les deux listes : meilleur ou moins bien que l'autre facon (net par unite)."""
+    other = {e["item_id"]: e for e in b}
+    out = {}
+    for e in a:
+        o = other.get(e["item_id"])
+        if o and o["net_u"] != e["net_u"]:
+            out[e["item_id"]] = (e["net_u"] > o["net_u"], abs(e["net_u"] - o["net_u"]), label_b)
+    return out
+
+
+def table_crafts(ctx, rows, tid, harvest, compare=None):
+    """compare : {item_id: (meilleur?, ecart net/u, nom de l'autre facon)} pour colorer vert/rouge face a l'autre categorie."""
     head = ("<tr>" + _th("#") + _th("Craft") +
             (_th("Ressources / unité") if harvest else _th("Ingrédients achetés")) +
             ("" if harvest else _th("Coût/u", "Coût des ingrédients au prix réaliste", True)) +
@@ -643,7 +677,7 @@ def table_crafts(ctx, rows, tid, harvest):
         cols = (_num_td(e["net_par_ressource"]) if harvest else
                 f'<td class="n {_cls(e["marge"])}" data-v="{e["marge"] or 0}">{(e["marge"] or 0):+.0%}</td>')
         body.append(
-            f"<tr class='{'' if is_good(e) else 'dim'}' {craft_attrs(e)}><td class='n rank'>{i}</td>"
+            f"<tr class='{'' if is_good(e) else 'dim'} {cmp_class(compare, e)}' {craft_attrs(e)}><td class='n rank'>{i}</td>"
             f"<td>{ctx.label(e['item_id'], sub=f'{METIERS.get(e['metier'], e['metier'])} {niveau(e['maitrise'])} · lot ×{e['lot']:g}')}</td>"
             f"<td>{res}</td>"
             + ("" if harvest else _num_td(e["achats_u"], color=False))
@@ -656,7 +690,7 @@ def table_crafts(ctx, rows, tid, harvest):
             + _num_td(e["prix_ref"], color=False, x=True) + _num_td(e["net_pess_u"], x=True)
             + _num_td(e["profit_pess_j"], k=True, x=True)
             + ("" if harvest else _num_td(e["capital_j"], color=False, k=True, x=True))
-            + f"<td>{status(e)}{surete_html(e)}</td></tr>")
+            + f"<td>{cmp_badge(compare, e)}{status(e)}{surete_html(e)}</td></tr>")
     return toolbar(tid) + f'<div class="wrap"><table id="{tid}"><thead>{head}</thead><tbody>{"".join(body)}</tbody></table></div>'
 
 
@@ -672,7 +706,8 @@ def table_targets(ctx, targets):
             + ("" if u["fiable"] else f" <span class='badge b-warn'>⚠ {esc('; '.join(u['flags']) or 'à perte')}</span>")
             + "</div>" for u in t["usages"]) + "</div>"
         body.append(f"<tr class='{'' if t['meilleur'] else 'dim'}' data-res=\"{esc(t['ressource'])}\" "
-                    f"data-best='{avg}' data-abs='{t['absorbable_j'] or 0}'><td>{ctx.label(name=t['ressource'])}</td>"
+                    f"data-best='{avg}' data-abs='{t['absorbable_j'] or 0}'><td>{ctx.label(name=t['ressource'])}"
+                    f"<button class='mapbtn' style='margin-top:4px' onclick=\"resCrafts(this.closest('tr').dataset.res)\">crafts</button></td>"
                     f"<td class='n'><input type='number' min='0' step='10' class='rate' placeholder='100' "
                     f"style='width:74px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;background:var(--bg2);"
                     f"color:var(--txt);font:inherit;text-align:right' oninput='rateCalc(this)'></td>"
@@ -1143,22 +1178,33 @@ def build(con, cfg, results):
     if my:
         add("home", "🏠 Aujourd’hui", home(con, cfg, ctx, my, sname))
         sep()
-        add("harvest", "Mes crafts (récolte)",
-            f"<h2>Ma récolte → craft → vente</h2><p class='lead'>Tes ressources récoltées sont gratuites. {hyp} "
-            "Ventes/j = ta part des ventes mesurées sur ton serveur (annonces disparues sur 24 h × taille habituelle "
-            "des annonces).</p>" + table_crafts(ctx, my["harvest"], "th", True))
-        add("targets", "Quoi récolter",
-            "<h2>Quoi récolter, et en quoi le transformer</h2><p class='lead'>Classement des ressources par gain réel "
-            "une fois transformées (le brut n’est jamais vendu). Indique ce que tu récoltes par heure pour chaque ressource "
+        add("planning", "📅 Planning", planning_tab(cfg, my))
+        add("harvest", "🌲 Récolte",
+            "<h2>Récolte → craft → vente</h2><p class='lead'>Ta récolte est gratuite et toujours transformée "
+            "(jamais vendue brute). Deux façons de voir les mêmes calculs.</p>"
+            '<div class="seg"><button class="on" data-v="res" onclick="segShow(this,\'hres\')">Par ressource</button>'
+            '<button data-v="craft" onclick="segShow(this,\'hcraft\')">Par craft</button></div>'
+            "<div id='hres' class='segp'><p class='lead'>Indique ce que tu récoltes par heure pour chaque ressource "
             "(100 par défaut) : <b>Kinah / heure</b> dit où passer ton temps, <b>Heures / jour</b> combien de temps de récolte "
-            "le marché absorbe avant que les prix baissent. Clique sur un en-tête pour trier. "
-            "Les usages douteux ou à perte sont indiqués en orange.</p>" + table_targets(ctx, my["targets"]))
+            "le marché absorbe avant que les prix baissent. Clique sur « crafts » pour voir le détail d’une ressource. "
+            "Les usages douteux ou à perte sont indiqués en orange.</p>" + table_targets(ctx, my["targets"]) + "</div>"
+            f"<div id='hcraft' class='segp' style='display:none'><p class='lead'>{hyp} Ventes/j = ta part des ventes "
+            "mesurées sur ton serveur (annonces disparues sur 24 h × taille habituelle des annonces).</p>"
+            + table_crafts(ctx, my["harvest"], "th", True) + "</div>")
+        direct, trans = my.get("buy_direct") or [], my.get("buy_trans") or []
         add("buy", "Achat → craft",
-            f"<h2>Acheter les ingrédients → fabriquer → revendre</h2><p class='lead'>{hyp}</p>"
-            + table_spikes(ctx, my.get("spikes")) + table_crafts(ctx, my["buy"], "tb", False))
+            f"<h2>Acheter les ingrédients → fabriquer → revendre</h2><p class='lead'>{hyp} Deux façons d’acheter les "
+            "ingrédients récoltables : directement à l’HDV, ou acheter de l’Od de même rareté et le transmuter (gratuit, "
+            "sans échec). <b class='pos'>Vert</b> = cette façon rapporte plus que l’autre pour ce craft, "
+            "<b class='neg'>rouge</b> = moins.</p>"
+            + table_spikes(ctx, my.get("spikes"))
+            + '<div class="seg"><button class="on" onclick="segShow(this,\'bdir\')">🏪 Achat à l’HDV → craft → vente</button>'
+            f'<button onclick="segShow(this,\'btr\')">🔁 Achat d’Od → transmutation → craft → vente ({len(trans)})</button></div>'
+            "<div id='bdir' class='segp'>" + table_crafts(ctx, direct, "tb", False, compare_ways(direct, trans, "via Od"))
+            + "</div><div id='btr' class='segp' style='display:none'>"
+            + table_crafts(ctx, trans, "tbt", False, compare_ways(trans, direct, "l’achat à l’HDV")) + "</div>")
         add("flips", "🔁 Flip", "<h2>Achat → revente (sans craft)</h2>" + table_flips(ctx, my["flips"], cfg))
         add("uniques", "💎 Uniques", "<h2>Équipements Unique : prix bradés</h2>" + table_uniques(ctx, my["uniques"], cfg))
-        add("planning", "📅 Planning", planning_tab(cfg, my))
         add("metiersTab", "🛠️ Mes métiers", metiers_tab(con, my))
         add("plan", "🧮 Mon stock", "<h2>Mon stock → quoi fabriquer</h2>" + stock_calc(ctx, cfg, my["harvest"], my["market"].gather_names(),
                          {t: my["market"].items[s]["base_name"] for t, s in my["market"].transmute.items()})

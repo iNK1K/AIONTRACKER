@@ -363,9 +363,11 @@ class Market:
                     listings=self.listings.get(item_id, 0), stale=stale)
 
     # ------------------------------------------------------------ cout d'une recette
-    def recipe_cost(self, recipe, mode, depth=0, skip=()):
+    def recipe_cost(self, recipe, mode, depth=0, skip=(), trans="auto"):
         """mode 'harvest' : ressources de recolte gratuites ; mode 'buy' : tout s'achete a l'HDV.
-        skip : ingredients deja en main (ex. l'objet eclatant de l'etape precedente d'une chaine), non comptes."""
+        skip : ingredients deja en main (ex. l'objet eclatant de l'etape precedente d'une chaine), non comptes.
+        trans : 'auto' = le moins cher entre la ressource et l'Od a transmuter ; 'off' = achat direct seulement ;
+        'force' = l'Od transmute des qu'il est achetable (pour comparer les deux facons d'acheter)."""
         npc = self.cfg["npc_reagent_price"]
         cost_r = cost_p = 0.0
         lines, gather, buys, thin_list = [], {}, {}, []
@@ -384,7 +386,10 @@ class Market:
                 for o in opts:
                     # la ressource elle-meme, ou l'Od de meme rarete a transmuter (1 pour 1)
                     target = self.items.get(o["item_id"], {}).get("base_name")
-                    for src, via in ((o["item_id"], None), (self.transmute.get(target), target)):
+                    od = self.transmute.get(target) if trans != "off" else None
+                    cands = ((od, target),) if trans == "force" and od and self.buy_price(od) else \
+                        ((o["item_id"], None), (od, target))
+                    for src, via in cands:
                         bp = self.buy_price(src) if src else None
                         if bp and (thin_ok or bp["listings"] >= 2):
                             c = bp["real"] * o["qty"]
@@ -418,7 +423,7 @@ class Market:
                         sub = rs
                         break
             if depth == 0 and sub:
-                sc = self.recipe_cost(sub[0], mode, depth + 1)
+                sc = self.recipe_cost(sub[0], mode, depth + 1, trans=trans)
                 per = o["qty"] / (sub[0]["output_qty"] or 1)
                 cost_r += sc["cost_r"] * per
                 cost_p += sc["cost_p"] * per
@@ -436,7 +441,7 @@ class Market:
         return dict(cost_r=cost_r, cost_p=cost_p, lines=lines, gather=gather, buys=buys, ok=ok, thin=thin_list)
 
     # ------------------------------------------------------------ evaluation
-    def evaluate(self, recipe, mode):
+    def evaluate(self, recipe, mode, trans="auto"):
         oid = recipe["item_id"]
         sp = self.sell_price(oid)
         ref = self.ref(oid)
@@ -445,9 +450,9 @@ class Market:
         masteries = self.cfg.get("masteries", {})
         if (recipe["mastery"] or 0) > masteries.get(recipe["profession"], 999):
             return None
-        c = self.recipe_cost(recipe, mode)
-        if not c["ok"]:
-            return None
+        c = self.recipe_cost(recipe, mode, trans=trans)
+        if not c["ok"] or (trans == "force" and not any("transmuté" in l for l in c["lines"])):
+            return None                                  # 'force' : seulement les crafts ou l'Od sert vraiment
         q = recipe["output_qty"] or 1
         fees = self.cfg["fees"]
         cost_u, cost_pu = c["cost_r"] / q, c["cost_p"] / q
@@ -597,7 +602,7 @@ class Market:
         lot = min(lot, max(1, round(per_day)))
         return dict(lot_vente=lot, nb_lots_j=max(1, round(per_day / lot)))
 
-    def best_per_item(self, mode):
+    def best_per_item(self, mode, trans="auto"):
         out = []
         for oid, recipes in self.recipes_by_item.items():
             best = None
@@ -607,7 +612,7 @@ class Market:
                 if mode == "harvest" and not any(self.items.get(o["item_id"], {}).get("is_gather")
                                                   for opts in self.ingredients.get(r["id"], {}).values() for o in opts):
                     continue
-                e = self.evaluate(r, mode)
+                e = self.evaluate(r, mode, trans)
                 if e and (best is None or e["profit_j"] > best["profit_j"]):
                     best = e
             if best:
@@ -705,8 +710,8 @@ def add_safety(con, res, acts=None):
     fees = m.cfg["fees"]
     for e in res["spikes"]:
         e["surete"] = m.safety(e, act(e["item_id"]), e["achats_u"], e["net_habituel_u"], e.get("depuis"))
-    for e in res["buy"]:
-        if e["net_u"] > 0 and not e["flags"]:
+    for e in res["buy"] + res.get("buy_direct", []) + res.get("buy_trans", []):
+        if e["net_u"] > 0 and not e["flags"] and "surete" not in e:
             usual = e["prix_ref"] * (1 - fees) - e["achats_u"] if e["prix_ref"] else None
             e["surete"] = m.safety(e, act(e["item_id"]), e["achats_u"], usual)
     for f in res["flips"]:
@@ -724,6 +729,8 @@ def run_all(con, cfg, server=None):
     m = Market(con, cfg, server)
     harvest = m.best_per_item("harvest")
     buy = m.best_per_item("buy")
+    # achat -> craft en deux facons, pour les comparer : ingredients achetes a l'HDV, ou Od achete puis transmute
+    buy_direct, buy_trans = m.best_per_item("buy", "off"), m.best_per_item("buy", "force")
     targets = m.gather_targets(harvest)
     plan = m.production_plan(harvest, cfg.get("harvest_per_day"))
     run_ts = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
@@ -738,4 +745,5 @@ def run_all(con, cfg, server=None):
     con.commit()
     return add_safety(con, dict(run_ts=run_ts, server=server, as_of=m.as_of, ratio=m.ratio, harvest=harvest, buy=buy,
                 targets=targets, plan=plan, hours=m.hourly_profile(), uniques=m.uniques(),
-                flips=m.flips(), listings=m.my_listings(), spikes=m.spikes(buy), chains=m.gamble_chains(), market=m))
+                flips=m.flips(), listings=m.my_listings(), spikes=m.spikes(buy), chains=m.gamble_chains(),
+                buy_direct=buy_direct, buy_trans=buy_trans, market=m))
