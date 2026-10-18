@@ -27,10 +27,17 @@ def load_config():
             data = json.load(f)
         cfg["my_listings"] = data.get("annonces") or {}
         cfg["_my_listings_help"] = data.get("_", "")
-    # lien vers l'editeur GitHub du fichier (le depot est connu dans GitHub Actions)
+    sales = ROOT / "mes_ventes.json"
+    if sales.exists():
+        with open(sales, encoding="utf-8") as f:
+            data = json.load(f)
+        cfg["my_sales"] = data.get("ventes") or []
+        cfg["_my_sales_help"] = data.get("_", "")
+    # liens vers l'editeur GitHub des fichiers (le depot est connu dans GitHub Actions)
     repo = os.environ.get("GITHUB_REPOSITORY") or cfg.get("github_repo")
     if repo:
         cfg["_github_edit_url"] = f"https://github.com/{repo}/edit/main/mes_annonces.json"
+        cfg["_github_sales_edit_url"] = f"https://github.com/{repo}/edit/main/mes_ventes.json"
     for key in ("discord_webhook_url", "discord_webhook_unique_url", "discord_webhook_news_url"):
         if os.environ.get(key.upper()):
             cfg[key] = os.environ[key.upper()]

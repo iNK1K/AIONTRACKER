@@ -313,7 +313,7 @@ window.reserveToList = async function (img, progress) {
     v.push(Math.min(1, w / h));
     return v;
   }
-  function readPrice(gl, models) {
+  function readPrice(gl, models, maxErr) {
     // lit les chiffres de gauche a droite ; s'arrete au premier glyphe qui n'est pas un chiffre (ex. « par unite »)
     let txt = '', worst = 0;
     for (const g of gl) {
@@ -324,7 +324,7 @@ window.reserveToList = async function (img, progress) {
         let e = 0; for (let i = 0; i < m.length; i++) e += (v[i] - m[i]) ** 2; e /= m.length;
         if (!best || e < best.e) best = { digit, e };
       }
-      if (best.e > 0.08) break;
+      if (best.e > (maxErr || 0.08)) break;
       txt += best.digit; worst = Math.max(worst, best.e);
     }
     return { value: txt ? parseInt(txt, 10) : null, err: worst, digits: txt.length };
@@ -349,7 +349,8 @@ window.reserveToList = async function (img, progress) {
       progress(`Chargement des icônes de référence : ${k} / ${all.length} (seulement au premier collage)…`);
       const got = await Promise.all(all.slice(k, k + batch).map(r => new Promise(ok => {
         const i = new Image();
-        i.onload = () => ok({ n: r.n, t: thumbOf(i, 0, 0, i.naturalWidth, i.naturalHeight) });
+        i.onload = () => ok({ n: r.n, g: (/\.(Common|Rare|Legend|Unique|Epic|Special)\./.exec(r.s) || [])[1],
+                              t: thumbOf(i, 0, 0, i.naturalWidth, i.naturalHeight) });
         i.onerror = () => ok(null);
         i.src = r.s;
       })));
@@ -395,6 +396,173 @@ window.reserveToList = async function (img, progress) {
       out.push({ name: best ? best.n : null, d: best && best.d, qty, unit, total: tot.value, check,
                  x: ic.x, y: ic.y, w: ic.w, h: ic.h });
     }
+    return out;
+  };
+
+  // ====================================================================== historique des ventes
+  // Capture de l'historique des ventes : une ligne par vente (icone avec quantite, nom, prix total + « par unite »,
+  // montant recu apres taxe + « par unite », date « jj.mm.aaaa hh:mm » derriere un badge bleu). Deux pieces par ligne :
+  // la premiere precede le prix de vente, la seconde le montant recu. La piece y est plus pale que dans « Mes ventes ».
+  const paleGold = (d, i) => d[i] > 120 && d[i + 1] > 95 && d[i] - d[i + 2] > 28 && d[i] >= d[i + 1] && d[i + 1] >= d[i + 2] - 5;
+  function coinsOf(P, test) {
+    const { W, H, d } = P, x0 = Math.floor(W * 0.3), cols = [];
+    // taches de pixels dores, regroupees par composantes connexes (assez grosses, a peu pres rondes)
+    const seen = new Uint8Array(W * H), out = [];
+    for (let y = 0; y < H; y++) for (let x = x0; x < W; x++) {
+      const k = y * W + x;
+      if (seen[k] || !test(d, k * 4)) continue;
+      let a = x, b = x, t = y, u = y, n = 0;
+      const st = [k]; seen[k] = 1;
+      while (st.length) {
+        const q = st.pop(), qx = q % W, qy = (q - qx) / W; n++;
+        a = Math.min(a, qx); b = Math.max(b, qx); t = Math.min(t, qy); u = Math.max(u, qy);
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = qx + dx, ny = qy + dy, nk = ny * W + nx;
+          if (nx < x0 || nx >= W || ny < 0 || ny >= H || seen[nk] || !test(d, nk * 4)) continue;
+          seen[nk] = 1; st.push(nk);
+        }
+      }
+      const w = b - a + 1, h = u - t + 1;
+      if (h >= 10 && h <= 30 && w >= 0.6 * h && w <= 1.5 * h && n > 0.3 * w * h) out.push({ x0: a, x1: b, y0: t, y1: u });
+    }
+    return out;
+  }
+  // hauteur d'encre d'un glyphe ; nettoyage : on retire les eclats (bord de piece, points, deux-points) et on coupe
+  // en deux les chiffres colles (« 24 » lu comme un seul glyphe de 13 px)
+  function inkH(g) {
+    let t = -1, b = -1;
+    g.M.forEach((r, k) => { for (let x = g.a; x < g.b; x++) if (r[x] > 0.5) { if (t < 0) t = k; b = k; break; } });
+    return t < 0 ? 0 : b - t + 1;
+  }
+  function clean(gl) {
+    const hs = gl.map(inkH), H = Math.max(0, ...hs), out = [];
+    gl.forEach((g, k) => {
+      const h = hs[k], w = g.b - g.a;
+      if (h < 0.6 * H || w <= 0.35 * h) return;
+      const n = Math.max(1, Math.round(w / (0.7 * h)));
+      for (let j = 0; j < n; j++) out.push({ a: g.a + Math.round(j * w / n), b: g.a + Math.round((j + 1) * w / n), M: g.M });
+    });
+    return out;
+  }
+  // chiffres de l'historique, appris sur des captures reelles : prix (gros), « par unite » (petits), date
+  const HIST_MODELS = {"big":{"0":[0.278,0.626,0.692,0.407,0.049,0.764,0.886,0.811,0.854,0.331,1.0,0.58,0.322,0.812,0.567,1.0,0.355,0.0,0.645,0.703,1.0,0.355,0.0,0.645,0.8,1.0,0.355,0.0,0.645,0.778,1.0,0.441,0.048,0.672,0.59,0.86,0.763,0.548,0.839,0.545,0.496,0.918,1.0,0.822,0.289,0.659],"1":[0.25,0.623,0.873,1.0,0.882,0.75,1.0,1.0,1.0,0.889,0.722,0.721,0.75,1.0,0.885,0.222,0.221,0.5,1.0,0.887,0.0,0.0,0.5,1.0,0.894,0.0,0.0,0.5,1.0,0.887,0.0,0.0,0.5,1.0,0.884,0.0,0.0,0.5,1.0,0.889,0.0,0.0,0.5,1.0,0.891,0.545],"2":[0.421,0.661,0.727,0.405,0.069,0.921,0.919,0.888,0.845,0.294,0.5,0.419,0.405,0.816,0.449,0.0,0.0,0.276,0.816,0.448,0.0,0.156,0.743,0.799,0.224,0.0,0.436,0.968,0.466,0.005,0.569,0.775,0.241,0.0,0.025,0.906,0.833,0.5,0.497,0.445,1.0,1.0,1.0,0.995,0.872,0.675],"3":[0.509,0.617,0.73,0.555,0.296,1.0,0.875,0.833,0.984,0.742,0.5,0.375,0.343,0.775,0.893,0.14,0.395,0.617,0.868,0.637,0.366,0.872,1.0,0.927,0.396,0.226,0.476,0.647,0.918,0.652,0.0,0.0,0.028,0.564,0.934,0.5,0.5,0.528,0.796,0.905,1.0,1.0,1.0,0.935,0.616,0.601],"4":[0.0,0.049,0.585,0.827,0.241,0.0,0.258,0.879,0.829,0.243,0.012,0.434,0.919,0.825,0.237,0.08,0.555,0.729,0.829,0.243,0.506,0.606,0.46,0.867,0.3,0.872,0.788,0.689,0.975,0.712,0.865,0.95,0.967,1.0,0.919,0.365,0.45,0.657,0.918,0.547,0.0,0.0,0.379,0.835,0.253,0.793],"5":[0.939,0.975,0.921,0.902,0.703,1.0,0.852,0.548,0.477,0.309,1.0,0.705,0.169,0.049,0.035,1.0,0.856,0.571,0.5,0.251,0.693,0.699,0.703,0.856,0.826,0.05,0.05,0.059,0.538,1.0,0.003,0.0,0.055,0.583,1.0,0.503,0.5,0.555,0.833,0.99,1.0,1.0,1.0,0.887,0.627,0.631],"6":[0.103,0.523,0.73,0.609,0.191,0.445,0.825,0.68,0.391,0.113,0.842,0.666,0.229,0.087,0.03,1.0,0.667,0.535,0.431,0.141,1.0,0.858,0.796,0.818,0.35,1.0,0.509,0.335,0.755,0.568,1.0,0.401,0.111,0.711,0.687,0.88,0.734,0.556,0.789,0.425,0.485,0.903,1.0,0.722,0.167,0.715],"7":[0.666,0.896,0.895,0.97,0.767,0.23,0.396,0.402,0.81,0.568,0.0,0.0,0.183,0.786,0.419,0.0,0.0,0.352,0.78,0.169,0.0,0.025,0.586,0.555,0.0,0.0,0.177,0.829,0.333,0.0,0.0,0.344,0.816,0.181,0.0,0.014,0.475,0.663,0.014,0.0,0.041,0.632,0.563,0.0,0.0,0.808],"8":[0.435,0.744,0.761,0.673,0.436,0.852,0.865,0.617,0.856,0.748,1.0,0.673,0.297,0.761,0.833,0.75,0.944,0.805,0.943,0.583,0.556,0.995,0.96,0.889,0.389,0.833,0.854,0.634,0.861,0.667,1.0,0.444,0.0,0.556,0.919,1.0,0.722,0.496,0.778,0.878,0.75,1.0,0.996,0.945,0.584,0.629],"9":[0.618,0.826,0.799,0.779,0.339,0.885,0.671,0.451,0.81,0.589,0.934,0.469,0.082,0.655,0.665,0.953,0.429,0.0,0.619,0.798,0.803,0.794,0.542,0.781,0.786,0.286,0.583,0.45,0.705,0.688,0.0,0.0,0.213,0.807,0.64,0.375,0.495,0.713,0.878,0.39,0.835,0.995,0.988,0.56,0.071,0.7]},"small":{"0":[0.432,0.625,0.613,0.6,0.39,0.706,0.481,0.21,0.487,0.678,0.69,0.273,0.0,0.293,0.7,0.57,0.159,0.0,0.177,0.59,0.517,0.1,0.0,0.117,0.533,0.567,0.155,0.0,0.174,0.587,0.683,0.274,0.0,0.29,0.704,0.684,0.474,0.205,0.489,0.702,0.405,0.607,0.611,0.624,0.425,0.6],"1":[0.0,0.137,0.361,0.699,0.705,0.289,0.498,0.567,0.742,0.699,0.289,0.361,0.241,0.603,0.692,0.0,0.0,0.0,0.568,0.704,0.0,0.0,0.0,0.565,0.688,0.0,0.0,0.0,0.56,0.69,0.0,0.0,0.0,0.563,0.701,0.0,0.0,0.0,0.565,0.692,0.0,0.0,0.0,0.566,0.695,0.435],"2":[0.557,0.646,0.64,0.685,0.524,0.401,0.283,0.224,0.523,0.779,0.0,0.0,0.0,0.386,0.799,0.0,0.0,0.034,0.449,0.671,0.0,0.005,0.245,0.56,0.371,0.0,0.213,0.546,0.439,0.107,0.211,0.53,0.447,0.126,0.0,0.626,0.654,0.344,0.211,0.21,0.834,0.748,0.641,0.625,0.625,0.6],"3":[0.538,0.572,0.609,0.684,0.511,0.31,0.173,0.178,0.546,0.796,0.0,0.0,0.0,0.407,0.723,0.158,0.359,0.406,0.461,0.364,0.203,0.516,0.71,0.657,0.31,0.045,0.157,0.303,0.556,0.625,0.0,0.0,0.0,0.308,0.732,0.165,0.042,0.138,0.486,0.754,0.534,0.471,0.553,0.625,0.478,0.6],"4":[0.0,0.008,0.311,0.717,0.469,0.0,0.188,0.56,0.786,0.47,0.097,0.431,0.513,0.597,0.476,0.311,0.456,0.193,0.439,0.455,0.444,0.259,0.022,0.436,0.474,0.546,0.237,0.24,0.577,0.598,0.668,0.541,0.601,0.75,0.755,0.353,0.357,0.378,0.61,0.634,0.0,0.0,0.028,0.438,0.473,0.6],"5":[0.673,0.761,0.66,0.646,0.399,0.745,0.541,0.243,0.23,0.122,0.784,0.401,0.0,0.0,0.0,0.811,0.608,0.419,0.401,0.194,0.415,0.411,0.496,0.681,0.599,0.002,0.001,0.077,0.417,0.747,0.0,0.0,0.0,0.306,0.719,0.236,0.117,0.212,0.535,0.709,0.595,0.537,0.618,0.635,0.4,0.6],"6":[0.205,0.512,0.594,0.522,0.378,0.557,0.613,0.276,0.102,0.044,0.585,0.238,0.0,0.0,0.0,0.547,0.318,0.414,0.416,0.299,0.708,0.484,0.414,0.584,0.672,0.667,0.258,0.0,0.191,0.604,0.616,0.216,0.0,0.112,0.531,0.664,0.464,0.185,0.369,0.695,0.407,0.6,0.594,0.644,0.55,0.6],"7":[0.615,0.603,0.623,0.691,0.802,0.204,0.188,0.192,0.451,0.774,0.0,0.0,0.0,0.39,0.593,0.0,0.0,0.182,0.602,0.424,0.0,0.0,0.385,0.665,0.279,0.0,0.144,0.558,0.481,0.068,0.0,0.339,0.69,0.351,0.0,0.101,0.511,0.552,0.141,0.0,0.312,0.718,0.406,0.0,0.0,0.6],"8":[0.539,0.578,0.434,0.535,0.482,0.727,0.349,0.023,0.405,0.767,0.701,0.349,0.0,0.366,0.68,0.511,0.564,0.416,0.484,0.367,0.362,0.716,0.728,0.666,0.291,0.54,0.473,0.312,0.507,0.552,0.541,0.11,0.0,0.148,0.578,0.583,0.177,0.0,0.177,0.583,0.528,0.562,0.423,0.525,0.512,0.6],"9":[0.531,0.652,0.602,0.558,0.337,0.677,0.389,0.207,0.471,0.647,0.493,0.08,0.0,0.212,0.63,0.565,0.155,0.0,0.244,0.673,0.688,0.559,0.411,0.5,0.709,0.334,0.404,0.411,0.342,0.541,0.0,0.0,0.0,0.216,0.558,0.0,0.039,0.232,0.597,0.539,0.354,0.472,0.557,0.519,0.215,0.6]},"date":{"0":[0.433,0.695,0.705,0.579,0.228,0.842,0.812,0.649,0.849,0.527,1.0,0.537,0.215,0.723,0.679,1.0,0.397,0.009,0.605,0.739,1.0,0.397,0.009,0.608,0.809,1.0,0.397,0.009,0.607,0.773,1.0,0.474,0.046,0.615,0.684,0.833,0.776,0.542,0.796,0.645,0.44,0.886,0.999,0.834,0.379,0.658],"1":[0.25,0.621,0.872,1.0,0.874,0.75,1.0,1.0,1.0,0.875,0.715,0.715,0.75,1.0,0.871,0.215,0.215,0.5,1.0,0.871,0.0,0.0,0.5,1.0,0.871,0.0,0.0,0.5,1.0,0.873,0.0,0.0,0.5,1.0,0.87,0.0,0.0,0.5,1.0,0.871,0.0,0.0,0.5,1.0,0.875,0.545],"2":[0.478,0.672,0.722,0.471,0.084,0.848,0.829,0.789,0.862,0.329,0.429,0.344,0.31,0.81,0.5,0.0,0.0,0.25,0.833,0.499,0.0,0.166,0.735,0.809,0.238,0.02,0.458,0.94,0.452,0.0,0.531,0.761,0.25,0.0,0.0,0.889,0.833,0.5,0.5,0.444,1.0,1.0,1.0,1.0,0.893,0.675],"3":[0.583,0.607,0.692,0.628,0.396,0.917,0.779,0.712,0.958,0.844,0.417,0.302,0.26,0.729,1.0,0.11,0.36,0.58,0.856,0.735,0.301,0.773,0.958,0.978,0.513,0.174,0.382,0.537,0.889,0.792,0.0,0.0,0.003,0.505,1.0,0.5,0.5,0.503,0.755,1.0,1.0,1.0,1.0,0.944,0.694,0.592],"4":[0.0,0.019,0.528,0.799,0.199,0.0,0.203,0.851,0.799,0.198,0.001,0.364,0.908,0.795,0.192,0.028,0.513,0.733,0.794,0.19,0.41,0.642,0.451,0.837,0.256,0.809,0.815,0.676,0.959,0.689,0.81,0.918,0.94,1.0,0.9,0.31,0.418,0.616,0.902,0.503,0.0,0.0,0.352,0.801,0.202,0.808],"5":[0.957,1.0,0.924,0.893,0.663,0.999,0.829,0.476,0.393,0.216,1.0,0.659,0.106,0.0,0.0,1.0,0.83,0.553,0.5,0.25,0.652,0.665,0.666,0.833,0.833,0.0,0.0,0.0,0.5,1.0,0.0,0.0,0.037,0.556,1.0,0.5,0.5,0.537,0.806,0.988,1.0,1.0,1.0,0.869,0.607,0.636],"6":[0.191,0.715,0.78,0.586,0.257,0.632,0.774,0.465,0.188,0.064,0.941,0.503,0.087,0.021,0.001,1.0,0.664,0.504,0.456,0.179,1.0,0.75,0.621,0.875,0.504,1.0,0.388,0.079,0.704,0.732,1.0,0.385,0.0,0.667,0.676,0.854,0.718,0.5,0.833,0.523,0.428,0.883,1.0,0.833,0.25,0.713],"7":[0.62,0.868,0.885,0.973,0.749,0.198,0.368,0.386,0.807,0.557,0.0,0.0,0.176,0.767,0.399,0.0,0.0,0.35,0.766,0.149,0.0,0.022,0.583,0.554,0.0,0.0,0.17,0.822,0.333,0.0,0.0,0.336,0.802,0.172,0.0,0.015,0.456,0.655,0.005,0.0,0.04,0.613,0.552,0.0,0.0,0.809],"8":[0.472,0.747,0.723,0.736,0.553,0.861,0.886,0.577,0.841,0.907,1.0,0.747,0.314,0.724,1.0,0.75,1.0,0.832,0.997,0.75,0.574,0.998,0.949,1.0,0.574,0.861,0.885,0.609,0.889,0.861,1.0,0.5,0.0,0.5,1.0,1.0,0.75,0.491,0.75,1.0,0.75,1.0,0.991,1.0,0.75,0.607],"9":[0.751,0.903,0.819,0.875,0.375,1.0,0.591,0.319,0.812,0.625,1.0,0.375,0.0,0.625,0.66,1.0,0.375,0.0,0.625,0.763,0.833,0.792,0.555,0.785,0.743,0.25,0.5,0.333,0.678,0.635,0.0,0.0,0.229,0.812,0.625,0.41,0.5,0.729,0.875,0.375,0.899,1.0,0.981,0.544,0.062,0.705]}};
+  const blue = (d, i) => d[i + 2] > 140 && d[i + 2] - d[i] > 60;
+  window.__historyRows = function (img) {
+    const P = pixels(img), all = coinsOf(P, paleGold).sort((a, b) => a.y0 - b.y0 || a.x0 - b.x0), lines = [];
+    // une ligne = deux pieces a la meme hauteur (vente, montant recu)
+    for (const co of all) {
+      const l = lines.find(l => Math.abs(l[0].y0 - co.y0) <= 4);
+      if (l) l.push(co); else lines.push([co]);
+    }
+    const out = [];
+    for (const l of lines) {
+      if (l.length < 2) continue;
+      l.sort((a, b) => a.x0 - b.x0);
+      const [c1, c2] = l, h = c1.y1 - c1.y0 + 1, s = h >= 14 && h <= 19 ? 1 : h / 17;
+      const line = co => clean(glyphs(P, co.x1 + 2, co.x1 + Math.round(200 * s), co.y0 - 1, co.y1 + 2, Math.round(9 * s)));
+      const unitLine = co => clean(glyphs(P, co.x0 - Math.round(12 * s), co.x0 + Math.round(200 * s), co.y1 + Math.round(6 * s),
+                                          co.y1 + Math.round(12 * s) + h, Math.round(7 * s)));
+      const total = line(c1), unit = unitLine(c1), net = line(c2), netUnit = unitLine(c2);
+      // icone : 1082 px a gauche de la premiere piece ; centree sur le prix, ou 12 px plus bas s'il y a une ligne « par unite »
+      const cy = (c1.y0 + c1.y1) / 2 + (unit.length ? 12 * s : 0);
+      const icon = { x: Math.round(c1.x0 - 1082 * s), y: Math.round(cy - 30 * s), w: Math.round(60 * s), h: Math.round(60 * s), s };
+      // date : apres le badge bleu, a droite de la ligne, centree sur l'icone
+      const y0 = Math.round(cy - 11 * s), y1 = Math.round(cy + 11 * s);
+      let bx = -1;
+      for (let x = c2.x0 + Math.round(250 * s); x < P.W; x++)
+        for (let y = y0; y < y1; y++) if (blue(P.d, (y * P.W + x) * 4)) { bx = x; break; }
+      const date = bx < 0 ? [] : clean(glyphs(P, bx + 2, P.W, y0, y1, Math.round(30 * s)));
+      out.push({ icon, coins: [c1, c2], total, unit, net, netUnit, date });
+    }
+    return { P, rows: out, vecOf };
+  };
+
+  // capture -> ventes : objet (icone), quantite, prix, montant recu, date ; verifications croisees :
+  // recu = prix - taxe 10 % (arrondi a l'inferieur), prix = unitaire x quantite, date plausible
+  window.scanHistory = async function (img, opts) {
+    opts = opts || {};
+    const progress = opts.progress || (() => {}), thumbOf = window.__thumb;
+    const { P, rows } = window.__historyRows(img), list = await iconRefs(thumbOf, progress), out = [];
+    progress(`Lecture des ${rows.length} vente(s)…`);
+    const read = (g, m) => readPrice(g, HIST_MODELS[m], m === 'date' ? 0.12 : 0.08);
+    // rarete d'apres la couleur du nom (blanc commun, vert rare, bleu legendaire, or unique, orange epique) : departage
+    // les objets qui ont la meme icone (Mijote de pujery / de maitre)
+    const grade = ic => {
+      const { W, d } = P, cy = ic.y + ic.h / 2;
+      let n = 0, r = 0, g = 0, b = 0;
+      for (let y = Math.max(0, Math.round(cy - 22 * ic.s)); y < cy + 4 * ic.s; y++)
+        for (let x = ic.x + ic.w + 8; x < Math.min(W, ic.x + ic.w + 380 * ic.s); x++) {
+          const i = (y * W + x) * 4;
+          if (Math.max(d[i], d[i + 1], d[i + 2]) > 150) { n++; r += d[i]; g += d[i + 1]; b += d[i + 2]; }
+        }
+      if (n < 50) return null;
+      r /= n; g /= n; b /= n;
+      if (g > r + 60 && g > b + 50) return 'Rare';
+      if (b > r + 70 && b > g + 30) return 'Legend';
+      if (r > 190 && b < 120 && g > 150) return 'Unique';
+      if (r > 190 && b < 120 && g <= 150) return 'Epic';
+      if (Math.abs(r - g) < 25 && Math.abs(g - b) < 25) return 'Common';
+      return null;
+    };
+    // date jj mm aaaa hh mm : chaque position n'admet que certains chiffres (dizaine des heures 0-2, etc.), ce qui
+    // corrige les chiffres colles mal coupes (« 04 » dont le 0 ressemble a un 6)
+    const ALLOWED = ['0123', '', '01', '', '2', '0', '', '', '012', '', '012345', ''];
+    const readDate = gl => {
+      let z = '';
+      for (let k = 0; k < 12; k++) {
+        const v = vecOf(gl[k].M, gl[k].a, gl[k].b);
+        if (!v) return null;
+        let best = null;
+        for (const [digit, m] of Object.entries(HIST_MODELS.date)) {
+          if (ALLOWED[k] && !ALLOWED[k].includes(digit)) continue;
+          let e = 0; for (let i = 0; i < m.length; i++) e += (v[i] - m[i]) ** 2; e /= m.length;
+          if (!best || e < best.e) best = { digit, e };
+        }
+        if (best.e > 0.12) return null;
+        z += best.digit;
+      }
+      return z;
+    };
+    // prix unitaire : les chiffres sont suivis de « par unite » ; on garde le plus long debut qui divise le prix total
+    const unitOf = (gl, total) => {
+      const u = read(gl, 'small');
+      if (!u.value || !total) return null;
+      for (let s = String(u.value); s.length; s = s.slice(0, -1)) if (total % +s === 0 && total / +s <= 9999) return +s;
+      return null;
+    };
+    for (const r of rows) {
+      const ic = r.icon, t = thumbOf(img, ic.x, ic.y, ic.w, ic.h);
+      const gr = grade(ic);
+      let scored = list.map(x => ({ n: x.n, g: x.g, d: robustDist(t, x.t) })).sort((a, b) => a.d - b.d);
+      // parmi les icones presque identiques a la meilleure, on garde celles de la rarete lue sur le nom
+      if (gr && scored.length) {
+        const near = scored.filter(x => x.d <= scored[0].d + 6), same = near.filter(x => x.g === gr);
+        if (same.length) scored = same.concat(scored.filter(x => !same.includes(x) && x.g === gr));
+      }
+      const best = scored[0];
+      const tot = read(r.total, 'big'), net = read(r.net, 'big'), uni = r.unit.length ? unitOf(r.unit, tot.value) : null;
+      const check = [];
+      let qty = 1;
+      if (uni) qty = tot.value / uni;
+      else if (r.unit.length) { const q = window.__readNumber(P, ic.x, ic.y, { px: ic.w, py: ic.h }); qty = q.qty || 1; check.push('quantité incertaine'); }
+      if (!tot.value) check.push('prix illisible');
+      else if (net.value !== Math.floor(tot.value * 0.9)) check.push('montant reçu ≠ prix − 10 %');
+      const z = r.date.length === 12 ? readDate(r.date) : null;
+      let date = null;
+      if (z) {
+        const [dd, mo, yy, hh, mi] = [z.slice(0, 2), z.slice(2, 4), z.slice(4, 8), z.slice(8, 10), z.slice(10)];
+        if (+dd >= 1 && +dd <= 31 && +mo >= 1 && +mo <= 12 && +hh <= 23 && +mi <= 59) date = `${yy}-${mo}-${dd} ${hh}:${mi}`;
+      }
+      if (!date) check.push('date illisible');
+      if (!best || best.d > 22 || scored[1] && scored[1].d - best.d < 2) check.push('objet incertain');
+      out.push({ name: best ? best.n : null, d: best && best.d, qty, unit: uni || tot.value, total: tot.value, net: net.value, date, check,
+                 x: ic.x, y: ic.y, w: ic.w, h: ic.h });
+    }
+    // l'historique va du plus recent au plus ancien : une date qui casse l'ordre est suspecte
+    out.forEach((v, k) => {
+      const a = out[k - 1], b = out[k + 1];
+      if (v.date && ((a && a.date && v.date > a.date) || (b && b.date && v.date < b.date))) v.check.push('date à vérifier');
+    });
     return out;
   };
 })();

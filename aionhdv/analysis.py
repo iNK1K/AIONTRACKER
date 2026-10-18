@@ -124,6 +124,75 @@ class Market:
                             chute=self.price_drop(iid) if iid else None))
         return out
 
+    def real_gains(self):
+        """Mes vraies ventes (mes_ventes.json, lues sur les captures de l'historique en jeu) face aux estimations de
+        l'outil : ventes par jour, part de marche, prix obtenu, taille des achats. Une ligne de l'historique = un achat
+        (un acheteur peut prendre une partie d'une annonce). Les rythmes ne sont calcules qu'a partir de 3 ventes d'un
+        meme objet, sur sa propre periode : (n - 1) achats entre le premier et le dernier."""
+        sales = []
+        for v in self.cfg.get("my_sales") or []:
+            try:
+                t = datetime.strptime(v["date"], "%Y-%m-%d %H:%M").replace(tzinfo=PARIS or timezone.utc).astimezone(timezone.utc)
+            except (KeyError, ValueError):
+                continue
+            if v.get("objet") and v.get("prix"):
+                sales.append(dict(v, t=t))
+        if not sales:
+            return None
+        start, end = min(s["t"] for s in sales), max(s["t"] for s in sales)
+        days = max(1.0, (end - start).total_seconds() / 86400)
+        share, fees = self.cfg["market_share"], self.cfg["fees"]
+        costs = {n: v.get("cout") for n, v in (self.cfg.get("my_listings") or {}).items() if isinstance(v, dict)}
+        items = {}
+        for s in sales:
+            it = items.setdefault(s["objet"], dict(objet=s["objet"], item_id=self.by_base.get(s["objet"]), lots=0,
+                                                   unites=0, brut=0, recu=0, ts=[]))
+            q = s.get("quantite") or 1
+            it["lots"] += 1; it["unites"] += q; it["brut"] += s["prix"]; it["ts"].append(s["t"])
+            it["recu"] += s.get("recu") or math.floor(s["prix"] * (1 - fees))
+        out = []
+        for it in items.values():
+            iid, ts = it["item_id"], sorted(it.pop("ts"))
+            a, b = ts[0], ts[-1]
+            span = (b - a).total_seconds() / 86400
+            it.update(prix_u=it["brut"] / it["unites"], recu_u=it["recu"] / it["unites"], achat_moyen=it["unites"] / it["lots"],
+                      debut=a, fin=b, unites_j=None, achats_j=None, recu_j=None)
+            if it["lots"] >= 3 and span >= 0.5:
+                k = (it["lots"] - 1) / it["lots"] / span        # rythme sans biais : n - 1 intervalles sur la periode
+                it.update(unites_j=it["unites"] * k, achats_j=it["lots"] * k, recu_j=it["recu"] * k)
+            # estimations de l'outil sur la meme periode (marche mesure : annonces disparues x taille des annonces)
+            mk = lot = None
+            if iid:
+                r = self.con.execute("SELECT AVG(drops_h) AS d, COUNT(*) AS n FROM activity WHERE server=? AND item_id=? "
+                                     "AND ts>=? AND ts<=?", (self.server, iid, a.isoformat()[:19],
+                                                             (b + timedelta(hours=24)).isoformat()[:19])).fetchone()
+                mk = r["d"] * 24 if r and r["n"] and r["d"] else None
+                lot = self.lot_size(iid)
+            it["lot_outil"] = lot
+            it["marche_unites_j"] = mk * lot if mk and lot else None
+            it["estime_unites_j"] = it["marche_unites_j"] * share if it["marche_unites_j"] else None
+            it["part"] = it["unites_j"] / it["marche_unites_j"] if it["unites_j"] and it["marche_unites_j"] else None
+            # prix : ce que le marche payait pendant la periode (ventes observees sur les releves horaires)
+            seen = self.sale_prices(iid, (b - a).total_seconds() / 3600 + 24, until=b + timedelta(hours=1)) if iid else []
+            it["prix_marche"] = statistics.median(seen) if len(seen) >= 3 else None
+            cost = costs.get(it["objet"])
+            it["cout"] = cost
+            it["marge_u"] = it["recu_u"] - cost if cost else None
+            out.append(it)
+        out.sort(key=lambda x: -x["recu"])
+        # calibrage, sur les objets vendus au moins 3 fois
+        cal = [x for x in out if x["unites_j"]]
+        ratio = [x["unites_j"] / x["estime_unites_j"] for x in cal if x["estime_unites_j"]]
+        parts = [x["part"] for x in cal if x["part"]]
+        prix = [x["prix_u"] / x["prix_marche"] for x in cal if x["prix_marche"]]
+        achat = [(x["achat_moyen"], x["lot_outil"]) for x in cal if x["lot_outil"]]
+        return dict(items=out, debut=start, fin=end, jours=days, ventes=len(sales), recu=sum(x["recu"] for x in out),
+                    recu_j=sum(x["recu"] for x in out) / days, part_supposee=share,
+                    part=statistics.median(parts) if parts else None,
+                    ratio=statistics.median(ratio) if ratio else None,
+                    prix_ratio=statistics.median(prix) if prix else None,
+                    achat=statistics.median(a / l for a, l in achat) if achat else None, n_cal=len(cal))
+
     def price_drop(self, item_id, hours=3):
         """Chute en cours : prix actuel compare au plus haut des dernieres heures (None si pas de chute nette)."""
         now = self.price.get(item_id)
@@ -304,18 +373,21 @@ class Market:
         return 0.40
 
     # ------------------------------------------------------------ prix d'achat / de vente
-    def sale_prices(self, item_id, hours):
+    def sale_prices(self, item_id, hours, until=None):
         """Prix des ventes observees : quand le nombre d'annonces baisse d'une heure a l'autre, les annonces parties
-        l'ont ete au prix le plus bas de l'heure precedente (une valeur par annonce disparue)."""
-        since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()[:19]
+        l'ont ete au prix le plus bas de l'heure precedente (une valeur par annonce disparue). Fenetre : les `hours`
+        heures avant `until` (maintenant par defaut)."""
+        end = until or datetime.now(timezone.utc)
+        since = (end - timedelta(hours=hours)).isoformat()[:19]
+        stop = end.isoformat()[:19]
         hourly = {}
         srv = self.con.execute("SELECT ax_id FROM servers WHERE id=?", (self.server,)).fetchone()
         if srv and srv["ax_id"]:
             for r in self.con.execute("SELECT ts, close, listings FROM ax_prices WHERE ax_server=? AND bucket='1h' "
-                                      "AND item_id=? AND ts>=?", (srv["ax_id"], item_id, since)):
+                                      "AND item_id=? AND ts>=? AND ts<=?", (srv["ax_id"], item_id, since, stop)):
                 hourly[r["ts"][:13]] = (r["close"], r["listings"])
-        for r in self.con.execute("SELECT ts, price, listings FROM quotes WHERE server=? AND item_id=? AND ts>=?",
-                                  (self.server, item_id, since)):
+        for r in self.con.execute("SELECT ts, price, listings FROM quotes WHERE server=? AND item_id=? AND ts>=? AND ts<=?",
+                                  (self.server, item_id, since, stop)):
             hourly[r["ts"][:13]] = (r["price"], r["listings"])
         pts, out = sorted(hourly.items()), []
         for (_, (p0, l0)), (_, (p1, l1)) in zip(pts, pts[1:]):
@@ -780,5 +852,5 @@ def run_all(con, cfg, server=None):
     con.commit()
     return add_safety(con, dict(run_ts=run_ts, server=server, as_of=m.as_of, ratio=m.ratio, harvest=harvest, buy=buy,
                 targets=targets, plan=plan, hours=m.hourly_profile(), uniques=m.uniques(),
-                flips=m.flips(), listings=m.my_listings(), spikes=m.spikes(buy), chains=m.gamble_chains(),
+                flips=m.flips(), listings=m.my_listings(), gains=m.real_gains() if server == str(cfg["my_server"]) else None, spikes=m.spikes(buy), chains=m.gamble_chains(),
                 buy_direct=buy_direct, buy_trans=buy_trans, market=m))

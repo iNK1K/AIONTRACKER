@@ -215,7 +215,8 @@ async function scanFile(file){if(!file||!(file.type||'').startsWith('image/'))re
  }catch(e){msg.textContent='Lecture impossible : '+e+' (la lecture fonctionne sur le site en ligne)'}}
 document.addEventListener('paste',e=>{const it=[...((e.clipboardData||{}).items||[])].find(i=>(i.type||'').startsWith('image/'));if(!it)return;
  const on=id=>{const sec=document.getElementById(id);return sec&&sec.classList.contains('on')};
- if(on('plan')){e.preventDefault();scanFile(it.getAsFile())}else if(on('home')){e.preventDefault();scanSales(it.getAsFile())}});
+ if(on('plan')){e.preventDefault();scanFile(it.getAsFile())}else if(on('home')){e.preventDefault();scanSales(it.getAsFile())}
+ else if(on('gains')){e.preventDefault();scanHist(it.getAsFile())}});
 let SALES=[];
 async function scanSales(file){if(!file||!(file.type||'').startsWith('image/'))return;const msg=document.getElementById('vmsg');
  msg.textContent='Lecture de la capture…';
@@ -235,6 +236,29 @@ function renderSales(){const box=document.getElementById('vrows');box.innerHTML=
  Object.entries(agg).forEach(([n,a])=>{const old=keep[n]&&typeof keep[n]==='object'?keep[n]:{};const cost=old.cout??(window.COSTS||{})[n];
   keep[n]={prix:a.prix,quantite:a.quantite,...(cost!=null?{cout:cost}:{})}});
  const file={_:(window.MY_LISTINGS_HELP||''),annonces:keep};document.getElementById('vjson').value=JSON.stringify(file,null,2)}
+// historique des ventes -> mes_ventes.json (ventes deja connues + ventes lues, sans doublon, de la plus recente a la plus ancienne)
+let HIST=[];
+async function scanHist(file){if(!file||!(file.type||'').startsWith('image/'))return;const msg=document.getElementById('gmsg');
+ msg.textContent='Lecture de la capture…';
+ try{await scanLoad();const url=URL.createObjectURL(file);
+  const img=await new Promise((ok,ko)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=()=>ko('image illisible');i.src=url});
+  const rows=await scanHistory(img,{progress:m=>msg.textContent=m});URL.revokeObjectURL(url);
+  if(!rows.length){msg.textContent='Aucune vente trouvée : capture la liste de l’historique des ventes (prix, montant reçu et date sur chaque ligne).';return}
+  rows.forEach(r=>{const cv=document.createElement('canvas');cv.width=cv.height=40;cv.getContext('2d').drawImage(img,r.x,r.y,r.w,r.h,0,0,40,40);r.cv=cv});
+  HIST=HIST.concat(rows);renderHist();const bad=rows.filter(r=>r.check.length).length;
+  msg.textContent=rows.length+' vente(s) lue(s)'+(bad?', dont '+bad+' à vérifier (en orange : corrige-les dans le texte ci-dessous)':'')
+   +'. Colle d’autres captures si ton historique est plus long, puis copie le fichier.'}catch(e){msg.textContent='Lecture impossible : '+e+' (la lecture fonctionne sur le site en ligne)'}}
+function renderHist(){const box=document.getElementById('grows');box.innerHTML='';
+ HIST.forEach(r=>{const d=document.createElement('span');d.className='chip';if(r.check.length)d.style.borderColor='var(--warn)';d.title=r.check.join(', ');
+  d.appendChild(r.cv);d.appendChild(document.createTextNode((r.check.length?'⚠ ':'')+(r.date||'date ?')+' · '+(r.name||'?')+' × '+r.qty+' : '+(r.total==null?'?':NF.format(r.total))));box.appendChild(d)});
+ const all={},key=v=>v.date+'|'+v.objet+'|'+v.prix;
+ (window.MY_SALES||[]).forEach(v=>all[key(v)]=v);
+ HIST.forEach(r=>{const v={date:r.date||'?',objet:r.name||'?',quantite:r.qty,prix:r.total,recu:r.net};all[key(v)]=v});
+ const list=Object.values(all).sort((a,b)=>b.date.localeCompare(a.date));
+ document.getElementById('gjson').value='{\\n "_": '+JSON.stringify(window.MY_SALES_HELP||'')+',\\n "ventes": [\\n'
+  +list.map(v=>'  '+JSON.stringify(v).replace(/,"/g,', "').replace(/":/g,'": ')).join(',\\n')+'\\n ]\\n}\\n'}
+function copyHist(){const t=document.getElementById('gjson').value;const done=()=>toast('Contenu de mes_ventes.json copié');
+ if(navigator.clipboard&&window.isSecureContext)navigator.clipboard.writeText(t).then(done,()=>copyOld(t,done));else copyOld(t,done)}
 function copySales(){const t=document.getElementById('vjson').value;const done=()=>toast('Contenu de mes_annonces.json copié');
  if(navigator.clipboard&&window.isSecureContext)navigator.clipboard.writeText(t).then(done,()=>copyOld(t,done));else copyOld(t,done)}
 const PROF={Alchemy:'Alchimie',Handicrafting:'Artisanat',Armorsmithing:"Forge d'armures",Blacksmithing:"Forge d'armes",Cooking:'Cuisine'};
@@ -1204,6 +1228,92 @@ def home(con, cfg, ctx, my, sname):
             + "<h3>⑥ Annonces officielles</h3>" + news_html)
 
 
+def gains_tab(ctx, cfg, my):
+    """💰 Mes gains : mes vraies ventes (mes_ventes.json) face aux estimations de l'outil, et remplissage depuis une
+    capture de l'historique des ventes en jeu."""
+    g = my.get("gains")
+    head = ("<h2>Mes gains réels</h2><p class='lead'>Tes ventes réelles (historique des ventes en jeu) comparées à ce que "
+            "l’outil prévoit, pour vérifier ses estimations : combien tu vends par jour, à quel prix, et ta vraie part du "
+            "marché. Une ligne de l’historique = un achat (un acheteur peut ne prendre qu’une partie d’une annonce).</p>")
+    if g:
+        pct = lambda v: f"{v:.0%}" if v is not None else "–"
+        kpis = (f'<div class="kpis">'
+                f'<div class="kpi"><div class="l">Kinah reçus</div><div class="v pos">{kfmt(g["recu"])}</div>'
+                f'<div class="s">{g["ventes"]} ventes du {esc(paris(g["debut"].isoformat(), "%d/%m %H:%M"))} au '
+                f'{esc(paris(g["fin"].isoformat(), "%d/%m %H:%M"))}</div></div>'
+                f'<div class="kpi"><div class="l">Par jour</div><div class="v pos">{kfmt(g["recu_j"])}</div>'
+                f'<div class="s">après la taxe de 10 %, sur {g["jours"]:.1f} j</div></div>'
+                f'<div class="kpi"><div class="l">Ma part réelle du marché</div><div class="v">{pct(g["part"])}</div>'
+                f'<div class="s">l’outil suppose {pct(g["part_supposee"])}</div></div>'
+                f'<div class="kpi"><div class="l">Ventes réelles / prévues</div>'
+                f'<div class="v">{"×" + format(g["ratio"], ".2f").replace(".", ",") if g["ratio"] else "–"}</div>'
+                f'<div class="s">unités par jour, objets vendus 3 fois ou plus</div></div></div>')
+        notes = []
+        if g["n_cal"]:
+            n = g["n_cal"]
+            if g["ratio"]:
+                notes.append(f"Tu vends <b>{g['ratio']:.2f}".replace(".", ",") + "×</b> ce que l’outil prévoit (ta part de "
+                             f"{pct(g['part_supposee'])} des ventes mesurées), ce qui fait une part réelle de <b>{pct(g['part'])}</b>.")
+            if g["prix_ratio"]:
+                notes.append(f"Prix obtenu = <b>{g['prix_ratio']:.2f}".replace(".", ",") + "×</b> le prix des ventes "
+                             "observées sur le marché pendant la même période.")
+            if g["achat"]:
+                notes.append(f"Tes acheteurs prennent en moyenne <b>{g['achat']:.1f}".replace(".", ",") + "×</b> la taille "
+                             "d’annonce que l’outil utilise (mesurée sur Kaisinel).")
+            notes.append(f"Calcul sur {n} objet{'s' if n > 1 else ''} vendu{'s' if n > 1 else ''} au moins 3 fois : "
+                         + ("attends d’en avoir au moins 3 avant de changer les hypothèses de l’outil." if n < 3 else
+                            "assez pour ajuster les hypothèses (part de marché dans config.json)."))
+        else:
+            notes.append("Pas encore d’objet vendu au moins 3 fois : ajoute des captures pour comparer aux estimations.")
+        loss = [x for x in g["items"] if x["marge_u"] is not None and x["marge_u"] < 0]
+        for x in loss:
+            notes.append(f"<b class='neg'>⚠ {esc(x['objet'])} : vendu à perte</b> (reçu {fmt(round(x['recu_u']))} /u après "
+                         f"taxe, coût {fmt(x['cout'])} /u dans mes_annonces.json, soit {fmt(round(x['marge_u']))} /u).")
+        rows = "".join(
+            f"<tr><td>{ctx.label(x['item_id'], x['objet'])}</td>"
+            f"{_num_td(x['lots'], color=False)}{_num_td(x['unites'], color=False)}{_num_td(x['recu'], color=False, k=True)}"
+            f"{_num_td(round(x['prix_u']), color=False)}{_num_td(round(x['prix_marche']) if x['prix_marche'] else None, color=False)}"
+            f"{_num_td(round(x['marge_u']) if x['marge_u'] is not None else None)}"
+            f"{_num_td(round(x['unites_j'], 1) if x['unites_j'] else None, color=False)}"
+            f"{_num_td(round(x['estime_unites_j'], 1) if x['estime_unites_j'] else None, color=False)}"
+            f"<td class='n'>{pct(x['part']) if x['part'] else '–'}</td>"
+            f"{_num_td(round(x['achat_moyen'], 1), color=False)}{_num_td(x['lot_outil'], color=False)}</tr>"
+            for x in g["items"])
+        table = (f'<div class="wrap"><table><thead><tr>{_th("Objet")}{_th("Ventes", "Achats (lignes de l’historique)", True)}'
+                 f'{_th("Unités", None, True)}{_th("Reçu", "Après la taxe de 10 %", True)}'
+                 f'{_th("Prix obtenu /u", "Prix de vente moyen par unité", True)}'
+                 f'{_th("Prix du marché /u", "Médiane des ventes observées sur le marché pendant la même période", True)}'
+                 f'{_th("Marge /u", "Reçu par unité − coût de revient (mes_annonces.json)", True)}'
+                 f'{_th("Unités /j réel", "À partir de 3 ventes : (n − 1) achats entre le premier et le dernier", True)}'
+                 f'{_th("Unités /j prévu", "Ventes mesurées sur le serveur × ta part supposée", True)}'
+                 f'{_th("Part réelle", "Mes unités vendues / unités vendues sur le marché", True)}'
+                 f'{_th("Achat moyen", "Unités par achat", True)}{_th("Taille d’annonce outil", None, True)}'
+                 f'</tr></thead><tbody>{rows}</tbody></table></div>')
+        body = kpis + "<div class='card' style='margin:12px 0'>" + "".join(f"<div>{n}</div>" for n in notes) + "</div>" + table
+    else:
+        body = "<p class='mut'>Aucune vente enregistrée : colle une capture de ton historique des ventes ci-dessous.</p>"
+    edit = cfg.get("_github_sales_edit_url")
+    paste = ('<div class="card" style="margin-top:14px" ondragover="event.preventDefault()" '
+             'ondrop="event.preventDefault();scanHist(event.dataTransfer.files[0])"><b>📷 Ajouter des ventes depuis une capture</b>'
+             '<span class="mut">En jeu, ouvre l’historique des ventes et fais une capture de la liste (Win + Maj + S), puis colle-la '
+             'ici avec <b>Ctrl + V</b> (sur cet onglet), glisse le fichier, ou <label style="color:var(--acc);cursor:pointer;'
+             'text-decoration:underline">choisis un fichier<input type="file" accept="image/*" hidden '
+             'onchange="scanHist(this.files[0])"></label>. Plusieurs captures s’ajoutent, les ventes déjà connues ne sont pas '
+             'doublées. Contrôles automatiques : reçu = prix − 10 %, prix = unitaire × quantité, dates dans l’ordre.</span>'
+             '<span id="gmsg" class="mut"></span><div class="chips" id="grows"></div>'
+             '<div class="toolbar" style="margin:0"><button class="mapbtn" onclick="copyHist()">📋 Copier le fichier</button>'
+             + (f'<a class="mapbtn" style="text-decoration:none" href="{esc(edit)}" target="_blank" rel="noopener">'
+                '✏️ Ouvrir mes_ventes.json sur GitHub</a>' if edit else '')
+             + '<button class="mapbtn" onclick="HIST=[];renderHist();document.getElementById(\'gmsg\').textContent=\'\'">Effacer</button></div>'
+             '<textarea id="gjson" spellcheck="false" style="width:100%;min-height:120px;padding:8px 10px;border:1px solid var(--line);'
+             'border-radius:8px;background:var(--bg2);color:var(--txt);font:12.5px/1.5 ui-monospace,Consolas,monospace"></textarea>'
+             '<span class="sub">Colle ce contenu à la place de celui du fichier sur GitHub, puis « Commit changes » : '
+             'le prochain passage horaire met à jour cet onglet.</span></div>'
+             f'<script>window.MY_SALES={json.dumps(cfg.get("my_sales") or [], ensure_ascii=False)};'
+             f'window.MY_SALES_HELP={json.dumps(cfg.get("_my_sales_help") or "", ensure_ascii=False)};</script>')
+    return head + body + paste
+
+
 def build(con, cfg, results):
     REPORT_DIR.mkdir(exist_ok=True)
     ctx = Ctx(con, map_world_ids(con, cfg))
@@ -1259,6 +1369,7 @@ def build(con, cfg, results):
         add("plan", "🧮 Mon stock", "<h2>Mon stock → quoi fabriquer</h2>" + stock_calc(ctx, cfg, my["harvest"], my["market"].gather_names(),
                          {t: my["market"].items[s]["base_name"] for t, s in my["market"].transmute.items()})
             + ("<h3>Plan quotidien (config)</h3>" + table_plan(my["plan"]) if my["plan"] else ""))
+        add("gains", "💰 Mes gains", gains_tab(ctx, cfg, my))
         sep()
     others = [r for r in results if r is not my]
     if others:
