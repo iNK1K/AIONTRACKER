@@ -174,18 +174,18 @@ Vérifié sur les sites HDV (Hadala) : le lingot vaut habituellement **1 500 à 
 
 | Recettes concernées | Écart 0 | 5 | 10 | 20 | 30 | 50+ |
 |---|---|---|---|---|---|---|
-| Équipements « Roi dragon » (niv. 55–60) | 67,5 | 74,1 | 79,0 | 86,2 | 90,5 | 94,6 |
-| Potions, élixirs, plats, pierres, parchemins (Alchimie, Cuisine, niv. 1–95) | 72,9 | 75,5 | 79,6 | 83,8 | 87,3 | 90,9 |
-| Équipements d'orichalque (niv. 3–10) | 74,0 | 78,2 | 81,4 | 87,4 | 90,3 | 93,1 |
-| Équipements d'orichalque d'expert (niv. 15–25) | 76,8 | 81,6 | 85,1 | 89,6 | 92,4 | 94,6 |
-| Équipements d'orichalque de maître (niv. 30–40) | 79,6 | 83,6 | 87,2 | 91,4 | 94,1 | 96,8 |
-| Matériaux : lingots, pièces, poudres, cornes raffinées (niv. 1–80) | 95,2 | 95,9 | 97,0 | 98,0 | 98,6 | 99,2 |
+| Équipements « Roi dragon » (Spécialiste 5–10) | 67,5 | 74,1 | 79,0 | 86,2 | 90,5 | 94,6 |
+| Potions, élixirs, plats, pierres, parchemins (Alchimie, Cuisine, Débutant 1 à Spécialiste 45) | 72,9 | 75,5 | 79,6 | 83,8 | 87,3 | 90,9 |
+| Équipements d'orichalque (Débutant 3–10) | 74,0 | 78,2 | 81,4 | 87,4 | 90,3 | 93,1 |
+| Équipements d'orichalque d'expert (Débutant 15–25) | 76,8 | 81,6 | 85,1 | 89,6 | 92,4 | 94,6 |
+| Équipements d'orichalque de maître (Débutant 30–40) | 79,6 | 83,6 | 87,2 | 91,4 | 94,1 | 96,8 |
+| Matériaux : lingots, pièces, poudres, cornes raffinées (Débutant 1 à Spécialiste 30) | 95,2 | 95,9 | 97,0 | 98,0 | 98,6 | 99,2 |
 
 - Les recettes de niveau 0 sans table (et sans jauge d'échec) sont comptées à 100 %.
 - Recettes et tables rechargées à chaque passage daily (suivent les patchs).
 
 ## L'onglet
-- Un cadre par métier (Alchimie, Artisanat, Forge d'armures, Forge d'armes, Cuisine) : niveau, bouton **+1 niveau** (et −1), « Débutant / Intermédiaire niv. X », nombre de crafts rentables débloqués.
+- Un cadre par métier (Alchimie, Artisanat, Forge d'armures, Forge d'armes, Cuisine) : grade **Débutant / Spécialiste** et niveau 1–50 comme en jeu, bouton **+1** (Débutant 50 → Spécialiste 1) et −1, nombre de crafts rentables débloqués. Partout sur le site, les niveaux requis s'affichent ainsi (« 🔒 Alchimie Spécialiste 5 »).
 - Niveaux enregistrés **dans le navigateur** (chaque joueur a les siens) ; bouton **🔗 Copier le lien de mes niveaux** pour les transférer sur un autre appareil.
 - Options : **En cas d'échec, les ingrédients sont perdus** (cochée par défaut, à confirmer en jeu) ; **Masquer les crafts que je ne peux pas faire** (sinon grisés).
 - **Bientôt débloqué** : crafts rentables accessibles dans les 10 prochains niveaux, triés par profit/jour.
