@@ -38,7 +38,7 @@
     "unique_min_median": 10000,
     "unique_min_samples": 12,
     "flip_min_margin": 0.10,
-    "flip_min_samples": 24,
+    "flip_min_samples": 12,
     "flip_min_profit_day": 50000,
     "spike_craft_min_margin": 0.15
   },

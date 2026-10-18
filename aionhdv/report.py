@@ -670,6 +670,9 @@ def table_flips(ctx, flips, cfg):
                     f"{_num_td(f['profit_j'], 'big', k=True)}<td>{lots_txt(f)}</td>"
                     f"{_num_td(f['capital_j'], 'x', color=False, k=True)}{_num_td(f['annonces'], 'mut x', color=False)}"
                     f"{_num_td(f['releves'], 'mut x', color=False)}</tr>")
+        if f["releves"] < 48:
+            body[-1] = body[-1].replace("</td><td data-v=", "<div><span class='badge b-mut' title='Moins de 48 prix relevés : "
+                                        "fourchette encore peu fiable'>historique court</span></div></td><td data-v=", 1)
     head = ("<tr>" + _th("Item") + _th("Statut") + _th("Prix actuel", "Prix le plus bas en vente", True)
             + _th("Acheter à ≤", "Prix d'achat cible : bas de la fourchette habituelle (1er quartile sur 3 j)", True)
             + _th("Revendre à", "Prix plancher médian des 3 derniers jours", True)
@@ -814,7 +817,7 @@ def home(con, cfg, ctx, my, sname):
     """Page d'accueil : uniquement ce qui sert a faire du profit aujourd'hui."""
     m = my["market"]
     good = [e for e in my["harvest"] if is_good(e)]
-    top = good[:6]
+    top = good[:12]
     total = sum(e["profit_j"] for e in good[:5])
     buys = [e for e in my["buy"] if is_good(e) and e["net_pess_u"] > 0]
     targets = [t for t in my["targets"] if t["meilleur"]][:6]
@@ -851,7 +854,9 @@ def home(con, cfg, ctx, my, sname):
             f'<div class="row"><span>À vendre par jour</span><b>~{fmt(e["ma_part_j"])}</b></div>'
             f'<div class="row"><span>Mettre en vente</span><b>{lots_txt(e)}</b></div>'
             f'<div class="row"><span>Profit/j</span><span class="big cprof">{kfmt(e["profit_j"])}</span></div>{tip}</div>')
-    craft_html = f'<div class="cards">{"".join(cards)}</div>' if cards else '<p class="mut">Aucun craft rentable.</p>'
+    craft_html = (f'<div class="cards">{"".join(cards)}</div>' if cards else '<p class="mut">Aucun craft rentable.</p>')
+    craft_html += (f'<p class="mut" style="margin-top:8px">{len(good)} crafts rentables au total, {len(my["harvest"])} comparés : '
+                   '<a href="#" onclick="show(\'harvest\');return false" style="color:var(--acc)">voir la liste complète</a>.</p>')
 
     # 2. quoi recolter
     rows = "".join(

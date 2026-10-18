@@ -5,7 +5,7 @@ import statistics
 from datetime import datetime, timedelta, timezone
 
 from .catalog import node_name
-from .collect import PARIS
+from .collect import PARIS, paris
 
 # types d'equipement (harmonisation : meme rang et meme type)
 EQUIP_TYPES = {"Sword": "Épée", "Greatsword": "Espadon", "Dagger": "Dague", "Bow": "Arc", "Mace": "Masse", "Staff": "Bâton",
@@ -138,7 +138,7 @@ class Market:
                 continue
             rows = self.price_series(iid, days)
             if len(rows) < a["flip_min_samples"]:
-                continue
+                continue                              # historique trop court pour une fourchette de prix
             old, new = [p for t, p in rows if t < cut], [p for t, p in rows if t >= cut]
             if old and new and not 0.75 <= statistics.median(new) / statistics.median(old) <= 1.33:
                 continue
@@ -313,16 +313,25 @@ class Market:
             pess = max(ask, k)
         return dict(item_id=iid, ask=ask, real=real, pess=pess, listings=self.listings.get(iid, 0))
 
+    def last_seen(self, item_id, days=3):
+        """Dernier prix plancher connu d'un item qui n'est plus en vente : (ts, prix), ou None."""
+        rows = sorted(self.price_series(item_id, days))
+        return rows[-1] if rows else None
+
     def sell_price(self, item_id):
-        ask = self.price.get(item_id)
+        ask, stale = self.price.get(item_id), None
         if ask is None:
-            return None
+            # plus en vente en ce moment : dernier prix connu (3 j), pour pouvoir comparer quand meme
+            seen = self.last_seen(item_id)
+            if not seen:
+                return None
+            stale, ask = seen
         u = self.usual_price(item_id)
         k = u["price"] if u else None
         real = (ask + k) / 2 if (k and ask > k) else ask
         pess = min(real, k) if k else real * 0.7
         return dict(ask=ask, real=real, pess=pess, ref=k, ref_source=u and u["source"],
-                    listings=self.listings.get(item_id, 0))
+                    listings=self.listings.get(item_id, 0), stale=stale)
 
     # ------------------------------------------------------------ cout d'une recette
     def recipe_cost(self, recipe, mode, depth=0):
@@ -414,7 +423,9 @@ class Market:
         mine = vol * self.cfg["market_share"]
         res_u = sum(c["gather"].values()) / q
         flags = [] if ref else ["volume de vente inconnu (pas de référence)"]
-        if sp["listings"] <= 1:
+        if sp["stale"]:
+            flags.append(f"pas en vente en ce moment (dernier prix connu le {paris(sp['stale'], '%d/%m %H:%M')})")
+        elif sp["listings"] <= 1:
             flags.append("1 seule annonce en vente")
         if sp["ref"] and sp["ask"] > 5 * sp["ref"]:
             flags.append("prix affiché > 5x le prix habituel")

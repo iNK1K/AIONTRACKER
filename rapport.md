@@ -233,3 +233,17 @@ Testé sur les données réelles de 20h29 avec une position fictive de 20 lingot
 
 ## 3. Garde-fous chiffrés
 Sous chaque badge : **quantité max conseillée** (~2 h de ventes du marché, plafonnée à ta part de marché sur 2 h, divisée par 3 pendant un pic) et **« ne vends pas sous X »** (prix plancher = coût ÷ 0,88). Repris dans les alertes Discord.
+
+---
+
+# Plus d'items comparés — 18/10/2026 (soir)
+
+**Pourquoi si peu d'items** (constat sur les données) :
+- **Mes crafts** : 192 crafts utilisent des ressources de récolte, mais 130 n'ont aucune annonce sur Hadala (surtout les équipements Roi dragon) : sans prix, pas de comparaison possible. Parmi ceux qui ont un prix, 33 ont un volume de vente inconnu (jamais vendus sur Kaisinel, seul serveur dont le jeu publie les ventes).
+- **Aujourd'hui** : n'affichait que les 6 meilleurs crafts rentables (sur 16).
+- **Flip** : 265 items sur 434 écartés faute d'historique (24 relevés horaires demandés, relevés commencés le 18/10).
+
+**Changements :**
+- Aujourd'hui : **12 crafts** (au lieu de 6), avec le nombre total et un lien vers la liste complète.
+- Mes crafts / Achat → craft : les items **pas en vente en ce moment mais vus dans les 3 derniers jours** sont comparés avec leur dernier prix connu, marqués « pas en vente en ce moment ». Mes crafts : 62 → 82 crafts comparés ; Achat → craft : 86 → 106.
+- Flip : **12 relevés** suffisent (au lieu de 24), avec un badge « historique court » sous 48 relevés. L'onglet se remplit tout seul : chaque passage horaire ajoute un relevé par item.
