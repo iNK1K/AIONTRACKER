@@ -159,10 +159,13 @@ def main(argv):
         elif cmd == "news":
             cmd_news(con, cfg)
         elif cmd == "hourly":
+            if not con.execute("SELECT 1 FROM rate_curves LIMIT 1").fetchone():
+                log(f"recettes et taux de reussite (premiere fois) : {collect.sync_recipes(con, cfg['locale'])}")
             cmd_snapshot(con, cfg)
             cmd_analyze(con, cfg, send_alerts=True)
             cmd_news(con, cfg)
         elif cmd == "daily":
+            log(f"recettes et taux de reussite : {collect.sync_recipes(con, cfg['locale'])}")
             cmd_refvolume(con, cfg)
             cmd_activity(con, cfg)
             since = (datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%dT00:00:00Z")

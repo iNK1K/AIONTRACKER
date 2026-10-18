@@ -79,6 +79,9 @@ CREATE TABLE IF NOT EXISTS patch_watch (     -- items cites dans une note de ver
     item_id INTEGER, news_key TEXT, title TEXT, url TEXT, since TEXT, base_price REAL,
     PRIMARY KEY (item_id, news_key)
 );
+CREATE TABLE IF NOT EXISTS rate_curves (     -- taux de reussite (en millioniemes de %) selon l'ecart de maitrise
+    id INTEGER PRIMARY KEY, rates TEXT
+);
 CREATE TABLE IF NOT EXISTS runs (
     ts TEXT, job TEXT, status TEXT, detail TEXT
 );
@@ -91,4 +94,9 @@ def connect():
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA journal_mode=WAL")
     con.executescript(SCHEMA)
+    # colonnes ajoutees apres coup aux bases existantes
+    cols = {r["name"] for r in con.execute("PRAGMA table_info(recipes)")}
+    for col, typ in (("rate_curve", "INTEGER"), ("fail_gauge", "INTEGER")):
+        if col not in cols:
+            con.execute(f"ALTER TABLE recipes ADD COLUMN {col} {typ}")
     return con

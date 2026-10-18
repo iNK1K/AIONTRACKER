@@ -452,6 +452,11 @@ class Market:
                 if e and (best is None or e["profit_j"] > best["profit_j"]):
                     best = e
             if best:
+                # toutes les facons de fabriquer l'item (metier, niveau requis, courbe de reussite) : le site choisit
+                # celle que le joueur peut faire, selon ses niveaux de metier
+                best["alts"] = sorted({(r["profession"], r["mastery"] or 0, r.get("rate_curve"))
+                                       for r in recipes if not r["unresolved"]}, key=lambda a: (a[1], a[0]))
+                best["vente_net_u"] = round(best["prix_real"] * (1 - self.cfg["fees"]))
                 out.append(best)
         out.sort(key=lambda e: -e["profit_j"])
         return out

@@ -12,6 +12,8 @@ Rapport : ouvrir `reports\index.html` dans le navigateur (onglets, filtres, tri,
 
 Onglet **Mon stock** : coller une capture de la réserve (Ctrl + V) remplit le stock automatiquement (reconnaissance des icônes et des quantités dans le navigateur, `aionhdv/scan.js`).
 
+Onglet **Mes métiers** : niveaux de métier enregistrés dans le navigateur ; les crafts impossibles sont grisés partout et le profit tient compte du taux de réussite du jeu (tables extraites du client, mises à jour par le passage daily).
+
 Mode test : ajouter `--dry-run` (ex. `python -m aionhdv hourly --dry-run`) pour ne rien envoyer sur Discord.
 
 Python est **portable** (`.runtime\python`) : rien n'est installé sur le système. Supprimer le dossier suffit.

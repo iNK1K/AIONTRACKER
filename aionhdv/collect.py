@@ -1,4 +1,5 @@
 """Collecte des donnees vers SQLite."""
+import json
 import re
 from datetime import datetime, timedelta, timezone
 
@@ -84,20 +85,32 @@ def sync_recipes(con, locale="fr-FR"):
         upsert_item(con, int(key), name=it.get("name") or "", item_key=it.get("itemKey"), grade=it.get("grade"),
                     category=it.get("category"), sub_category=it.get("subCategory"))
     con.execute("DELETE FROM recipes")
+    curves = {}
     con.execute("DELETE FROM recipe_ingredients")
     for r in data["recipes"]:
         combo = r.get("combo") or {}
-        con.execute("INSERT OR REPLACE INTO recipes VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        # table de reussite du jeu, indexee par l'ecart (mon niveau - niveau requis) ; les recettes partagent quelques
+        # courbes, tronquees a 100 - niveau requis : on garde la plus longue, identifiee par sa premiere valeur
+        rates = (r.get("successRates") or {}).get("rates") or []
+        if rates and len(rates) > len(curves.get(rates[0], [])):
+            curves[rates[0]] = rates
+        con.execute("INSERT OR REPLACE INTO recipes (id, item_id, method, profession, mastery, faction, output_qty, visible, "
+                    "combo_result, unresolved, combo_item_id, combo_prob_raw, rate_curve, fail_gauge) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (r["id"], r["itemId"], r.get("method"), r.get("profession"), r.get("requiredMastery"),
                      r.get("faction"), num(r.get("outputQuantity")) or 1, 1 if r.get("visibleInClientUi") else 0,
                      1 if r.get("isComboResult") else 0, 1 if r.get("hasUnresolvedAdditionalInputs") else 0,
-                     combo.get("itemId"), combo.get("probabilityRaw")))
+                     combo.get("itemId"), combo.get("probabilityRaw"), rates[0] if rates else None,
+                     (r.get("client") or {}).get("failGaugeRaw")))
         for slot, ing in enumerate(r.get("ingredients") or []):
             con.execute("INSERT INTO recipe_ingredients VALUES (?,?,?,?,0)",
                         (r["id"], slot, ing["itemId"], num(ing.get("quantity")) or 0))
             for alt in ing.get("alternatives") or []:
                 con.execute("INSERT INTO recipe_ingredients VALUES (?,?,?,?,1)",
                             (r["id"], slot, alt["itemId"], num(alt.get("quantity")) or 0))
+    con.execute("DELETE FROM rate_curves")
+    for k, rates in curves.items():
+        con.execute("INSERT INTO rate_curves VALUES (?,?)", (k, json.dumps(rates)))
     con.commit()
     return len(items), len(data["recipes"])
 

@@ -163,3 +163,36 @@ Vérifié sur les sites HDV (Hadala) : le lingot vaut habituellement **1 500 à 
 - **Alerte Discord « ⚡ Pic de prix »** (une par item et par jour) avec le gain si tu vends vite et la perte si le prix redescend.
 - Seuil réglable : `alerts.spike_craft_min_margin` (0.15).
 - Aujourd'hui : Lingot d'orichalque (×11), Cuir résistant (×2,9), Papier d'Asvata (×6,1).
+
+---
+
+# Onglet 🛠️ Mes métiers — 18/10/2026 (soir)
+
+## Tables de réussite
+- Source : tables du client du jeu, extraites par a2-tracker (`CraftRecipeRate`), indexées par l'**écart de niveau** (ton niveau − niveau requis). **Vérifiées contre ta capture « Chances de fabrication »** du lingot : identiques au millionième (95,200927 %, 95,587774 %, 95,724539 %…), et 98,761433 % à l'écart 40 (ton niveau 41).
+- 6 courbes utilisées par les recettes visibles (la 7e ne sert à aucune) :
+
+| Recettes concernées | Écart 0 | 5 | 10 | 20 | 30 | 50+ |
+|---|---|---|---|---|---|---|
+| Équipements « Roi dragon » (niv. 55–60) | 67,5 | 74,1 | 79,0 | 86,2 | 90,5 | 94,6 |
+| Potions, élixirs, plats, pierres, parchemins (Alchimie, Cuisine, niv. 1–95) | 72,9 | 75,5 | 79,6 | 83,8 | 87,3 | 90,9 |
+| Équipements d'orichalque (niv. 3–10) | 74,0 | 78,2 | 81,4 | 87,4 | 90,3 | 93,1 |
+| Équipements d'orichalque d'expert (niv. 15–25) | 76,8 | 81,6 | 85,1 | 89,6 | 92,4 | 94,6 |
+| Équipements d'orichalque de maître (niv. 30–40) | 79,6 | 83,6 | 87,2 | 91,4 | 94,1 | 96,8 |
+| Matériaux : lingots, pièces, poudres, cornes raffinées (niv. 1–80) | 95,2 | 95,9 | 97,0 | 98,0 | 98,6 | 99,2 |
+
+- Les recettes de niveau 0 sans table (et sans jauge d'échec) sont comptées à 100 %.
+- Recettes et tables rechargées à chaque passage daily (suivent les patchs).
+
+## L'onglet
+- Un cadre par métier (Alchimie, Artisanat, Forge d'armures, Forge d'armes, Cuisine) : niveau, bouton **+1 niveau** (et −1), « Débutant / Intermédiaire niv. X », nombre de crafts rentables débloqués.
+- Niveaux enregistrés **dans le navigateur** (chaque joueur a les siens) ; bouton **🔗 Copier le lien de mes niveaux** pour les transférer sur un autre appareil.
+- Options : **En cas d'échec, les ingrédients sont perdus** (cochée par défaut, à confirmer en jeu) ; **Masquer les crafts que je ne peux pas faire** (sinon grisés).
+- **Bientôt débloqué** : crafts rentables accessibles dans les 10 prochains niveaux, triés par profit/jour.
+- Tableau des chances de réussite (ci-dessus).
+
+## Effets sur le reste du site
+- Aujourd'hui, Mes crafts, Achat → craft, pics de prix : crafts impossibles grisés (« 🔒 Alchimie niv. 55 ») ou masqués ; nouvelle colonne **Réussite** ; Net/u et Profit/j recalculés (coût ÷ taux de réussite si les ingrédients sont perdus).
+- Mon stock : seuls les crafts faisables sont proposés, et la consommation de ressources tient compte des échecs (ex. 300 Bois d'Asvata → 145 Pièces au lieu de 150 à 97 %).
+- Pour un item fabricable par plusieurs métiers (ex. Lingot : Forge d'armes ou d'armures), le site prend la façon la plus favorable selon tes niveaux.
+- Sans niveau renseigné pour un métier, rien ne change pour ses crafts.

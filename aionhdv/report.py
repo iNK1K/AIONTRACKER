@@ -86,6 +86,10 @@ code{background:var(--card2);padding:1px 6px;border-radius:5px}
 .ch .cap{color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.05em;margin:10px 0 2px}
 #ctip{position:absolute;pointer-events:none;background:var(--card2);border:1px solid var(--line);border-radius:8px;padding:6px 9px;
  font-size:12.5px;white-space:nowrap;display:none;z-index:2}
+.locked{opacity:.45}tr.locked td{background:#0000}
+.mcard{display:flex;flex-direction:column;gap:8px}.mcard .lv{display:flex;align-items:center;gap:8px}
+.mcard input{width:72px;padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:var(--bg2);color:var(--txt);font:inherit;font-size:18px;font-weight:700;text-align:center}
+.mcard .up{font-size:15px;padding:6px 14px}
 .nm{cursor:copy}.nm:hover{text-decoration:underline dotted}
 #toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--card2);border:1px solid var(--acc);color:var(--txt);
  padding:8px 14px;border-radius:8px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:60;max-width:90vw}
@@ -128,7 +132,11 @@ function calc(){const box=document.getElementById('stock');if(!box||!window.CRAF
  box.querySelectorAll('input[data-r]').forEach(i=>{const v=parseFloat(i.value);if(v>0)st[i.dataset.r]=v});
  try{localStorage.setItem('stock',JSON.stringify(st))}catch(e){}
  const cap=document.getElementById('cap').checked,risky=document.getElementById('risky').checked,left={...st},rows=[];let tot=0;
- for(const c of CRAFTS){if(c.f&&!risky)continue;const need=Object.entries(c.r);if(!need.length||need.some(([k])=>!(left[k]>0)))continue;
+ const lose=lvState().lose;
+ for(const c0 of CRAFTS){if(c0.f&&!risky)continue;const info=craftInfo(c0.i);if(info&&!info.ok)continue;
+  const p=info&&info.rate?info.rate:1,c={...c0,n:c0.s!=null?Math.round(c0.s-(lose?c0.a/p:c0.a)):c0.n,r:{}};
+  Object.entries(c0.r).forEach(([k,q])=>c.r[k]=lose?q/p:q);if(c.n<=0)continue;
+  const need=Object.entries(c.r);if(!need.length||need.some(([k])=>!(left[k]>0)))continue;
   let n=Math.min(...need.map(([k,q])=>left[k]/q));if(cap&&!c.f)n=Math.min(n,c.c);n=Math.floor(n);if(n<=0)continue;
   need.forEach(([k,q])=>left[k]-=n*q);tot+=n*c.n;rows.push([c,n])}
  document.getElementById('stot').textContent=rows.length?kf(tot):'–';
@@ -199,12 +207,56 @@ async function scanFile(file){if(!file||!(file.type||'').startsWith('image/'))re
  }catch(e){msg.textContent='Lecture impossible : '+e+' (la lecture fonctionne sur le site en ligne)'}}
 document.addEventListener('paste',e=>{const sec=document.getElementById('plan');if(!sec||!sec.classList.contains('on'))return;
  const it=[...((e.clipboardData||{}).items||[])].find(i=>(i.type||'').startsWith('image/'));if(it){e.preventDefault();scanFile(it.getAsFile())}});
+const PROF={Alchemy:'Alchimie',Handicrafting:'Artisanat',Armorsmithing:"Forge d'armures",Blacksmithing:"Forge d'armes",Cooking:'Cuisine'};
+function lvState(){let st={};try{st=JSON.parse(localStorage.getItem('metiers')||'{}')}catch(e){}st.lv=st.lv||{};if(st.lose===undefined)st.lose=true;return st}
+function lvSave(st){try{localStorage.setItem('metiers',JSON.stringify(st))}catch(e){}}
+function grade(l){return l>50?'Intermédiaire':'Débutant'}
+// meilleure facon de fabriquer un item selon mes niveaux : {ok, rate} ; rate null = metier non renseigne
+function craftInfo(id){const st=lvState(),alts=(window.CRAFTDATA&&CRAFTDATA.items[id])||[];if(!alts.length)return null;
+ let best=null,unknown=false,need=null;
+ alts.forEach(([p,m,cv])=>{const lv=st.lv[p];if(lv==null||lv===''){unknown=true;return}
+  if(lv<m){if(!need||m<need.m)need={p:p,m:m};return}
+  const c=cv!=null&&CRAFTDATA.curves[cv],rate=c?c[Math.min(lv-m,c.length-1)]/1e8:1;if(!best||rate>best.rate)best={p:p,m:m,rate:rate}});
+ if(best)return{ok:true,rate:best.rate,p:best.p,m:best.m};if(unknown)return{ok:true,rate:null};return{ok:false,need:need}}
+function applyLevels(){const st=lvState();
+ document.querySelectorAll('[data-craft]').forEach(el=>{const info=craftInfo(el.dataset.craft),sr=el.querySelector('.csr');
+  el.classList.remove('locked');el.style.display='';
+  if(info&&!info.ok){el.classList.add('locked');if(st.hide)el.style.display='none';
+   if(sr)sr.textContent='🔒 '+(info.need?PROF[info.need.p]+' niv. '+info.need.m:'');return}
+  if(!info||info.rate==null){if(sr)sr.textContent='–';return}
+  if(sr)sr.textContent=(info.rate*100).toFixed(1).replace('.',',')+' %';
+  const sell=+el.dataset.sell,cost=+el.dataset.cost,day=+el.dataset.day;
+  const net=Math.round(sell-(st.lose?cost/info.rate:cost)),cn=el.querySelector('.cnet'),cp=el.querySelector('.cprof');
+  if(cn){cn.textContent=NF.format(net);cn.dataset.v=net;cn.classList.toggle('pos',net>0);cn.classList.toggle('neg',net<=0)}
+  if(cp){const pr=net*day;cp.textContent=kf(pr);cp.dataset.v=pr;cp.classList.toggle('pos',pr>0);cp.classList.toggle('neg',pr<=0)}});
+ calc();renderMetiers()}
+function setLevel(p,v){const st=lvState();if(v===''||v==null||isNaN(v))delete st.lv[p];else st.lv[p]=Math.max(0,Math.min(100,Math.round(v)));lvSave(st);applyLevels()}
+function bumpLevel(p,d){const st=lvState();setLevel(p,(st.lv[p]||0)+d);toast(PROF[p]+' : niveau '+lvState().lv[p])}
+function setOpt(k,v){const st=lvState();st[k]=v;lvSave(st);applyLevels()}
+function shareLevels(){const st=lvState(),code=Object.entries(st.lv).map(([p,l])=>p+'-'+l).join('.');
+ const url=location.href.split('#')[0]+'#metiers='+code;const done=()=>toast('Lien copié : ouvre-le sur ton autre appareil');
+ if(navigator.clipboard&&window.isSecureContext)navigator.clipboard.writeText(url).then(done,()=>copyOld(url,done));else copyOld(url,done)}
+function renderMetiers(){const box=document.getElementById('metiers');if(!box||!window.CRAFTDATA)return;const st=lvState();
+ const good=CRAFTDATA.good||[];
+ box.innerHTML=Object.keys(PROF).map(p=>{const lv=st.lv[p];const mine=good.filter(g=>g.a.some(a=>a[0]===p));
+  const open=lv==null?null:mine.filter(g=>g.a.some(a=>a[0]===p&&a[1]<=lv)).length;
+  return `<div class="card mcard"><b>${PROF[p]}</b><div class="lv"><input type="number" min="0" max="100" value="${lv==null?'':lv}" placeholder="?" onchange="setLevel('${p}',this.value===''?'':+this.value)">`
+   +`<button class="mapbtn up" onclick="bumpLevel('${p}',1)">+1 niveau</button><button class="mapbtn" onclick="bumpLevel('${p}',-1)">−1</button></div>`
+   +`<span class="sub">${lv==null?'Niveau non renseigné : tous les crafts restent proposés':grade(lv)+' niv. '+lv+' · '+open+' / '+mine.length+' crafts rentables débloqués'}</span></div>`}).join('');
+ document.getElementById('mlose').checked=st.lose;document.getElementById('mhide').checked=!!st.hide;
+ const soon=[];good.forEach(g=>g.a.forEach(([p,m])=>{const lv=st.lv[p];if(lv!=null&&m>lv&&m<=lv+10&&!g.a.some(a=>st.lv[a[0]]!=null&&a[1]<=st.lv[a[0]]))soon.push({o:g.o,p:p,m:m,d:m-lv,j:g.j})}));
+ const seen=new Set(),list=soon.sort((x,y)=>y.j-x.j).filter(x=>!seen.has(x.o)&&seen.add(x.o)).slice(0,12);
+ document.getElementById('soon').innerHTML=list.length?'<div class="uses">'+list.map(x=>`<div class="card" style="padding:9px 14px;flex-direction:row;justify-content:space-between"><span><span class="nm" title="Cliquer pour copier">${escH(x.o)}</span> <span class="sub">· ${PROF[x.p]} niv. ${x.m} (dans ${x.d} niveau${x.d>1?'x':''})</span></span><b class="pos">~${kf(x.j)} /j</b></div>`).join('')+'</div>'
+  :'<p class="mut">'+(Object.keys(st.lv).length?'Aucun craft rentable à débloquer dans les 10 prochains niveaux.':'Renseigne tes niveaux ci-dessus.')+'</p>'}
+function importLevelsFromHash(){const h=decodeURIComponent(location.hash||'');if(!h.startsWith('#metiers='))return;
+ const st=lvState();h.slice(9).split('.').forEach(x=>{const [p,l]=x.split('-');if(PROF[p]&&l!=='')st.lv[p]=+l});lvSave(st);
+ history.replaceState(null,'',location.pathname+location.search);toast('Niveaux de métier importés');show('metiersTab')}
 function clearStock(){document.querySelectorAll('#stock input[data-r]').forEach(i=>i.value='');calc()}
 document.addEventListener('DOMContentLoaded',()=>{let t='home';try{t=localStorage.getItem('tab')||t;
  if(localStorage.getItem('detail')){document.body.classList.add('detail');document.querySelectorAll('input.dt').forEach(x=>x.checked=true)}}catch(e){}
  if(!document.getElementById(t))t='home';show(t);
  try{const s=JSON.parse(localStorage.getItem('stock')||'null');if(s)document.querySelectorAll('#stock input[data-r]').forEach(i=>i.value=s[i.dataset.r]||'')}catch(e){}
- calc();document.querySelectorAll('th').forEach(th=>th.onclick=()=>sortT(th))});
+ importLevelsFromHash();applyLevels();document.querySelectorAll('th').forEach(th=>th.onclick=()=>sortT(th))});
 """
 
 MAP_HTML = """<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -349,12 +401,61 @@ def toolbar(tid, extra=""):
             f'{extra}</div>')
 
 
+def craft_attrs(e):
+    """Donnees pour recalculer la ligne dans le navigateur selon les niveaux de metier."""
+    return (f'data-craft="{e["item_id"]}" data-sell="{e.get("vente_net_u", 0)}" data-cost="{e["achats_u"]}" '
+            f'data-day="{e["ma_part_j"]}"')
+
+
+def metiers_tab(con, my):
+    """Onglet Mes metiers : niveaux enregistres dans le navigateur, + tables de reussite du jeu."""
+    curves = {r["id"]: json.loads(r["rates"]) for r in con.execute("SELECT * FROM rate_curves")}
+    items, good = {}, []
+    for e in my["harvest"] + my["buy"] + (my.get("spikes") or []):
+        items[e["item_id"]] = [list(a) for a in e.get("alts") or []]
+        if is_good(e) and e["profit_j"] > 0:
+            good.append(dict(o=e["objet"], a=items[e["item_id"]], j=e["profit_j"]))
+    gaps = (0, 5, 10, 20, 30, 50)
+    rows = []
+    for k, c in sorted(curves.items(), key=lambda kv: kv[0]):
+        # qui utilise cette courbe : metiers, niveaux requis, exemples (recettes visibles, objets echangeables)
+        used = con.execute("SELECT DISTINCT r.profession, r.mastery, i.base_name FROM recipes r JOIN items i ON i.id = r.item_id "
+                           "WHERE r.rate_curve = ? AND r.visible = 1 AND r.combo_result = 0 AND r.method = 'craft'", (k,)).fetchall()
+        if not used:
+            continue
+        profs = ", ".join(METIERS.get(p, p) for p in sorted({u["profession"] for u in used}))
+        levels = sorted({u["mastery"] or 0 for u in used})
+        examples = ", ".join(list(dict.fromkeys(u["base_name"] for u in used))[:3])
+        rows.append(f"<tr><td><b>{esc(examples)}</b>…<div class='sub'>{esc(profs)} · niv. {levels[0]}–{levels[-1]}</div></td>"
+                    + "".join(f"<td class='n'>{c[min(g, len(c) - 1)] / 1e6:.1f} %</td>".replace(".", ",") for g in gaps) + "</tr>")
+    rows = "".join(rows)
+    table = (f'<div class="wrap" style="max-height:none"><table><thead><tr>{_th("Recettes concernées (exemples)")}'
+             + "".join(_th(f"Écart {g}" + ("+" if g == gaps[-1] else ""), None, True) for g in gaps)
+             + f'</tr></thead><tbody>{rows}</tbody></table></div>') if curves else '<p class="mut">Tables pas encore chargées.</p>'
+    data = json.dumps(dict(curves={str(k): v for k, v in curves.items()}, items=items, good=good), separators=(",", ":"))
+    return ("<h2>Mes métiers</h2><p class='lead'>Renseigne le niveau de tes métiers : les crafts que tu ne peux pas faire "
+            "sont grisés partout sur le site, et le profit tient compte de ta chance de réussite. Tes niveaux restent "
+            "enregistrés dans ce navigateur ; clique sur <b>+1 niveau</b> quand tu montes.</p>"
+            '<div class="cards" id="metiers"></div>'
+            '<div class="toolbar" style="margin-top:12px"><label class="tg"><input type="checkbox" id="mlose" '
+            'onchange="setOpt(\'lose\',this.checked)"> En cas d’échec, les ingrédients sont perdus</label>'
+            '<label class="tg"><input type="checkbox" id="mhide" onchange="setOpt(\'hide\',this.checked)"> '
+            'Masquer les crafts que je ne peux pas faire</label>'
+            '<button class="mapbtn" onclick="shareLevels()">🔗 Copier le lien de mes niveaux (autre appareil)</button></div>'
+            "<h3>Bientôt débloqué (10 prochains niveaux)</h3><div id='soon'></div>"
+            "<h3>Chances de réussite du jeu selon l’écart de niveau</h3><p class='lead'>Écart = ton niveau − niveau requis "
+            "par la recette. Valeurs du jeu (identiques à la fenêtre « Chances de fabrication »). Les recettes de niveau 0 "
+            "sans table réussissent toujours.</p>" + table
+            + f"<script>window.CRAFTDATA={data};</script>")
+
+
 def table_crafts(ctx, rows, tid, harvest):
     head = ("<tr>" + _th("#") + _th("Craft") +
             (_th("Ressources / unité") if harvest else _th("Ingrédients achetés")) +
             ("" if harvest else _th("Coût/u", "Coût des ingrédients au prix réaliste", True)) +
+            _th("Réussite", "Chance de réussite selon tes niveaux (onglet Mes métiers) ; 🔒 = niveau insuffisant", True) +
             _th("Vendre à", "Prix de vente conseillé (réaliste)", True) +
-            _th("Net/u", "Bénéfice par unité après 12 % de taxes et frais", True) +
+            _th("Net/u", "Bénéfice par unité après 12 % de taxes et frais (et échecs, selon tes niveaux)", True) +
             (_th("Net/ressource", "Bénéfice par ressource récoltée utilisée", True) if harvest
              else _th("Marge", "Bénéfice / coût", True)) +
             _th("Ventes/j", "Ce que tu peux vendre par jour (20 % du marché)", True) +
@@ -368,7 +469,7 @@ def table_crafts(ctx, rows, tid, harvest):
             _th("Statut") + "</tr>")
     good = [e for e in rows if is_good(e)]
     bad = [e for e in rows if not is_good(e)]
-    ncol = 16 if not harvest else 14
+    ncol = 17 if not harvest else 15
     body = []
     for i, e in enumerate(good + bad, 1):
         if i == len(good) + 1 and bad:
@@ -383,13 +484,14 @@ def table_crafts(ctx, rows, tid, harvest):
         cols = (_num_td(e["net_par_ressource"]) if harvest else
                 f'<td class="n {_cls(e["marge"])}" data-v="{e["marge"] or 0}">{(e["marge"] or 0):+.0%}</td>')
         body.append(
-            f"<tr class='{'' if is_good(e) else 'dim'}'><td class='n rank'>{i}</td>"
+            f"<tr class='{'' if is_good(e) else 'dim'}' {craft_attrs(e)}><td class='n rank'>{i}</td>"
             f"<td>{ctx.label(e['item_id'], sub=f'{METIERS.get(e['metier'], e['metier'])} · maîtrise {e['maitrise']} · lot ×{e['lot']:g}')}</td>"
             f"<td>{res}</td>"
             + ("" if harvest else _num_td(e["achats_u"], color=False))
-            + _num_td(e["prix_real"], color=False) + _num_td(e["net_u"]) + cols
+            + '<td class="n csr">–</td>'
+            + _num_td(e["prix_real"], color=False) + _num_td(e["net_u"], "cnet") + cols
             + _num_td(e["ma_part_j"], color=False)
-            + _num_td(e["profit_j"], "big", k=True)
+            + _num_td(e["profit_j"], "big cprof", k=True)
             + _num_td(e["vol_serveur_j"], color=False, x=True) + _num_td(e["prix_affiche"], color=False, x=True)
             + _num_td(e["prix_ref"], color=False, x=True) + _num_td(e["net_pess_u"], x=True)
             + _num_td(e["profit_pess_j"], k=True, x=True)
@@ -446,7 +548,8 @@ def stock_calc(ctx, cfg, harvest, names):
     Les crafts fiables passent d'abord ; les douteux (drapeaux) seulement si on coche l'option."""
     crafts = [e for e in harvest if e["net_u"] > 0 and e["ressources_u"]]
     crafts.sort(key=lambda e: (bool(e["flags"]), -(e["net_u"] / e["ressources_u"])))
-    data = [dict(o=e["objet"], n=e["net_u"], p=e["prix_real"], c=e["ma_part_j"], l=e.get("lot_vente"),
+    data = [dict(o=e["objet"], i=e["item_id"], s=e.get("vente_net_u"), a=e["achats_u"],
+                 n=e["net_u"], p=e["prix_real"], c=e["ma_part_j"], l=e.get("lot_vente"),
                  f="; ".join(e["flags"]), r={k: round(v, 4) for k, v in e["ressources"].items()}) for e in crafts]
     names = sorted(set(names) | {k for e in crafts for k in e["ressources"]})
     preset = cfg.get("harvest_per_day") or {}
@@ -491,7 +594,7 @@ def table_spikes(ctx, spikes):
     if not spikes:
         return ""
     rows = "".join(
-        f"<tr><td>{ctx.label(e['item_id'])}</td>{_num_td(e['prix_affiche'], 'big', color=False)}"
+        f"<tr {craft_attrs(e)}><td>{ctx.label(e['item_id'])}</td>{_num_td(e['prix_affiche'], 'big', color=False)}"
         f"{_num_td(e['prix_ref'], color=False)}<td class='n' data-v='{e['ratio']}'><span class='badge b-warn'>×{e['ratio']}</span></td>"
         f"<td class='sub'>{esc(paris(e['depuis'], '%d/%m %H:%M') if e['depuis'] else '–')}</td>"
         f"{_num_td(e['achats_u'], color=False)}{_num_td(e['net_affiche_u'])}{_num_td(e['net_habituel_u'])}"
@@ -693,13 +796,14 @@ def home(con, cfg, ctx, my, sname):
         res = "".join(f'<span class="chip">{ctx.icon(name=k)}<span class="nm" title="Cliquer pour copier">{esc(k)}</span> ×{v:g}{ctx.mapbtn(k)}</span>'
                       for k, v in e["ressources"].items())
         cards.append(
-            f'<div class="card">{ctx.label(e["item_id"], sub=f"{METIERS.get(e["metier"], e["metier"])} · lot ×{e["lot"]:g}")}'
+            f'<div class="card" {craft_attrs(e)}>{ctx.label(e["item_id"], sub=f"{METIERS.get(e["metier"], e["metier"])} · maîtrise {e["maitrise"]} · lot ×{e["lot"]:g}")}'
             f'<div class="chips">{res}</div>'
             f'<div class="row"><span>Vendre à</span><b>{fmt(e["prix_real"])}</b></div>'
-            f'<div class="row"><span>Net par unité</span><b class="pos">{fmt(e["net_u"])}</b></div>'
+            f'<div class="row"><span>Réussite</span><b class="csr">–</b></div>'
+            f'<div class="row"><span>Net par unité</span><b class="pos cnet">{fmt(e["net_u"])}</b></div>'
             f'<div class="row"><span>À vendre par jour</span><b>~{fmt(e["ma_part_j"])}</b></div>'
             f'<div class="row"><span>Mettre en vente</span><b>{lots_txt(e)}</b></div>'
-            f'<div class="row"><span>Profit/j</span><span class="big">{kfmt(e["profit_j"])}</span></div>{tip}</div>')
+            f'<div class="row"><span>Profit/j</span><span class="big cprof">{kfmt(e["profit_j"])}</span></div>{tip}</div>')
     craft_html = f'<div class="cards">{"".join(cards)}</div>' if cards else '<p class="mut">Aucun craft rentable.</p>'
 
     # 2. quoi recolter
@@ -803,6 +907,7 @@ def build(con, cfg, results):
             + table_spikes(ctx, my.get("spikes")) + table_crafts(ctx, my["buy"], "tb", False))
         add("flips", "🔁 Flip", "<h2>Achat → revente (sans craft)</h2>" + table_flips(ctx, my["flips"], cfg))
         add("uniques", "💎 Uniques", "<h2>Équipements Unique : prix bradés</h2>" + table_uniques(ctx, my["uniques"], cfg))
+        add("metiersTab", "🛠️ Mes métiers", metiers_tab(con, my))
         add("plan", "🧮 Mon stock", "<h2>Mon stock → quoi fabriquer</h2>" + stock_calc(ctx, cfg, my["harvest"], my["market"].gather_names())
             + ("<h3>Plan quotidien (config)</h3>" + table_plan(my["plan"]) if my["plan"] else ""))
         sep()
