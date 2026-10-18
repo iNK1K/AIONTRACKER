@@ -361,7 +361,7 @@ def table_crafts(ctx, rows, tid, harvest):
             _th("Profit/j", "Ventes/j × Net/u", True) +
             _th("Volume serveur/j", "Ventes estimées sur tout le serveur", True, True) +
             _th("Prix affiché", "Prix le plus bas actuellement en vente", True, True) +
-            _th("Prix réf.", "Prix de vente moyen réel sur Kaisinel (7 j)", True, True) +
+            _th("Prix habituel", "Prix plancher médian sur ton serveur (3 j) ; à défaut, prix de vente moyen sur Kaisinel", True, True) +
             _th("Net pess./u", "Bénéfice si on vend au prix le plus bas", True, True) +
             _th("Profit pess./j", None, True, True) +
             ("" if harvest else _th("Capital/j", "Kinah à avancer par jour", True, True)) +
@@ -484,6 +484,28 @@ def stock_calc(ctx, cfg, harvest, names):
             f'<div class="wrap"><table id="splan"><thead>{head}</thead><tbody></tbody></table></div>'
             '<p class="mut" id="sleft"></p>'
             f'<script>window.CRAFTS={json.dumps(data, ensure_ascii=False).replace("</", "<\\/")};</script>')
+
+
+def table_spikes(ctx, spikes):
+    """Pics de prix : rentable au prix affiche seulement."""
+    if not spikes:
+        return ""
+    rows = "".join(
+        f"<tr><td>{ctx.label(e['item_id'])}</td>{_num_td(e['prix_affiche'], 'big', color=False)}"
+        f"{_num_td(e['prix_ref'], color=False)}<td class='n' data-v='{e['ratio']}'><span class='badge b-warn'>×{e['ratio']}</span></td>"
+        f"<td class='sub'>{esc(paris(e['depuis'], '%d/%m %H:%M') if e['depuis'] else '–')}</td>"
+        f"{_num_td(e['achats_u'], color=False)}{_num_td(e['net_affiche_u'])}{_num_td(e['net_habituel_u'])}"
+        f"{_num_td(e['annonces'], 'mut', color=False)}<td class='ing'>{'<br>'.join(esc(x) for x in e['ingredients'])}</td></tr>"
+        for e in spikes)
+    head = ("<tr>" + _th("Craft") + _th("Prix affiché", None, True) + _th("Prix habituel", "Médiane 3 j sur ton serveur", True)
+            + _th("Pic", None, True) + _th("Depuis") + _th("Coût/u", None, True)
+            + _th("Net/u si vendu au prix affiché", None, True) + _th("Net/u si le prix redescend", None, True)
+            + _th("Annonces", None, True) + _th("Acheter") + "</tr>")
+    return ("<h3>⚡ Pics de prix : rentable seulement tant que le prix reste haut</h3>"
+            "<p class='lead'>Le prix affiché est bien au-dessus du prix habituel depuis peu. Fabriquer et vendre maintenant "
+            "rapporte, mais si le prix redescend avant la vente, c’est à perte. Petite quantité, à vendre vite, et "
+            "regarde la courbe 📈 avant de te lancer.</p>"
+            f'<div class="wrap"><table><thead>{head}</thead><tbody>{rows}</tbody></table></div><h3>Toujours rentables</h3>')
 
 
 def table_flips(ctx, flips, cfg):
@@ -701,6 +723,12 @@ def home(con, cfg, ctx, my, sname):
                     '(les prix de la restriction anti-bot rendent les ingrédients trop chers). Tu seras alerté sur Discord '
                     'dès qu’une opportunité apparaît.</span></div>')
 
+    spikes = my.get("spikes") or []
+    if spikes:
+        buy_html += (f'<div class="card" style="margin-top:10px;border-color:var(--warn)"><span>⚡ <b>{len(spikes)} pic(s) de prix</b> '
+                     f'en cours ({esc(", ".join(e["objet"] for e in spikes[:3]))}) : rentable seulement en vendant vite. '
+                     f'<a href="#" onclick="show(\'buy\');return false" style="color:var(--acc)">Voir l’onglet Achat → craft</a></span></div>')
+
     # 4. alertes du jour
     since = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0).isoformat(timespec="seconds")
     al = con.execute("SELECT ts, message FROM alerts_sent WHERE ts >= ? ORDER BY ts DESC LIMIT 12", (since,)).fetchall()
@@ -759,7 +787,8 @@ def build(con, cfg, results):
         navs.append('<span class="sep"></span>')
 
     hyp = (f"Part de marché {cfg['market_share']:.0%}, taxes et frais {cfg['fees']:.0%}. "
-           "« Vendre à » = prix réaliste entre le prix affiché et le prix de vente réel de référence.")
+           "« Vendre à » = prix réaliste : le prix affiché, ramené vers le prix habituel sur ton serveur (médiane 3 j) "
+           "quand il est anormalement haut.")
     if my:
         add("home", "🏠 Aujourd’hui", home(con, cfg, ctx, my, sname))
         sep()
@@ -771,7 +800,7 @@ def build(con, cfg, results):
             "une fois transformées. Les usages douteux ou à perte sont indiqués en orange.</p>" + table_targets(ctx, my["targets"]))
         add("buy", "Achat → craft",
             f"<h2>Acheter les ingrédients → fabriquer → revendre</h2><p class='lead'>{hyp}</p>"
-            + table_crafts(ctx, my["buy"], "tb", False))
+            + table_spikes(ctx, my.get("spikes")) + table_crafts(ctx, my["buy"], "tb", False))
         add("flips", "🔁 Flip", "<h2>Achat → revente (sans craft)</h2>" + table_flips(ctx, my["flips"], cfg))
         add("uniques", "💎 Uniques", "<h2>Équipements Unique : prix bradés</h2>" + table_uniques(ctx, my["uniques"], cfg))
         add("plan", "🧮 Mon stock", "<h2>Mon stock → quoi fabriquer</h2>" + stock_calc(ctx, cfg, my["harvest"], my["market"].gather_names())

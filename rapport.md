@@ -144,3 +144,22 @@ Ta 3e capture (avec le titre « Matériaux de fabrication », une marge, et des 
 - L'aperçu montre maintenant **toutes** les cases reconnues avec leur vignette et la quantité lue (⚠ sur les douteuses), pour vérifier d'un coup d'œil avant de remplir.
 
 Résultat sur les 3 captures : **85 ressources reconnues sur 88, aucune inventée ni confondue** (manquées : 2 Bois d'Asvata, 1 Morfa) ; **82 quantités justes sur 85** (2 erreurs signalées ⚠, 1 non signalée : 9 au lieu de 19).
+
+---
+
+# Prix de référence et pics de prix — 18/10/2026 (soir)
+
+## Pourquoi le Lingot d'orichalque n'apparaissait pas en achat → craft
+Vérifié sur les sites HDV (Hadala) : le lingot vaut habituellement **1 500 à 1 800** (médiane 3 j : 1 497 sur a2-tracker, 1 800 sur aion2.exchange ; ventes réelles sur Kaisinel : 1 767 en moyenne), soit 3 fois moins que ses 2 minerais (~5 450 pièce). Il est monté à 10 000 ce matin (retombé en 6 h), puis à **20 000 à 15h45** et 15 000 ensuite. Coût du craft : 2 minerais + Solvant d'orichalque (400, prix PNJ vérifié) ≈ 10 200. Vendu à 15 000 : **+3 000/u** ; revendu au prix habituel : **−8 600/u**. L'outil le jugeait donc (à raison) non rentable en temps normal, mais masquait l'opportunité.
+
+## Point 1 : prix de référence = prix habituel sur ton serveur
+- Avant : le « prix réaliste » était ramené vers le prix de vente moyen de **Kaisinel** (autre serveur, autre niveau de prix : minerai 2 200 là-bas contre 5 450 sur Hadala).
+- Maintenant : référence = **médiane des prix plancher de Hadala sur 3 jours** (au moins 12 relevés) ; Kaisinel ne sert plus qu'à défaut, et pour les volumes de vente.
+- Effet immédiat : 2 crafts achat → craft rentables apparaissent (Poudre de Pierre d'esprit, Potion de soin supérieure), masqués jusque-là. Colonne « Prix réf. » renommée « Prix habituel ».
+
+## Point 2 : ⚡ Pics de prix
+- Nouveau tableau en tête de l'onglet **Achat → craft** : crafts rentables **au prix affiché** (marge ≥ 15 %) alors que le prix affiché est au moins 1,5× le prix habituel. Colonnes : prix affiché, prix habituel, ×pic, depuis quand, coût, net/u si vendu au prix affiché, net/u si le prix redescend, ingrédients à acheter.
+- Rappel sur l'accueil (section ③) quand il y a des pics en cours.
+- **Alerte Discord « ⚡ Pic de prix »** (une par item et par jour) avec le gain si tu vends vite et la perte si le prix redescend.
+- Seuil réglable : `alerts.spike_craft_min_margin` (0.15).
+- Aujourd'hui : Lingot d'orichalque (×11), Cuir résistant (×2,9), Papier d'Asvata (×6,1).

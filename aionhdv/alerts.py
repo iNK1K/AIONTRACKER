@@ -185,6 +185,24 @@ def detect_patch_moves(con, cfg, result):
     return msgs
 
 
+def detect_spikes(con, cfg, result):
+    """Achat -> craft rentable seulement grace a un pic de prix en cours : une alerte par item et par jour."""
+    srv = con.execute("SELECT name FROM servers WHERE id = ?", (result["server"],)).fetchone()
+    sname = srv["name"] if srv else result["server"]
+    day = datetime.now(timezone.utc).strftime("%Y%m%d")
+    msgs = []
+    for e in result.get("spikes") or []:
+        depuis = f", depuis {paris(e['depuis'], '%d/%m %H:%M')}" if e["depuis"] else ""
+        msg = (f"⚡ **Pic de prix** [{sname}] {e['objet']} affiché **{fmt(e['prix_affiche'])}** "
+               f"(habituellement {fmt(e['prix_ref'])}, ×{e['ratio']}{depuis}) — {e['annonces']} annonce(s). "
+               f"Acheter les ingrédients ({fmt(e['achats_u'])}/u) et fabriquer rapporte **+{fmt(e['net_affiche_u'])}/u** "
+               f"si tu vends au prix affiché, mais **{fmt(e['net_habituel_u'])}/u** si le prix revient à la normale : "
+               f"petite quantité, à vendre vite. Ingrédients : {'; '.join(e['ingredients'])}")
+        if _once(con, f"spike_craft|{result['server']}|{e['item_id']}|{day}", msg):
+            msgs.append(msg)
+    return msgs
+
+
 def detect_flips(con, cfg, result):
     """Item a acheter maintenant : prix actuel sous le prix d'achat cible, et assez de kinah/j a la cle."""
     a = cfg["alerts"]

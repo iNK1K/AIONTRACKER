@@ -48,6 +48,7 @@ class Market:
                 self.by_base.setdefault(it["base_name"], it["id"])
         self._load_prices()
         self._ref = {}
+        self._usual = {}
         self.ratio = self._activity_ratio()
         srow = con.execute("SELECT faction FROM servers WHERE id = ?", (self.server,)).fetchone()
         self.faction = (srow["faction"] if srow else "").lower()      # 'asmodian' / 'elyos'
@@ -252,6 +253,27 @@ class Market:
         return 0.40
 
     # ------------------------------------------------------------ prix d'achat / de vente
+    def usual_price(self, item_id):
+        """Prix habituel sur MON serveur : mediane des prix plancher des 3 derniers jours (au moins 12 releves).
+        A defaut, prix de vente moyen du serveur de reference (Kaisinel), qui peut avoir un tout autre niveau de prix."""
+        if item_id not in self._usual:
+            vals = [p for _, p in self.price_series(item_id, 3)]
+            if len(vals) >= 12:
+                self._usual[item_id] = dict(price=statistics.median(vals), source="serveur")
+            else:
+                ref = self.ref(item_id)
+                self._usual[item_id] = dict(price=ref["avg_price"], source="Kaisinel") if ref and ref["avg_price"] else None
+        return self._usual[item_id]
+
+    def spike_since(self, item_id, usual):
+        """Depuis quand le prix affiche est au moins 1,5x le prix habituel (debut du pic en cours)."""
+        since = None
+        for ts, p in sorted(self.price_series(item_id, 3), reverse=True):
+            if p < 1.5 * usual:
+                break
+            since = ts
+        return since
+
     def buy_price(self, item_id):
         iid = item_id
         if iid not in self.price:
@@ -260,8 +282,8 @@ class Market:
             if iid not in self.price:
                 return None
         ask = self.price[iid]
-        ref = self.ref(iid)
-        k = ref["avg_price"] if ref else None
+        u = self.usual_price(iid)
+        k = u["price"] if u else None
         real, pess = ask, ask * 1.5
         if k:
             if ask < k:
@@ -273,11 +295,12 @@ class Market:
         ask = self.price.get(item_id)
         if ask is None:
             return None
-        ref = self.ref(item_id)
-        k = ref["avg_price"] if ref else None
+        u = self.usual_price(item_id)
+        k = u["price"] if u else None
         real = (ask + k) / 2 if (k and ask > k) else ask
         pess = min(real, k) if k else real * 0.7
-        return dict(ask=ask, real=real, pess=pess, ref=k, listings=self.listings.get(item_id, 0))
+        return dict(ask=ask, real=real, pess=pess, ref=k, ref_source=u and u["source"],
+                    listings=self.listings.get(item_id, 0))
 
     # ------------------------------------------------------------ cout d'une recette
     def recipe_cost(self, recipe, mode, depth=0):
@@ -372,7 +395,7 @@ class Market:
         if sp["listings"] <= 1:
             flags.append("1 seule annonce en vente")
         if sp["ref"] and sp["ask"] > 5 * sp["ref"]:
-            flags.append("prix affiché > 5x le prix de vente de référence")
+            flags.append("prix affiché > 5x le prix habituel")
         if c["thin"]:
             flags.append("ingrédient introuvable en volume : " + ", ".join(sorted(set(c["thin"]))))
         return dict(
@@ -381,12 +404,31 @@ class Market:
             ingredients=c["lines"], ressources={k: v / q for k, v in c["gather"].items()},
             achats_u=round(cost_u), achats_pess_u=round(cost_pu),
             prix_affiche=sp["ask"], prix_ref=sp["ref"] and round(sp["ref"]), prix_real=round(sp["real"]),
-            annonces=sp["listings"], net_u=round(net_u), net_pess_u=round(net_pu),
+            annonces=sp["listings"], net_u=round(net_u), net_pess_u=round(net_pu), ref_source=sp["ref_source"],
+            net_affiche_u=round(sp["ask"] * (1 - fees) - cost_u),
             marge=round(net_u / cost_u, 3) if cost_u > 0 else None,
             ressources_u=res_u, net_par_ressource=round(net_u / res_u) if res_u else None,
             vol_serveur_j=round(vol), ma_part_j=round(mine),
             profit_j=round(mine * net_u), profit_pess_j=round(mine * net_pu),
             capital_j=round(mine * cost_u), flags=flags, **self.sizing(oid, mine))
+
+    def spikes(self, buy_rows):
+        """Pics de prix : achat -> craft rentable au prix affiche, mais pas au prix habituel (prix en pic depuis peu).
+        Opportunites courtes et risquees : a vendre vite, en petite quantite."""
+        a = self.cfg["alerts"]
+        out = []
+        for e in buy_rows:
+            u = e["prix_ref"]
+            if not u or e["prix_affiche"] < 1.5 * u or not e["achats_u"]:
+                continue
+            marge = e["net_affiche_u"] / e["achats_u"]
+            if marge < a["spike_craft_min_margin"] or e["net_u"] > 0 and not e["flags"]:
+                continue                              # pas rentable au prix affiche, ou deja rentable en temps normal
+            out.append(dict(e, ratio=round(e["prix_affiche"] / u, 1), marge_affiche=round(marge, 3),
+                            net_habituel_u=round(u * (1 - self.cfg["fees"]) - e["achats_u"]),
+                            depuis=self.spike_since(e["item_id"], u)))
+        out.sort(key=lambda x: -x["net_affiche_u"])
+        return out
 
     def sizing(self, item_id, per_day):
         """Combien d'annonces poster et de quelle taille, pour ecouler ma part du jour."""
@@ -491,4 +533,4 @@ def run_all(con, cfg, server=None):
     con.commit()
     return dict(run_ts=run_ts, server=server, as_of=m.as_of, ratio=m.ratio, harvest=harvest, buy=buy,
                 targets=targets, plan=plan, hours=m.hourly_profile(), uniques=m.uniques(),
-                flips=m.flips(), listings=m.my_listings(), market=m)
+                flips=m.flips(), listings=m.my_listings(), spikes=m.spikes(buy), market=m)

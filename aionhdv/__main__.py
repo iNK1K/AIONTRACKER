@@ -97,7 +97,7 @@ def cmd_analyze(con, cfg, send_alerts=False, send_digest=False):
             for m in uniques:
                 alerts.send(cfg, m, "unique")
             flips = (alerts.detect_flips(con, cfg, res) + alerts.detect_undercuts(con, cfg, res)
-                     + alerts.detect_patch_moves(con, cfg, res))
+                     + alerts.detect_patch_moves(con, cfg, res) + alerts.detect_spikes(con, cfg, res))
             for m in flips:
                 alerts.send(cfg, m)
             log(f"alertes : {len(msgs)}, uniques : {len(uniques)}, flips et annonces battues : {len(flips)}")
