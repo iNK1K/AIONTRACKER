@@ -205,8 +205,30 @@ async function scanFile(file){if(!file||!(file.type||'').startsWith('image/'))re
   r.thumbs.forEach(t=>{const d=document.createElement('span');d.className='chip';if(t.c.checkQty)d.style.borderColor='var(--warn)';
    d.appendChild(t.cv);d.appendChild(document.createTextNode((t.c.checkQty?'⚠ ':'')+t.c.name+' : '+(t.c.qty==null?'?':t.c.qty)));box.appendChild(d)})
  }catch(e){msg.textContent='Lecture impossible : '+e+' (la lecture fonctionne sur le site en ligne)'}}
-document.addEventListener('paste',e=>{const sec=document.getElementById('plan');if(!sec||!sec.classList.contains('on'))return;
- const it=[...((e.clipboardData||{}).items||[])].find(i=>(i.type||'').startsWith('image/'));if(it){e.preventDefault();scanFile(it.getAsFile())}});
+document.addEventListener('paste',e=>{const it=[...((e.clipboardData||{}).items||[])].find(i=>(i.type||'').startsWith('image/'));if(!it)return;
+ const on=id=>{const sec=document.getElementById(id);return sec&&sec.classList.contains('on')};
+ if(on('plan')){e.preventDefault();scanFile(it.getAsFile())}else if(on('home')){e.preventDefault();scanSales(it.getAsFile())}});
+let SALES=[];
+async function scanSales(file){if(!file||!(file.type||'').startsWith('image/'))return;const msg=document.getElementById('vmsg');
+ msg.textContent='Lecture de la capture…';
+ try{await scanLoad();const url=URL.createObjectURL(file);
+  const img=await new Promise((ok,ko)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=()=>ko('image illisible');i.src=url});
+  const rows=await scanListings(img);URL.revokeObjectURL(url);
+  rows.forEach(r=>{const cv=document.createElement('canvas');cv.width=cv.height=40;cv.getContext('2d').drawImage(img,r.x,r.y,r.w,r.h,0,0,40,40);r.cv=cv});
+  SALES=SALES.concat(rows);renderSales();
+  msg.textContent=rows.length+' annonce(s) lue(s)'+(SALES.length>rows.length?' (ajoutées aux précédentes : colle d’autres captures si tes ventes tiennent sur plusieurs écrans)':'')
+   +'. Vérifie, corrige le coût si besoin, puis copie le fichier.'}catch(e){msg.textContent='Lecture impossible : '+e+' (la lecture fonctionne sur le site en ligne)'}}
+function renderSales(){const box=document.getElementById('vrows');box.innerHTML='';
+ SALES.forEach((r,k)=>{const d=document.createElement('span');d.className='chip';if(r.check.length)d.style.borderColor='var(--warn)';d.title=r.check.join(', ');
+  d.appendChild(r.cv);d.appendChild(document.createTextNode((r.check.length?'⚠ ':'')+(r.name||'?')+' × '+r.qty+' à '+(r.unit==null?'?':NF.format(r.unit))));box.appendChild(d)});
+ const agg={};SALES.forEach(r=>{if(!r.name)return;const a=agg[r.name]||(agg[r.name]={prix:r.unit,quantite:0});a.quantite+=r.qty;
+  if(r.unit!=null&&(a.prix==null||r.unit<a.prix))a.prix=r.unit});
+ const keep=document.getElementById('vmode').value==='add'?{...(window.MY_LISTINGS||{})}:{};
+ Object.entries(agg).forEach(([n,a])=>{const old=keep[n]&&typeof keep[n]==='object'?keep[n]:{};const cost=old.cout??(window.COSTS||{})[n];
+  keep[n]={prix:a.prix,quantite:a.quantite,...(cost!=null?{cout:cost}:{})}});
+ const file={_:(window.MY_LISTINGS_HELP||''),annonces:keep};document.getElementById('vjson').value=JSON.stringify(file,null,2)}
+function copySales(){const t=document.getElementById('vjson').value;const done=()=>toast('Contenu de mes_annonces.json copié');
+ if(navigator.clipboard&&window.isSecureContext)navigator.clipboard.writeText(t).then(done,()=>copyOld(t,done));else copyOld(t,done)}
 const PROF={Alchemy:'Alchimie',Handicrafting:'Artisanat',Armorsmithing:"Forge d'armures",Blacksmithing:"Forge d'armes",Cooking:'Cuisine'};
 function lvState(){let st={};try{st=JSON.parse(localStorage.getItem('metiers')||'{}')}catch(e){}st.lv=st.lv||{};if(st.lose===undefined)st.lose=true;return st}
 function lvSave(st){try{localStorage.setItem('metiers',JSON.stringify(st))}catch(e){}}
@@ -331,6 +353,16 @@ class Ctx:
         local = it.get("icon_file") and (DATA_DIR / it["icon_file"]).exists()
         src = f"../data/{it['icon_file']}" if local else it.get("icon_url")
         return f'<img class="ic" loading="lazy" src="{esc(src)}" alt="">' if src else ""
+
+    def market_icons(self):
+        """Icones locales des items vus en vente (nom de base, chemin) : reference pour lire une capture de ventes."""
+        seen, out = set(), []
+        for it in self.items.values():
+            if it.get("on_market") and not it["bound"] and it.get("icon_file") and it["base_name"] not in seen \
+                    and (DATA_DIR / it["icon_file"]).exists():
+                seen.add(it["base_name"])
+                out.append(dict(n=it["base_name"], s=f"../data/{it['icon_file']}"))
+        return out
 
     def icon_src(self, name):
         """Image locale d'une ressource (meme origine que la page : necessaire pour lire ses pixels)."""
@@ -893,6 +925,7 @@ def home(con, cfg, ctx, my, sname):
         for a in al) + "</div>") if al else '<p class="mut">Aucune alerte aujourd’hui.</p>'
 
     # 5. mes annonces
+    costs = {e["objet"]: e["achats_u"] for e in my["buy"] if e.get("achats_u")}   # cout estime : achat des ingredients
     mine = my.get("listings") or []
     if mine:
         rows = "".join(
@@ -911,6 +944,30 @@ def home(con, cfg, ctx, my, sname):
     else:
         mine_html = ('<p class="mut">Liste tes annonces dans <code>mes_annonces.json</code> (nom exact : prix, ou prix + coût '
                      'de revient + quantité) pour être alerté quand quelqu’un vend moins cher que toi ou sous ton seuil.</p>')
+
+    edit = cfg.get("_github_edit_url")
+    mine_html += ('<div class="card" id="vdrop" style="margin-top:10px" ondragover="event.preventDefault()" '
+                  'ondrop="event.preventDefault();scanSales(event.dataTransfer.files[0])"><b>📷 Remplir depuis une capture de mes ventes</b>'
+                  '<span class="mut">En jeu, fais une capture de ta fenêtre des ventes (Win + Maj + S), puis colle-la ici avec '
+                  '<b>Ctrl + V</b> (sur cet onglet), glisse le fichier, ou <label style="color:var(--acc);cursor:pointer;'
+                  'text-decoration:underline">choisis un fichier<input type="file" accept="image/*" hidden '
+                  'onchange="scanSales(this.files[0])"></label>. Plusieurs captures s’ajoutent. Le coût de revient est '
+                  'prérempli avec l’estimation du site (achat des ingrédients) : corrige-le si tu as récolté.</span>'
+                  '<span id="vmsg" class="mut"></span><div class="chips" id="vrows"></div>'
+                  '<div class="toolbar" style="margin:0"><select id="vmode" class="search" style="width:auto" onchange="renderSales()">'
+                  '<option value="replace">Remplacer mes annonces</option><option value="add">Ajouter à mes annonces actuelles</option></select>'
+                  '<button class="mapbtn" onclick="copySales()">📋 Copier le fichier</button>'
+                  + (f'<a class="mapbtn" style="text-decoration:none" href="{esc(edit)}" target="_blank" rel="noopener">'
+                     '✏️ Ouvrir mes_annonces.json sur GitHub</a>' if edit else '')
+                  + '<button class="mapbtn" onclick="SALES=[];renderSales();document.getElementById(\'vmsg\').textContent=\'\'">Effacer</button></div>'
+                  '<textarea id="vjson" spellcheck="false" style="width:100%;min-height:120px;padding:8px 10px;border:1px solid var(--line);'
+                  'border-radius:8px;background:var(--bg2);color:var(--txt);font:12.5px/1.5 ui-monospace,Consolas,monospace"></textarea>'
+                  '<span class="sub">Colle ce contenu à la place de celui du fichier sur GitHub, puis « Commit changes » : '
+                  'le prochain passage horaire suivra tes annonces.</span></div>'
+                  f'<script>window.MY_LISTINGS={json.dumps(cfg.get("my_listings") or {}, ensure_ascii=False)};'
+                  f'window.MY_LISTINGS_HELP={json.dumps(cfg.get("_my_listings_help") or "", ensure_ascii=False)};'
+                  f'window.COSTS={json.dumps(costs, ensure_ascii=False)};'
+                  f'window.MARKET_ICONS={json.dumps(ctx.market_icons(), ensure_ascii=False)};</script>')
 
     # 6. annonces officielles
     news = con.execute("SELECT * FROM news WHERE key NOT LIKE 'reddit|%' ORDER BY posted DESC LIMIT 6").fetchall()

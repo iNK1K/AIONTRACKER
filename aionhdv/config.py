@@ -24,7 +24,13 @@ def load_config():
     listings = ROOT / "mes_annonces.json"
     if listings.exists():
         with open(listings, encoding="utf-8") as f:
-            cfg["my_listings"] = json.load(f).get("annonces") or {}
+            data = json.load(f)
+        cfg["my_listings"] = data.get("annonces") or {}
+        cfg["_my_listings_help"] = data.get("_", "")
+    # lien vers l'editeur GitHub du fichier (le depot est connu dans GitHub Actions)
+    repo = os.environ.get("GITHUB_REPOSITORY") or cfg.get("github_repo")
+    if repo:
+        cfg["_github_edit_url"] = f"https://github.com/{repo}/edit/main/mes_annonces.json"
     for key in ("discord_webhook_url", "discord_webhook_unique_url", "discord_webhook_news_url"):
         if os.environ.get(key.upper()):
             cfg[key] = os.environ[key.upper()]

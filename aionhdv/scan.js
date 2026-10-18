@@ -180,6 +180,8 @@
     return { qty: txt ? parseInt(txt, 10) : null, err: txt ? worst : 1 };
   }
 
+  window.__thumb = thumb; window.__dist = dist; window.__readNumber = readNumber;
+
   // ---------------------------------------------------------------- lecture complete
   // img : image de la capture. Retourne la grille, les cases (ressource reconnue ou non, quantite) et le total.
   window.scanReserve = async function (img, opts) {
@@ -227,3 +229,162 @@ window.reserveToList = async function (img, progress) {
   return { text: lines.join('\n'), found: res.cells.filter(c => c.name).length,
            ignored: res.cells.filter(c => !c.name).length, thumbs };
 };
+
+// ======================================================================== annonces en vente
+// Capture de la fenetre « Mes ventes » : une ligne par annonce (icone avec quantite, nom, prix total et unitaire).
+// L'objet est reconnu par son icone (window.MARKET_ICONS), la quantite comme dans la reserve, les prix par des
+// modeles de chiffres appris sur une capture de cette fenetre (PRICE_MODELS) ; total = unitaire x quantite sert de
+// verification.
+(function () {
+  // chiffres des prix, appris sur une capture reelle (pas encore de 8 : un prix avec un 8 est signale a verifier)
+  const PRICE_MODELS = {"0": [0.446, 0.72, 0.709, 0.624, 0.347, 0.781, 0.69, 0.474, 0.674, 0.609, 0.868, 0.44, 0.119, 0.532, 0.705, 0.829, 0.312, 0, 0.434, 0.727, 0.811, 0.294, 0, 0.415, 0.735, 0.829, 0.312, 0, 0.434, 0.749, 0.869, 0.395, 0.034, 0.49, 0.723, 0.777, 0.653, 0.421, 0.677, 0.665, 0.441, 0.775, 0.843, 0.741, 0.388, 0.631], "1": [0.051, 0.355, 0.613, 0.913, 0.897, 0.5, 0.796, 0.885, 0.926, 0.897, 0.489, 0.646, 0.493, 0.864, 0.897, 0.04, 0.184, 0.125, 0.84, 0.897, 0, 0, 0.125, 0.852, 0.898, 0, 0, 0.125, 0.852, 0.898, 0, 0, 0.125, 0.852, 0.898, 0, 0, 0.125, 0.852, 0.898, 0, 0, 0.125, 0.852, 0.898, 0.464], "2": [0.53, 0.681, 0.716, 0.594, 0.262, 0.669, 0.597, 0.564, 0.755, 0.507, 0.251, 0.2, 0.19, 0.653, 0.595, 0, 0, 0.174, 0.688, 0.536, 0, 0.107, 0.555, 0.697, 0.259, 0.018, 0.38, 0.775, 0.418, 0.034, 0.423, 0.679, 0.308, 0.039, 0, 0.796, 0.767, 0.442, 0.398, 0.35, 0.938, 0.91, 0.875, 0.867, 0.771, 0.655], "3": [0.961, 0.818, 0.747, 1, 0.791, 0.461, 0.318, 0.247, 0.75, 1, 0, 0, 0.056, 0.583, 0.99, 0.071, 0.321, 0.556, 0.757, 0.664, 0.149, 0.483, 0.725, 0.856, 0.602, 0, 0, 0.087, 0.631, 1, 0, 0, 0.005, 0.508, 1, 0.5, 0.49, 0.498, 0.758, 1, 1, 0.99, 0.993, 0.898, 0.648, 0.636], "4": [0, 0, 0.416, 0.725, 0.247, 0, 0.149, 0.691, 0.751, 0.247, 0.039, 0.35, 0.704, 0.672, 0.248, 0.12, 0.482, 0.497, 0.615, 0.248, 0.362, 0.473, 0.273, 0.636, 0.279, 0.646, 0.567, 0.489, 0.775, 0.61, 0.651, 0.69, 0.751, 0.894, 0.807, 0.255, 0.32, 0.469, 0.765, 0.492, 0, 0, 0.208, 0.617, 0.25, 0.731], "5": [0.792, 0.924, 0.796, 0.743, 0.497, 0.876, 0.719, 0.344, 0.269, 0.142, 0.927, 0.54, 0.047, 0, 0, 0.942, 0.745, 0.499, 0.471, 0.235, 0.554, 0.564, 0.587, 0.787, 0.766, 0, 0, 0.019, 0.474, 0.926, 0, 0, 0.014, 0.464, 0.917, 0.422, 0.391, 0.432, 0.708, 0.857, 0.877, 0.864, 0.888, 0.772, 0.473, 0.626], "6": [0.218, 0.596, 0.675, 0.554, 0.418, 0.596, 0.646, 0.312, 0.123, 0.063, 0.712, 0.324, 0.017, 0.009, 0, 0.703, 0.457, 0.433, 0.433, 0.309, 0.793, 0.573, 0.438, 0.637, 0.7, 0.769, 0.315, 0.003, 0.315, 0.688, 0.744, 0.299, 0.002, 0.272, 0.636, 0.722, 0.55, 0.296, 0.514, 0.717, 0.407, 0.674, 0.724, 0.727, 0.526, 0.623], "7": [0.652, 0.781, 0.787, 0.894, 0.754, 0.223, 0.3, 0.324, 0.736, 0.61, 0, 0, 0.168, 0.705, 0.43, 0, 0, 0.334, 0.722, 0.197, 0, 0.039, 0.563, 0.561, 0.055, 0, 0.188, 0.785, 0.365, 0.014, 0, 0.362, 0.788, 0.227, 0, 0.034, 0.504, 0.635, 0.053, 0, 0.125, 0.645, 0.489, 0, 0, 0.756], "9": [0.679, 0.85, 0.753, 0.854, 0.593, 0.898, 0.595, 0.286, 0.671, 0.861, 0.846, 0.365, 0, 0.425, 0.857, 0.866, 0.385, 0, 0.433, 0.874, 0.78, 0.734, 0.513, 0.625, 0.88, 0.265, 0.459, 0.364, 0.471, 0.823, 0, 0.001, 0.096, 0.558, 0.797, 0.228, 0.344, 0.517, 0.823, 0.611, 0.629, 0.815, 0.823, 0.599, 0.22, 0.631]};
+  let refs = null;
+
+  function canvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+  function pixels(img) {
+    const W = img.naturalWidth, H = img.naturalHeight, c = canvas(W, H), g = c.getContext('2d', { willReadFrequently: true });
+    g.drawImage(img, 0, 0);
+    return { W, H, d: g.getImageData(0, 0, W, H).data };
+  }
+  const lum = (d, i) => (d[i] + d[i + 1] + d[i + 2]) / 3;   // eslint-disable-line no-unused-vars
+  const sat = (d, i) => Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]);
+
+  // une annonce = une piece doree devant son prix total : on repere toutes les pieces (taches dorees de ~16 px)
+  const gold = (d, i) => d[i] > 150 && d[i + 1] > 110 && d[i + 2] < 130 && d[i] - d[i + 2] > 50;
+  function coins(P) {
+    const { W, H, d } = P, x0 = Math.floor(W * 0.3), rows = [];
+    for (let y = 0; y < H; y++) { let n = 0; for (let x = x0; x < W; x++) if (gold(d, (y * W + x) * 4)) n++; rows.push(n); }
+    const out = [];
+    for (let y = 0; y < H;) {
+      while (y < H && rows[y] < 2) y++;
+      let e = y; while (e < H && rows[e] >= 2) e++;
+      if (e - y >= 8 && e - y <= 40) {
+        let a = W, b = -1;
+        for (let yy = y; yy < e; yy++) for (let x = x0; x < W; x++) if (gold(d, (yy * W + x) * 4)) { a = Math.min(a, x); b = Math.max(b, x); }
+        if (b - a <= 2.2 * (e - y)) out.push({ x0: a, x1: b, y0: y, y1: e - 1 });
+      }
+      y = e + 1;
+    }
+    return out;
+  }
+  // icone de l'annonce : position fixe par rapport a la piece, a l'echelle de l'interface (mesuree sur captures)
+  function iconFromCoin(co, withUnit) {
+    // la piece mesure 14 a 16 px selon la ligne (detection au pixel pres) : meme echelle tant qu'elle reste dans cette plage
+    const h = co.y1 - co.y0 + 1, s = h >= 13 && h <= 18 ? 1 : h / 16, cy = (co.y0 + co.y1) / 2;
+    // avec une ligne « par unite » sous le prix, le prix est remonte de 11 px ; sinon il est centre sur l'icone
+    return { x: Math.round(co.x0 - 933 * s), y: Math.round(cy + (withUnit ? 11 : 0) * s - 30 * s), w: Math.round(60 * s),
+             h: Math.round(60 * s), s };
+  }
+
+  // glyphes d'une ligne de texte (chiffres blancs/gris, separateur de milliers = petit espace)
+  function glyphs(P, x0, x1, y0, y1, stopGap) {
+    const { W, H, d } = P, M = [];
+    y0 = Math.max(0, y0); y1 = Math.min(H, y1); x1 = Math.min(W, x1);
+    for (let y = y0; y < y1; y++) {
+      const row = [];
+      for (let x = x0; x < x1; x++) { const i = (y * W + x) * 4; row.push(sat(d, i) < 60 ? Math.max(0, Math.min(1, (lum(d, i) - 100) / 80)) : 0); }
+      M.push(row);
+    }
+    const col = i => M.reduce((n, r) => n + (r[i] > 0.5 ? 1 : 0), 0), out = [];
+    let x = 0; while (x < x1 - x0 && !col(x)) x++;
+    while (x < x1 - x0) {
+      let e = x; while (e < x1 - x0 && col(e)) e++;
+      out.push({ a: x, b: e, M });
+      let g = e; while (g < x1 - x0 && !col(g)) g++;
+      if (g - e > stopGap) break;
+      out[out.length - 1].gapAfter = g - e;
+      x = g;
+    }
+    return out;
+  }
+  function vecOf(M, a, b) {
+    const sub = M.map(r => r.slice(a, b)), rows = [];
+    sub.forEach((r, k) => { if (r.some(v => v > 0.5)) rows.push(k); });
+    if (!rows.length) return null;
+    const g = sub.slice(rows[0], rows[rows.length - 1] + 1), h = g.length, w = b - a, v = [];
+    for (let yy = 0; yy < 9; yy++) for (let xx = 0; xx < 5; xx++) {
+      const ya = yy * h / 9, yb = (yy + 1) * h / 9, xa = xx * w / 5, xb = (xx + 1) * w / 5;
+      let s = 0, t = 0;
+      for (let y = Math.floor(ya); y < Math.max(Math.floor(ya) + 1, Math.ceil(yb)); y++)
+        for (let x = Math.floor(xa); x < Math.max(Math.floor(xa) + 1, Math.ceil(xb)); x++)
+          if (y < h && x < w) { s += g[y][x]; t++; }
+      v.push(t ? s / t : 0);
+    }
+    v.push(Math.min(1, w / h));
+    return v;
+  }
+  function readPrice(gl, models) {
+    // lit les chiffres de gauche a droite ; s'arrete au premier glyphe qui n'est pas un chiffre (ex. « par unite »)
+    let txt = '', worst = 0;
+    for (const g of gl) {
+      const v = vecOf(g.M, g.a, g.b);
+      if (!v || !models) break;
+      let best = null;
+      for (const [digit, m] of Object.entries(models)) {
+        let e = 0; for (let i = 0; i < m.length; i++) e += (v[i] - m[i]) ** 2; e /= m.length;
+        if (!best || e < best.e) best = { digit, e };
+      }
+      if (best.e > 0.08) break;
+      txt += best.digit; worst = Math.max(worst, best.e);
+    }
+    return { value: txt ? parseInt(txt, 10) : null, err: worst, digits: txt.length };
+  }
+  // ecart tolerant aux badges poses sur l'icone (equipement fabrique, quantite) : on ignore le quart des pixels
+  // les plus differents
+  function robustDist(a, b) {
+    const [mx0, my0, mx1, my1] = a.mask, S = Math.round(Math.sqrt(a.length / 4)), diffs = [];
+    for (let y = my0; y < my1; y++) for (let x = mx0; x < mx1; x++) {
+      const i = (y * S + x) * 4;
+      diffs.push((Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2])) / 3);
+    }
+    diffs.sort((u, v) => u - v);
+    const keep = diffs.slice(0, Math.ceil(diffs.length * 0.75));
+    return keep.length ? keep.reduce((u, v) => u + v, 0) / keep.length : 999;
+  }
+  async function iconRefs(thumbOf) {
+    if (refs) return refs;
+    refs = [];
+    for (const r of window.MARKET_ICONS || []) {
+      try { const img = await new Promise((ok, ko) => { const i = new Image(); i.onload = () => ok(i); i.onerror = ko; i.src = r.s; });
+            refs.push({ n: r.n, t: thumbOf(img, 0, 0, img.naturalWidth, img.naturalHeight) }); } catch (e) {}
+    }
+    return refs;
+  }
+
+  // structure brute (pour l'apprentissage des modeles) : lignes, icone, piece, glyphes des deux lignes de prix
+  window.__listingRows = function (img) {
+    const P = pixels(img), out = [];
+    for (const co of coins(P)) {
+      const s = iconFromCoin(co, false).s, ch = co.y1 - co.y0;
+      const total = glyphs(P, co.x1 + 2, co.x1 + Math.round(260 * s), co.y0 - 1, co.y1 + 2, Math.round(9 * s));
+      const unit = glyphs(P, co.x0 - Math.round(12 * s), co.x0 + Math.round(260 * s), co.y1 + Math.round(6 * s),
+                          co.y1 + Math.round(12 * s) + ch, Math.round(7 * s));
+      out.push({ icon: iconFromCoin(co, unit.length > 0), coin: co, total, unit });
+    }
+    return { P, rows: out, vecOf };
+  };
+
+  window.scanListings = async function (img, opts) {
+    opts = opts || {};
+    const models = opts.models || PRICE_MODELS, thumbOf = window.__thumb, distOf = robustDist;
+    const { P, rows } = window.__listingRows(img), list = await iconRefs(thumbOf), out = [];
+    for (const r of rows) {
+      const ic = r.icon, t = thumbOf(img, ic.x, ic.y, ic.w, ic.h);
+      const scored = list.map(x => ({ n: x.n, d: distOf(t, x.t) })).sort((a, b) => a.d - b.d);
+      const best = scored[0];
+      const q = window.__readNumber(P, ic.x, ic.y, { px: ic.w, py: ic.h });
+      const tot = readPrice(r.total, models), uni = readPrice(r.unit, models);
+      // quantite : total / unitaire quand les deux prix sont lus (plus sur que le chiffre sur l'icone)
+      let qty = q.qty || 1;
+      if (tot.value && uni.value && tot.value % uni.value === 0) qty = tot.value / uni.value;
+      let unit = uni.value, check = [];
+      if (unit == null) unit = qty === 1 ? tot.value : (tot.value ? Math.round(tot.value / qty) : null);
+      if (tot.value && unit && Math.abs(unit * qty - tot.value) > Math.max(2, tot.value * 0.001)) check.push('total ≠ unitaire × quantité');
+      if (!best || best.d > 22 || scored[1] && scored[1].d - best.d < 2) check.push('objet incertain');
+      if (unit == null) check.push('prix illisible');
+      out.push({ name: best ? best.n : null, d: best && best.d, qty, unit, total: tot.value, check,
+                 x: ic.x, y: ic.y, w: ic.w, h: ic.h });
+    }
+    return out;
+  };
+})();

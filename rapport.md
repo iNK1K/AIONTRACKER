@@ -247,3 +247,26 @@ Sous chaque badge : **quantité max conseillée** (~2 h de ventes du marché, pl
 - Aujourd'hui : **12 crafts** (au lieu de 6), avec le nombre total et un lien vers la liste complète.
 - Mes crafts / Achat → craft : les items **pas en vente en ce moment mais vus dans les 3 derniers jours** sont comparés avec leur dernier prix connu, marqués « pas en vente en ce moment ». Mes crafts : 62 → 82 crafts comparés ; Achat → craft : 86 → 106.
 - Flip : **12 relevés** suffisent (au lieu de 24), avec un badge « historique court » sous 48 relevés. L'onglet se remplit tout seul : chaque passage horaire ajoute un relevé par item.
+
+---
+
+# Capture de mes ventes → mes_annonces.json — 18/10/2026 (soir)
+
+## Utilisation
+Accueil, section **④ Mes annonces**, cadre **📷 Remplir depuis une capture de mes ventes** : coller une capture de la fenêtre des ventes (Ctrl + V sur l'onglet Aujourd'hui), la glisser ou choisir le fichier. Plusieurs captures s'ajoutent (si tes ventes tiennent sur plusieurs écrans). Le site affiche chaque annonce lue (vignette, objet, quantité, prix unitaire ; ⚠ si douteuse), puis le **contenu complet de `mes_annonces.json`** :
+- annonces du même objet regroupées (quantités additionnées, prix le plus bas) ;
+- **coût de revient prérempli** avec l'estimation du site (achat des ingrédients au prix actuel) — à corriger si tu as récolté ou acheté moins cher ;
+- choix « Remplacer mes annonces » ou « Ajouter à mes annonces actuelles » (garde aussi tes coûts déjà saisis) ;
+- bouton **📋 Copier le fichier** et lien **✏️ Ouvrir mes_annonces.json sur GitHub** : coller, « Commit changes », et le passage horaire suivant suit tes annonces.
+Choix retenu : copier-coller (pas de token d'écriture dans le navigateur).
+
+## Comment ça lit la capture
+- **Annonces** : une pièce dorée devant chaque prix total ; l'icône est à une position fixe par rapport à elle (mesurée sur tes captures, à l'échelle de l'interface ; remontée quand une ligne « par unité » est présente).
+- **Objet** : par son icône, comparée aux icônes des ~770 objets vus en vente, avec une comparaison tolérante aux badges (ex. le badge rouge des équipements fabriqués).
+- **Prix** : chiffres appris sur ta capture (total en blanc, unitaire en gris). **Quantité** = total ÷ unitaire quand les deux sont lus (plus sûr que le petit chiffre sur l'icône), sinon chiffre de l'icône.
+- **Vérifications** : total = unitaire × quantité, objet nettement reconnu ; sinon ⚠ « à vérifier ».
+
+## Fiabilité
+- Tes 2 captures : **9 annonces sur 9** justes (objet, quantité, prix unitaire, total).
+- **Limite : ta capture ne contient aucun chiffre 8**, la forme du 8 n'est donc pas apprise. Un prix avec un 8 sera mal lu ou illisible, mais la vérification total = unitaire × quantité le signalera (⚠). Envoie-moi une capture avec un 8 dans un prix et j'ajoute le modèle.
+- Mesuré sur une seule taille d'interface (capture plein écran 1507 px de large).

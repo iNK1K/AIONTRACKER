@@ -5,6 +5,7 @@ Une tâche par ligne. Claude les traite dans l'ordre et coche `[x]` quand c'est 
 - [ ] 
 
 ## Fait
+- [x] Capture de la fenêtre des ventes → remplissage de mes_annonces.json (accueil, section ④ : coller la capture, copier le fichier, lien vers l'éditeur GitHub)
 - [x] Indice de sûreté (0-100, feu vert/orange/rouge) pour chaque opportunité d'achat : pression de l'offre (nouvelles annonces/h ÷ ventes/h), temps d'écoulement, marge si le prix revient à la normale, âge du pic ; alertes seulement au vert
 - [x] Suivi de mes positions : coût de revient dans mes_annonces.json, alertes « baisse à X (encore rentable) », « sous ton seuil de rentabilité », « le prix chute : vends », temps d'écoulement de mon stock
 - [x] Garde-fous chiffrés : quantité maximale conseillée (~2 h de ventes du marché) et prix plancher (« ne vends pas sous X ») sur chaque opportunité
