@@ -51,6 +51,7 @@ class Market:
         self._load_prices()
         self._ref = {}
         self._usual = {}
+        self._sales = {}
         self.ratio = self._activity_ratio()
         srow = con.execute("SELECT faction FROM servers WHERE id = ?", (self.server,)).fetchone()
         self.faction = (srow["faction"] if srow else "").lower()      # 'asmodian' / 'elyos'
@@ -144,11 +145,11 @@ class Market:
             if old and new and not 0.75 <= statistics.median(new) / statistics.median(old) <= 1.33:
                 continue
             q1, med, _ = statistics.quantiles([p for _, p in rows], n=4)
-            ref = self.ref(iid)
+            sl = self.sales(iid)
             net_u = med * (1 - fees) - q1
-            if not ref or not ref["daily"] or q1 <= 0 or net_u / q1 < a["flip_min_margin"]:
-                continue
-            mine = ref["daily"] * self.ratio * self.cfg["market_share"]
+            if not sl or sl["source"] != "serveur" or q1 <= 0 or net_u / q1 < a["flip_min_margin"]:
+                continue                              # flip seulement sur des ventes mesurees sur mon serveur
+            mine = sl["units"] * self.cfg["market_share"]
             out.append(dict(item_id=iid, objet=it["name"], prix=price, achat_cible=round(q1), revente_cible=round(med),
                             net_u=round(net_u), marge=round(net_u / q1, 3), ma_part_j=round(mine),
                             profit_j=round(mine * net_u), capital_j=round(mine * q1), annonces=self.listings.get(iid, 0),
@@ -214,22 +215,36 @@ class Market:
 
     def _drops_per_day(self, server, item_id, days=7):
         since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()[:19]
-        r = self.con.execute("SELECT AVG(drops_h) AS d FROM activity WHERE server=? AND item_id=? AND ts>=?",
+        r = self.con.execute("SELECT AVG(drops_h) AS d, COUNT(*) AS n FROM activity WHERE server=? AND item_id=? AND ts>=?",
                              (str(server), item_id, since)).fetchone()
-        return r["d"] * 24 if r and r["d"] else None
+        return r["d"] * 24 if r and r["n"] and r["d"] is not None else None
 
     def lot_size(self, item_id):
-        """Taille moyenne d'un lot vendu = unites vendues par jour / annonces disparues par jour.
-        D'abord sur le serveur de reference (les deux chiffres y sont mesures), sinon sur mon serveur (volume estime)."""
+        """Taille moyenne d'une annonce vendue = unites vendues par jour / annonces disparues par jour, les deux mesures
+        sur le serveur de reference (seul serveur dont le jeu publie les unites vendues). C'est une habitude des
+        vendeurs (taille des piles mises en vente), pas une demande : elle se transpose d'un serveur a l'autre."""
         ref = self.ref(item_id)
         if not ref or not ref["daily"]:
             return None
-        for server, iid, units in ((self.cfg["reference_server"], ref["ref_item"], ref["daily"]),
-                                   (self.server, item_id, ref["daily"] * self.ratio)):
-            drops = self._drops_per_day(server, iid)
-            if drops and drops >= 3:
-                return max(1, round(units / drops))
-        return None
+        drops = self._drops_per_day(self.cfg["reference_server"], ref["ref_item"])
+        return max(1, round(ref["daily"] / drops)) if drops and drops >= 3 else None
+
+    def sales(self, item_id):
+        """Ventes par jour sur MON serveur, mesurees : annonces disparues sur 24 h x taille des annonces.
+        A defaut de mesure sur mon serveur : ventes de Kaisinel x activite relative (extrapolation, signalee)."""
+        if item_id in self._sales:
+            return self._sales[item_id]
+        res = None
+        drops = self._drops_per_day(self.server, item_id, days=1.25)
+        if drops is not None:
+            lot = self.lot_size(item_id)
+            res = dict(units=drops * (lot or 1), listings=drops, lot=lot, source="serveur")
+        else:
+            ref = self.ref(item_id)
+            if ref and ref["daily"]:
+                res = dict(units=ref["daily"] * self.ratio, listings=None, lot=None, source="Kaisinel")
+        self._sales[item_id] = res
+        return res
 
     def hourly_profile(self, days=7):
         """Part des ventes par heure (heure de Paris) : annonces disparues d'une heure a l'autre, tous items confondus
@@ -419,11 +434,18 @@ class Market:
         cost_u, cost_pu = c["cost_r"] / q, c["cost_p"] / q
         net_u = sp["real"] * (1 - fees) - cost_u
         net_pu = sp["pess"] * (1 - fees) - cost_pu
-        # sans reference (item jamais vendu sur Kaisinel) : volume inconnu, on garde l'item mais signale
-        vol = ref["daily"] * self.ratio if ref else 0
+        # ventes mesurees sur mon serveur ; extrapolation depuis Kaisinel seulement a defaut (signalee)
+        sl = self.sales(oid)
+        vol = sl["units"] if sl else 0
         mine = vol * self.cfg["market_share"]
         res_u = sum(c["gather"].values()) / q
-        flags = [] if ref else ["volume de vente inconnu (pas de référence)"]
+        flags = []
+        if not sl:
+            flags.append("volume de vente inconnu (aucune mesure)")
+        elif sl["source"] == "Kaisinel":
+            flags.append("ventes non mesurées sur ton serveur (extrapolées de Kaisinel)")
+        elif sl["lot"] is None and sl["listings"]:
+            flags.append("taille des annonces inconnue (comptée 1 par annonce)")
         if sp["stale"]:
             flags.append(f"pas en vente en ce moment (dernier prix connu le {paris(sp['stale'], '%d/%m %H:%M')})")
         elif sp["listings"] <= 1:
@@ -442,7 +464,8 @@ class Market:
             net_affiche_u=round(sp["ask"] * (1 - fees) - cost_u),
             marge=round(net_u / cost_u, 3) if cost_u > 0 else None,
             ressources_u=res_u, net_par_ressource=round(net_u / res_u) if res_u else None,
-            vol_serveur_j=round(vol), ma_part_j=round(mine),
+            vol_serveur_j=round(vol), ma_part_j=round(mine), vol_source=sl and sl["source"],
+            annonces_vendues_j=round(sl["listings"], 1) if sl and sl["listings"] is not None else None,
             profit_j=round(mine * net_u), profit_pess_j=round(mine * net_pu),
             capital_j=round(mine * cost_u), flags=flags, **self.sizing(oid, mine))
 

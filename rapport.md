@@ -270,3 +270,32 @@ Choix retenu : copier-coller (pas de token d'écriture dans le navigateur).
 - Tes 2 captures : **9 annonces sur 9** justes (objet, quantité, prix unitaire, total).
 - **Limite : ta capture ne contient aucun chiffre 8**, la forme du 8 n'est donc pas apprise. Un prix avec un 8 sera mal lu ou illisible, mais la vérification total = unitaire × quantité le signalera (⚠). Envoie-moi une capture avec un 8 dans un prix et j'ajoute le modèle.
 - Mesuré sur une seule taille d'interface (capture plein écran 1507 px de large).
+
+---
+
+# Volumes de vente mesurés sur ton serveur — 18/10/2026 (soir)
+
+**Constat** : tu n'as vendu aucune potion alors que l'outil annonçait ~430 ventes/jour. Vérifié sur Hadala : seulement 12 à 16 annonces disparues en 24 h pour les potions/élixirs de PV. L'outil extrapolait les ventes de **Kaisinel** (seul serveur dont le jeu publie les ventes) × un coefficient d'activité global de Hadala (×0,37) : faux pour beaucoup de produits.
+
+**Correction** :
+- **Ventes/jour = annonces disparues sur 24 h sur Hadala × taille habituelle des annonces.** La taille des annonces (unités par annonce vendue) est mesurée sur Kaisinel : c'est une habitude de vendeurs (taille des piles), pas une demande.
+- L'activité (annonces disparues) est désormais relevée **chaque jour pour tous les produits comparés** (≈ 110 par serveur), plus seulement ~100 items.
+- À défaut de mesure sur ton serveur : extrapolation depuis Kaisinel, **signalée** (le craft passe en « à vérifier »). Sans aucune mesure : « volume inconnu ».
+- Si la taille des annonces est inconnue : comptée 1 unité par annonce (minimum certain), signalée.
+- Flip : seulement sur des ventes mesurées sur ton serveur.
+- Nouvelle colonne détaillée « Annonces vendues/j » ; accueil : « Ventes mesurées X / Y crafts ».
+
+**Effet (Hadala, 18/10 22h36)** :
+
+| Craft | Annonces vendues/j | Ta part/j avant → après | Profit/j avant → après |
+|---|---|---|---|
+| Pièce de bois d'Asvata | 60 | 461 → 346 | 6,1 M → 4,6 M |
+| Décoration en saphir | 24 | 269 → 311 | 1,1 M → 1,3 M |
+| Papier d'Asvata | 10 | 366 → 309 | 1,3 M → 1,1 M |
+| Élixir du vent | 38 | 309 → 199 | 1,1 M → 0,7 M |
+| Potion de PV supérieure | 18 | 278 → 140 | 0,9 M → 0,45 M |
+| Élixir de PV supérieur | 11 | 431 → 54 | 2,4 M → 0,3 M |
+
+Limites restantes : une annonce retirée par son vendeur compte comme une vente (surestimation possible, surtout pendant les pics où beaucoup de vendeurs remettent en vente) ; « ta part » reste une hypothèse de 20 % des ventes, que tu n'atteins que si tu es parmi les moins chers.
+
+Sur GitHub, ces mesures se rempliront au prochain passage **daily** (17h40), ou tout de suite avec un Run workflow `daily`.

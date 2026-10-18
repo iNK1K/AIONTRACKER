@@ -55,11 +55,16 @@ def cmd_snapshot(con, cfg):
 
 
 def cmd_activity(con, cfg):
-    items = list(dict.fromkeys(collect.core_items(con, 60) + collect.top_products(con, cfg["my_server"], 40)))
+    """Annonces disparues sur 24 h pour TOUS les produits compares (et les ressources) : c'est la mesure des ventes
+    sur chaque serveur. Le serveur de reference sert a mesurer la taille des annonces vendues."""
+    core = collect.core_items(con, 60)
+    per_server = {str(s): list(dict.fromkeys(core + collect.top_products(con, s, 1000)))
+                  for s in dict.fromkeys([cfg["my_server"], *cfg["watch_servers"]])}
+    items = list(dict.fromkeys(i for ids in per_server.values() for i in ids))
     # le serveur de reference est elyseen : on y suit les equivalents des produits asmodiens
     ref_items = list(dict.fromkeys(items + [e for e in (analysis.elyos_equivalent(con, i) for i in items) if e]))
     for s in dict.fromkeys([cfg["my_server"], *cfg["watch_servers"], cfg["reference_server"]]):
-        ids = ref_items if str(s) == str(cfg["reference_server"]) else items
+        ids = ref_items if str(s) == str(cfg["reference_server"]) else per_server.get(str(s), items)
         log(f"activite {s} : {collect.collect_activity(con, s, ids)} items")
 
 

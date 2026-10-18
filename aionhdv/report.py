@@ -511,9 +511,12 @@ def table_crafts(ctx, rows, tid, harvest):
             _th("Net/u", "Bénéfice par unité après 12 % de taxes et frais (et échecs, selon tes niveaux)", True) +
             (_th("Net/ressource", "Bénéfice par ressource récoltée utilisée", True) if harvest
              else _th("Marge", "Bénéfice / coût", True)) +
-            _th("Ventes/j", "Ce que tu peux vendre par jour (20 % du marché)", True) +
+            _th("Ventes/j", "Ta part (20 %) des ventes mesurées sur ton serveur : annonces disparues sur 24 h × taille "
+                "habituelle des annonces", True) +
             _th("Profit/j", "Ventes/j × Net/u", True) +
-            _th("Volume serveur/j", "Ventes estimées sur tout le serveur", True, True) +
+            _th("Volume serveur/j", "Unités vendues par jour sur ton serveur (mesurées)", True, True) +
+            _th("Annonces vendues/j", "Annonces disparues sur 24 h sur ton serveur (achats ; une annonce retirée compte aussi)",
+                True, True) +
             _th("Prix affiché", "Prix le plus bas actuellement en vente", True, True) +
             _th("Prix habituel", "Prix plancher médian sur ton serveur (3 j) ; à défaut, prix de vente moyen sur Kaisinel", True, True) +
             _th("Net pess./u", "Bénéfice si on vend au prix le plus bas", True, True) +
@@ -522,7 +525,7 @@ def table_crafts(ctx, rows, tid, harvest):
             _th("Statut") + "</tr>")
     good = [e for e in rows if is_good(e)]
     bad = [e for e in rows if not is_good(e)]
-    ncol = 17 if not harvest else 15
+    ncol = 18 if not harvest else 16
     body = []
     for i, e in enumerate(good + bad, 1):
         if i == len(good) + 1 and bad:
@@ -545,7 +548,8 @@ def table_crafts(ctx, rows, tid, harvest):
             + _num_td(e["prix_real"], color=False) + _num_td(e["net_u"], "cnet") + cols
             + _num_td(e["ma_part_j"], color=False)
             + _num_td(e["profit_j"], "big cprof", k=True)
-            + _num_td(e["vol_serveur_j"], color=False, x=True) + _num_td(e["prix_affiche"], color=False, x=True)
+            + _num_td(e["vol_serveur_j"], color=False, x=True) + _num_td(e.get("annonces_vendues_j"), color=False, x=True)
+            + _num_td(e["prix_affiche"], color=False, x=True)
             + _num_td(e["prix_ref"], color=False, x=True) + _num_td(e["net_pess_u"], x=True)
             + _num_td(e["profit_pess_j"], k=True, x=True)
             + ("" if harvest else _num_td(e["capital_j"], color=False, k=True, x=True))
@@ -884,8 +888,9 @@ def home(con, cfg, ctx, my, sname):
             f'{esc(top[0]["objet"]) if top else "–"}</div><div class="s">{kfmt(top[0]["profit_j"]) + " /j" if top else ""}</div></div>'
             f'<div class="kpi"><div class="l">Achat → craft</div><div class="v {"pos" if buys else "mut"}">{len(buys)}</div>'
             f'<div class="s">{"opportunité(s) sûre(s)" if buys else "rien de sûr aujourd’hui"}</div></div>'
-            f'<div class="kpi"><div class="l">Activité {esc(sname)}</div><div class="v">×{my["ratio"]:.2f}</div>'
-            f'<div class="s">par rapport à Kaisinel</div></div></div>')
+            f'<div class="kpi"><div class="l">Ventes mesurées sur {esc(sname)}</div>'
+            f'<div class="v">{sum(1 for e in my["harvest"] if e.get("vol_source") == "serveur")} / {len(my["harvest"])}</div>'
+            f'<div class="s">crafts comparés (annonces disparues sur 24 h)</div></div></div>')
 
     # 1. fabriquer et vendre
     cards = []
@@ -1036,7 +1041,8 @@ def build(con, cfg, results):
         sep()
         add("harvest", "Mes crafts (récolte)",
             f"<h2>Ma récolte → craft → vente</h2><p class='lead'>Tes ressources récoltées sont gratuites. {hyp} "
-            f"Activité ×{my['ratio']:.2f} par rapport à Kaisinel.</p>" + table_crafts(ctx, my["harvest"], "th", True))
+            "Ventes/j = ta part des ventes mesurées sur ton serveur (annonces disparues sur 24 h × taille habituelle "
+            "des annonces).</p>" + table_crafts(ctx, my["harvest"], "th", True))
         add("targets", "Quoi récolter",
             "<h2>Quoi récolter, et en quoi le transformer</h2><p class='lead'>Classement des ressources par gain réel "
             "une fois transformées (le brut n’est jamais vendu). Indique ce que tu récoltes par heure pour chaque ressource "
@@ -1057,7 +1063,7 @@ def build(con, cfg, results):
         parts = []
         for r in others:
             on = names.get(r["server"], r["server"])
-            parts.append(f"<h2>{esc(on)}</h2><p class='lead'>Activité ×{r['ratio']:.2f} par rapport à Kaisinel.</p>"
+            parts.append(f"<h2>{esc(on)}</h2><p class='lead'>Ventes mesurées sur ce serveur.</p>"
                          + table_crafts(ctx, r["harvest"], f"th_{r['server']}", True))
         add("compare", "Autres serveurs", "".join(parts))
     add("market", "Marché", "<h2>Tous les items en vente</h2>" + table_market(con, ctx, cfg))

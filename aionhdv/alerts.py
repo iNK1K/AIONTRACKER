@@ -317,8 +317,8 @@ def weekly(con, cfg, result, top=5):
 def digest(con, cfg, result, top=8):
     srv = con.execute("SELECT name FROM servers WHERE id = ?", (result["server"],)).fetchone()
     sname = srv["name"] if srv else result["server"]
-    lines = [f"📊 **Résumé du jour : {sname}** (prix de {paris(result['as_of'], '%H:%M')} heure de Paris, activité x{result['ratio']:.2f} par rapport à la référence)",
-             "", "**Ma récolte → craft → vente** (profit par jour à 20 % du marché)"]
+    lines = [f"📊 **Résumé du jour : {sname}** (prix de {paris(result['as_of'], '%H:%M')} heure de Paris, ventes mesurées sur le serveur)",
+             "", "**Ma récolte → craft → vente** (profit par jour à 20 % des ventes mesurées)"]
     h = result.get("hours")
     if h:
         lines.insert(1, f"🕒 Meilleur moment pour poster : **{h['best']}h – {(h['best'] + 3) % 24}h** "
