@@ -5,6 +5,8 @@
   "locale": "fr-FR",
 
   "market_share": 0.20,
+  "_combo_rate": "chance de combo (version eclatante) a chaque craft d'une chaine ; null = valeur des donnees du jeu (25 %)",
+  "combo_rate": 0.24,
   "fees": 0.12,
   "npc_reagent_price": 400,
   "max_listings": 10,

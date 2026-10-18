@@ -350,13 +350,16 @@ class Market:
                     listings=self.listings.get(item_id, 0), stale=stale)
 
     # ------------------------------------------------------------ cout d'une recette
-    def recipe_cost(self, recipe, mode, depth=0):
-        """mode 'harvest' : ressources de recolte gratuites ; mode 'buy' : tout s'achete a l'HDV."""
+    def recipe_cost(self, recipe, mode, depth=0, skip=()):
+        """mode 'harvest' : ressources de recolte gratuites ; mode 'buy' : tout s'achete a l'HDV.
+        skip : ingredients deja en main (ex. l'objet eclatant de l'etape precedente d'une chaine), non comptes."""
         npc = self.cfg["npc_reagent_price"]
         cost_r = cost_p = 0.0
         lines, gather, buys, thin_list = [], {}, {}, []
         ok = True
         for slot, opts in sorted(self.ingredients.get(recipe["id"], {}).items()):
+            if any(o["item_id"] in skip for o in opts):
+                continue
             gopt = next((o for o in opts if self.items.get(o["item_id"], {}).get("is_gather")), None)
             if gopt and mode == "harvest":
                 base = self.items[gopt["item_id"]]["base_name"]
@@ -529,6 +532,47 @@ class Market:
                     qte_max=qmax, prix_plancher=math.ceil(cost / (1 - self.cfg["fees"])) if cost else None,
                     ecoulement_h=round(sell_h, 1) if sell_h is not None else None)
 
+    def gamble_chains(self):
+        """Chaines d'amelioration (blanc -> vert -> bleu -> unique) : a chaque etape, le combo donne la version
+        « eclatante », seule a pouvoir servir a l'etape suivante. Donnees par etape pour le calcul dans le navigateur
+        (reussite selon les niveaux du joueur) : cout des matieres achetees, ressources recoltees, valeur nette de
+        vente du resultat normal et du resultat combo, ventes mesurees."""
+        fees = self.cfg["fees"]
+        combo_cfg = self.cfg.get("combo_rate")
+        recs = [r for rs in self.recipes_by_item.values() for r in rs if r["combo_item_id"] and not r["unresolved"]]
+        combos = {r["combo_item_id"] for r in recs}
+        by_input = {}
+        for r in recs:
+            for opts in self.ingredients.get(r["id"], {}).values():
+                for o in opts:
+                    by_input.setdefault(o["item_id"], []).append(r)
+
+        def value(iid):
+            u = self.usual_price(iid)
+            sl = self.sales(iid)
+            return dict(n=self.items[iid]["name"], v=round(u["price"] * (1 - fees)) if u else None,
+                        ls=round(sl["listings"], 1) if sl and sl["listings"] is not None else None)
+        chains = []
+        for r in recs:
+            if any(o["item_id"] in combos for opts in self.ingredients.get(r["id"], {}).values() for o in opts):
+                continue                                   # pas un debut de chaine
+            steps, cur, inp = [], r, None
+            while cur and len(steps) < 6:
+                c = self.recipe_cost(cur, "harvest", skip={inp} if inp else ())
+                plain, ecl = value(cur["item_id"]), value(cur["combo_item_id"])
+                steps.append(dict(prof=cur["profession"], m=cur["mastery"] or 0, cv=cur.get("rate_curve"),
+                                  c=combo_cfg if combo_cfg is not None else (cur["combo_prob_raw"] or 0) / 10000,
+                                  cost=round(c["cost_r"]), res={k: round(v, 2) for k, v in c["gather"].items()},
+                                  ok=c["ok"], inp=self.items[inp]["name"] if inp else None, plain=plain, ecl=ecl,
+                                  lines=c["lines"]))
+                if ecl["v"] is None:
+                    break                                  # plus de prix connu : on s'arrete la
+                inp = cur["combo_item_id"]
+                cur = next((x for x in by_input.get(inp, []) if x["combo_item_id"]), None)
+            if len(steps) >= 2 and steps[0]["plain"]["v"] is not None:
+                chains.append(dict(name=self.items[r["item_id"]]["name"], steps=steps))
+        return chains
+
     def sizing(self, item_id, per_day):
         """Combien d'annonces poster et de quelle taille, pour ecouler ma part du jour."""
         lot = self.lot_size(item_id)
@@ -580,9 +624,9 @@ class Market:
             for res, per_u in e["ressources"].items():
                 net_res = e["net_u"] / e["ressources_u"]
                 t = targets.setdefault(res, [])
-                t.append(dict(objet=e["objet"], net_par_ressource=round(net_res),
-                              ressources_j=round(e["ma_part_j"] * per_u), profit_j=e["profit_j"],
-                              fiable=e["net_u"] > 0 and not e["flags"], flags=e["flags"]))
+                t.append(dict(objet=e["objet"], item_id=e["item_id"], net_par_ressource=round(net_res),
+                              ressources_j=round(e["ma_part_j"] * per_u), profit_j=e["profit_j"], per_u=per_u,
+                              lot=e.get("lot_vente"), fiable=e["net_u"] > 0 and not e["flags"], flags=e["flags"]))
         out = []
         for res, uses in targets.items():
             uses.sort(key=lambda u: (not u["fiable"], -u["net_par_ressource"]))
@@ -673,4 +717,4 @@ def run_all(con, cfg, server=None):
     con.commit()
     return add_safety(con, dict(run_ts=run_ts, server=server, as_of=m.as_of, ratio=m.ratio, harvest=harvest, buy=buy,
                 targets=targets, plan=plan, hours=m.hourly_profile(), uniques=m.uniques(),
-                flips=m.flips(), listings=m.my_listings(), spikes=m.spikes(buy), market=m))
+                flips=m.flips(), listings=m.my_listings(), spikes=m.spikes(buy), chains=m.gamble_chains(), market=m))

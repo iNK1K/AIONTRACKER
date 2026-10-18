@@ -299,3 +299,20 @@ Choix retenu : copier-coller (pas de token d'écriture dans le navigateur).
 Limites restantes : une annonce retirée par son vendeur compte comme une vente (surestimation possible, surtout pendant les pics où beaucoup de vendeurs remettent en vente) ; « ta part » reste une hypothèse de 20 % des ventes, que tu n'atteins que si tu es parmi les moins chers.
 
 Sur GitHub, ces mesures se rempliront au prochain passage **daily** (17h40), ou tout de suite avec un Run workflow `daily`.
+
+---
+
+# Onglet 📅 Planning — 18/10/2026 (soir)
+
+## 🛡️ Planning safe
+- Tu indiques ton **temps de jeu** (3 h par défaut, enregistré). Le site répartit tes heures de récolte sur les débouchés qui rapportent le plus **par heure** (récolte/h de « Quoi récolter », 100 par défaut × net par ressource, ajusté à ta réussite selon tes niveaux), sans dépasser ce que chaque marché absorbe par jour (ventes mesurées).
+- Résultat : « Récolter X pendant Y h (≈ Z ressources) → fabriquer N × objet, en A annonces de L », gain par craft, gain total, et l'heure de mise en vente (fenêtre de 3 h la plus active).
+- Exemple (3 h, 100/h, Artisanat/Alchimie de test) : Bois d'Asvata 3 h → 305 Papiers d'Asvata (1,06 M) + 95 Pièces de bois (1,26 M) = **2,3 M**.
+
+## 🎲 Planning gamble (blanc → vert → bleu → unique)
+- **Mécanique (données du jeu)** : chaque étape d'une chaîne (ex. Masse d'orichalque → d'expert → de maître) donne, si la fabrication réussit, soit l'objet normal, soit, avec le **combo**, la version **éclatante** (grade supérieur), **seule utilisable à l'étape suivante**. Un échec fait perdre les matières **et** l'objet éclatant mis dedans.
+- **Combo : 24 %** (ta valeur ; les données du jeu indiquent 25 % sans vérification). Réglable dans l'onglet et dans `config.json` (`combo_rate`).
+- Par étape : réussite selon ton niveau (🔒 si insuffisant), coût de l'essai (matières achetées + **ressources récoltées comptées à ce qu'elles rapporteraient en safe**, option), **si échec** (probabilité, perte), **si réussite sans combo** (probabilité, valeur), **si le combo procque** (probabilité, valeur, **gain du proc** = éclatant − normal), et **conseil** : vendre l'éclatant ou tenter l'étape suivante (comparaison d'espérances, calculée du haut de la chaîne vers le bas).
+- Par chaîne : **espérance par essai** de l'étape 1, **jackpot** (chance de tout réussir avec combo et gain si ça arrive), nombre d'essais permis par ton stock (Mon stock). Chaînes triées par espérance ; « ⚠ prix douteux » si un objet normal est plus cher que sa version éclatante (annonce aberrante).
+- Exemple (Alchimie Débutant 41) : Orbe de vérité → éclatant (370 k) → éclatant d'expert (4,4 M) → éclatant de maître (22,5 M) ; réussite 92 % / 91 % / 88 % ; échec à l'étape 3 = −6 M ; espérance par essai +299 k ; jackpot ~1 %.
+- **Limites** : les objets éclatants hauts (bleu, unique) ont des ventes **non mesurées** (peu d'échanges) : leur prix habituel est fiable, mais **le temps pour les vendre est inconnu**. Les chaînes s'arrêtent au dernier palier ayant un prix sur Hadala (pas de prix pour les « Roi dragon »).

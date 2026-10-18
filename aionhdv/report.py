@@ -251,7 +251,7 @@ function applyLevels(){const st=lvState();
   const net=Math.round(sell-(st.lose?cost/info.rate:cost)),cn=el.querySelector('.cnet'),cp=el.querySelector('.cprof');
   if(cn){cn.textContent=NF.format(net);cn.dataset.v=net;cn.classList.toggle('pos',net>0);cn.classList.toggle('neg',net<=0)}
   if(cp){const pr=net*day;cp.textContent=kf(pr);cp.dataset.v=pr;cp.classList.toggle('pos',pr>0);cp.classList.toggle('neg',pr<=0)}});
- calc();renderMetiers()}
+ calc();renderMetiers();if(window.PLANDATA){planSafe();planGamble()}}
 function setLevel(p,v){const st=lvState();if(v===''||v==null||isNaN(v))delete st.lv[p];else st.lv[p]=Math.max(0,Math.min(100,Math.round(v)));lvSave(st);applyLevels()}
 function bumpLevel(p,d){const st=lvState();setLevel(p,(st.lv[p]||0)+d);toast(PROF[p]+' : '+lvTxt(lvState().lv[p]))}
 function setGrade(p,g,n){const st=lvState(),cur=st.lv[p];if(n===undefined)n=cur==null?'':(cur>50?cur-50:cur);
@@ -288,12 +288,76 @@ function rateCalc(inp){const R=rates();if(inp){const r=inp.closest('tr').dataset
   if(!best||!rate){kh.textContent='–';kh.dataset.v=0;hj.textContent='–';hj.dataset.v=0;return}
   const v=best*rate;kh.textContent=kf(v);kh.dataset.v=v;const h=abs/rate;hj.dataset.v=h;
   hj.textContent=h>=24?'24 h +':(h<1?Math.round(h*60)+' min':h.toFixed(1).replace('.',',')+' h')})}
+// ---------------- Planning
+function pget(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}}
+function pset(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+function stepRate(st,s){const lv=st.lv[s.prof],c=s.cv!=null&&window.CRAFTDATA&&CRAFTDATA.curves[s.cv];
+ if(lv==null||lv==='')return{p:c?c[0]/1e8:1,known:false};if(lv<s.m)return{p:0,known:true,locked:true};
+ return{p:c?c[Math.min(lv-s.m,c.length-1)]/1e8:1,known:true}}
+function planSafe(save){const box=document.getElementById('psafe');if(!box||!window.PLANDATA)return;
+ const hEl=document.getElementById('phours');if(save)pset('phours',+hEl.value);else hEl.value=pget('phours',3);
+ let left=+hEl.value||0;const R=rates(),st=lvState(),slots=[];
+ PLANDATA.targets.forEach(t=>{const rate=R[t.r]!=null?R[t.r]:100;if(!rate)return;
+  t.u.forEach(u=>{const info=craftInfo(u.i);if(info&&!info.ok)return;const p=info&&info.rate?info.rate:1;
+   slots.push({r:t.r,rate:rate,o:u.o,n:u.n*(st.lose?p:1),cap:u.cap,per:u.per/(st.lose?p:1),lot:u.lot})})});
+ slots.sort((a,b)=>b.n*b.rate-a.n*a.rate);const plan={};let tot=0;
+ for(const s of slots){if(left<=0)break;const h=Math.min(left,s.cap/s.rate);if(h<=0.05)continue;left-=h;
+  const res=h*s.rate,units=Math.floor(res/s.per);tot+=units*s.per*s.n;
+  (plan[s.r]=plan[s.r]||{h:0,res:0,k:0,c:[]});plan[s.r].h+=h;plan[s.r].res+=res;plan[s.r].k+=units*s.per*s.n;
+  plan[s.r].c.push({o:s.o,units:units,lot:s.lot,k:units*s.per*s.n})}
+ const rows=Object.entries(plan).sort((a,b)=>b[1].k-a[1].k);
+ if(!rows.length){box.innerHTML='<p class="mut">Aucun craft rentable à planifier.</p>';return}
+ const fmtH=h=>h<1?Math.round(h*60)+' min':h.toFixed(1).replace('.',',')+' h';
+ box.innerHTML='<div class="kpis"><div class="kpi"><div class="l">Gain estimé</div><div class="v pos">'+kf(tot)+'</div><div class="s">kinah, une fois tout vendu</div></div>'
+  +'<div class="kpi"><div class="l">Temps utilisé</div><div class="v">'+fmtH((+hEl.value||0)-left)+'</div><div class="s">'+(left>0.05?'au-delà, les marchés sont saturés':'de récolte')+'</div></div>'
+  +'<div class="kpi"><div class="l">Mise en vente</div><div class="v" style="font-size:20px">'+PLANDATA.best+'</div><div class="s">meilleur moment pour poster</div></div></div>'
+  +'<div class="uses">'+rows.map(([r,p],k)=>`<div class="card" style="padding:12px 16px"><b>${k+1}. Récolter <span class="nm" title="Cliquer pour copier">${escH(r)}</span> pendant ${fmtH(p.h)}</b> <span class="sub">(≈ ${NF.format(Math.round(p.res))} ressources)</span>`
+   +p.c.filter(c=>c.units>0).map(c=>`<div class="row"><span>→ fabriquer <b>${NF.format(c.units)}</b> × <span class="nm" title="Cliquer pour copier">${escH(c.o)}</span>${c.lot?' · '+Math.max(1,Math.round(c.units/Math.min(c.lot,c.units)))+' annonce(s) de '+NF.format(Math.min(c.lot,c.units)):''}</span><b class="pos">${kf(c.k)}</b></div>`).join('')+'</div>').join('')+'</div>'
+  +(Object.keys(R).length?'':'<p class="sub">Récolte par heure : 100 par défaut pour chaque ressource ; indique tes vraies valeurs dans « Quoi récolter ».</p>')}
+function planGamble(save){const box=document.getElementById('pgamble');if(!box||!window.PLANDATA)return;
+ const cEl=document.getElementById('pcombo'),oEl=document.getElementById('popp');
+ const def=PLANDATA.chains.length?Math.round(PLANDATA.chains[0].steps[0].c*100):24;
+ if(save){pset('pcombo',+cEl.value);pset('popp',oEl.checked)}else{cEl.value=pget('pcombo',def);oEl.checked=pget('popp',true)}
+ const c=(+cEl.value||0)/100,st=lvState(),safe={};PLANDATA.targets.forEach(t=>safe[t.r]=t.avg);
+ const stock=pget('stock',{}),opp=s=>oEl.checked?Object.entries(s.res).reduce((a,[r,q])=>a+q*(safe[r]||0),0):0;
+ const out=PLANDATA.chains.map(ch=>{const S=[];
+  for(const s of ch.steps){if(s.plain.v==null||s.ecl.v==null||!s.ok)break;const r=stepRate(st,s);S.push({...s,p:r.p,known:r.known,locked:r.locked,cost:s.cost+opp(s)})}
+  if(S.length<2)return null;                       // une seule etape : pas une chaine a jouer
+  const weird=S.some(s=>s.plain.v>s.ecl.v);         // objet normal plus cher que sa version eclatante : prix douteux
+  // valeur de garder l'eclatant de l'etape k (H) et decision : vendre ou tenter l'etape suivante
+  for(let k=S.length-1;k>=0;k--){const s=S[k],nx=S[k+1];const sell=s.ecl.v==null?0:s.ecl.v;
+   const cont=nx&&!nx.locked?nx.p*(1-c)*nx.plain.v+nx.p*c*nx.H-nx.cost:-Infinity;
+   s.H=Math.max(sell,cont);s.go=cont>sell;s.cont=cont}
+  const s0=S[0],ev=s0.locked?null:s0.p*(1-c)*s0.plain.v+s0.p*c*s0.H-s0.cost;
+  let pj=1,cj=0;S.forEach(s=>{pj*=s.p*c;cj+=s.cost});const last=S[S.length-1],lockAt=S.find(s=>s.locked);
+  const n0=Object.keys(s0.res).length?Math.min(...Object.entries(s0.res).map(([r,q])=>Math.floor((stock[r]||0)/q))):0;
+  return{ch:ch,S:S,ev:ev,pj:pj,jack:(last.ecl.v||0)-cj,n0:n0,weird:weird,lockAt:lockAt}}).filter(Boolean);
+ out.sort((a,b)=>(a.weird-b.weird)||((b.ev??-1e18)-(a.ev??-1e18)));
+ const pct=x=>(x*100).toFixed(x<0.01?2:1).replace('.',',')+' %',sg=x=>(x>=0?'+':'')+kf(x);
+ box.innerHTML=out.map(o=>{const s0=o.S[0];
+  return `<details class="card" style="margin:0 0 10px"><summary style="cursor:pointer;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap">`
+   +`<b>${escH(o.ch.name)} <span class="sub">→ ${escH(o.S[o.S.length-1].ecl.n)}</span></b>`
+   +`<span>${o.ev==null?'<span class="badge b-mut">🔒 '+PROF[s0.prof]+' '+lvTxt(s0.m)+'</span>':'Espérance par essai : <b class="'+(o.ev>0?'pos':'neg')+'">'+sg(o.ev)+'</b>'}`
+   +` · ${o.lockAt?'jackpot 🔒 '+PROF[o.lockAt.prof]+' '+lvTxt(o.lockAt.m):'jackpot '+pct(o.pj)+' → <b>'+kf(o.jack)+'</b>'}${o.n0?' · ton stock : '+o.n0+' essai(s)':''}`
+   +`${o.weird?' <span class="badge b-warn" title="Un objet normal est plus cher que sa version éclatante : prix habituel probablement faussé par une annonce aberrante">⚠ prix douteux</span>':''}</span></summary>`
+   +'<div class="wrap" style="max-height:none;margin-top:8px"><table><thead><tr><th>Étape</th><th class="n">Réussite</th><th class="n">Coût de l’essai</th>'
+   +'<th>Si échec</th><th>Si réussite sans combo</th><th>Si le combo procque</th><th>Conseil</th></tr></thead><tbody>'
+   +o.S.map((s,k)=>{const prev=k?o.S[k-1]:null,lose=s.cost+(prev?(prev.ecl.v||0):0);
+    return `<tr${s.locked?' class="locked"':''}><td><b>${k+1}.</b> ${PROF[s.prof]} ${lvTxt(s.m)}${s.inp?'<div class="sub">avec '+escH(s.inp)+'</div>':''}</td>`
+     +`<td class="n">${s.locked?'🔒':pct(s.p)}${s.known?'':'<div class="sub">niveau non renseigné</div>'}</td>`
+     +`<td class="n">${kf(s.cost)}<div class="sub">${escH((s.lines||[]).filter(l=>!l.includes('récolte')).slice(0,3).join(' · '))}</div></td>`
+     +`<td><span class="neg">${pct(1-s.p)}</span> : tu perds ${kf(lose)}</td>`
+     +`<td>${pct(s.p*(1-c))} : ${escH(s.plain.n)} <b>${kf(s.plain.v)}</b><div class="sub">${s.plain.ls!=null?NF.format(s.plain.ls)+' annonce(s) vendue(s)/j':'ventes non mesurées'}</div></td>`
+     +`<td>${pct(s.p*c)} : ${escH(s.ecl.n)} <b class="pos">${s.ecl.v==null?'prix inconnu':kf(s.ecl.v)}</b><div class="sub">gain du proc : ${s.ecl.v==null?'?':sg(s.ecl.v-s.plain.v)}${s.ecl.ls!=null?' · '+NF.format(s.ecl.ls)+' ann. vendue(s)/j':' · ventes non mesurées'}</div></td>`
+     +`<td>${k===o.S.length-1?'Vendre':(s.go?'<span class="badge b-ok">Tenter l’étape '+(k+2)+'</span><div class="sub">espérance '+sg(s.cont)+' contre vente '+kf(s.ecl.v)+'</div>':'<span class="badge b-warn">Vendre l’éclatant</span><div class="sub">tenter plus haut : '+(s.cont===-Infinity?'impossible (niveau)':sg(s.cont))+'</div>')}</td></tr>`}).join('')
+   +'</tbody></table></div><p class="sub" style="margin-top:6px">Espérance = gain moyen par essai de l’étape 1 en suivant les conseils. Jackpot = chance de passer toutes les étapes avec combo, et gain si ça arrive (valeur finale − coûts de tous les essais).</p></details>'}).join('')
+  ||'<p class="mut">Aucune chaîne avec des prix connus.</p>'}
 function clearStock(){document.querySelectorAll('#stock input[data-r]').forEach(i=>i.value='');calc()}
 document.addEventListener('DOMContentLoaded',()=>{let t='home';try{t=localStorage.getItem('tab')||t;
  if(localStorage.getItem('detail')){document.body.classList.add('detail');document.querySelectorAll('input.dt').forEach(x=>x.checked=true)}}catch(e){}
  if(!document.getElementById(t))t='home';show(t);
  try{const s=JSON.parse(localStorage.getItem('stock')||'null');if(s)document.querySelectorAll('#stock input[data-r]').forEach(i=>i.value=s[i.dataset.r]||'')}catch(e){}
- importLevelsFromHash();applyLevels();rateCalc();document.querySelectorAll('th').forEach(th=>th.onclick=()=>sortT(th))});
+ importLevelsFromHash();applyLevels();rateCalc();planSafe();planGamble();document.querySelectorAll('th').forEach(th=>th.onclick=()=>sortT(th))});
 """
 
 MAP_HTML = """<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -458,6 +522,42 @@ def craft_attrs(e):
     """Donnees pour recalculer la ligne dans le navigateur selon les niveaux de metier."""
     return (f'data-craft="{e["item_id"]}" data-sell="{e.get("vente_net_u", 0)}" data-cost="{e["achats_u"]}" '
             f'data-day="{e["ma_part_j"]}"')
+
+
+def planning_tab(cfg, my):
+    """Onglet Planning : plan « safe » (recolte -> crafts qui se vendent) et plan « gamble » (chaines d'amelioration
+    avec combo). Calcul dans le navigateur : niveaux de metier, recolte par heure et stock du joueur."""
+    targets = []
+    for t in my["targets"]:
+        uses = [dict(o=u["objet"], i=u["item_id"], n=u["net_par_ressource"], cap=u["ressources_j"], per=round(u["per_u"], 4),
+                     lot=u.get("lot")) for u in t["usages"] if u["fiable"] and u["ressources_j"]]
+        if uses:
+            avg = sum(u["n"] * u["cap"] for u in uses) / sum(u["cap"] for u in uses)
+            targets.append(dict(r=t["ressource"], u=uses, avg=round(avg)))
+    hours = my.get("hours")
+    best = f"{hours['best']}h – {(hours['best'] + 3) % 24}h" if hours else "21h – 0h"
+    data = json.dumps(dict(targets=targets, chains=my.get("chains") or [], best=best), ensure_ascii=False,
+                      separators=(",", ":"))
+    return ("<h2>Planning de la journée</h2><p class='lead'>Deux façons de jouer ta récolte (jamais vendue brute). "
+            "Les calculs utilisent tes niveaux de métier (🛠️ Mes métiers), ta récolte par heure (Quoi récolter, "
+            "100 par défaut) et ton stock (🧮 Mon stock).</p>"
+            "<h3>🛡️ Planning safe : récolter ce qui rapporte et se vend</h3>"
+            '<div class="toolbar"><label class="tg">Temps de jeu aujourd’hui : <input type="number" id="phours" min="0.5" '
+            'step="0.5" value="3" style="width:70px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;'
+            'background:var(--bg2);color:var(--txt);font:inherit" oninput="planSafe(true)"> h</label></div>'
+            '<div id="psafe"></div>'
+            "<h3>🎲 Planning gamble : blanc → vert → bleu → unique</h3>"
+            "<p class='lead'>À chaque craft d’une chaîne, si la fabrication réussit, le <b>combo</b> donne la version "
+            "<b>éclatante</b> (grade supérieur), seule à pouvoir servir à l’étape suivante ; sinon tu obtiens l’objet normal. "
+            "Un échec fait perdre les matières <b>et</b> l’objet éclatant mis dedans. À chaque palier, le calcul compare "
+            "« vendre l’éclatant » et « le risquer plus haut ». Prix = prix habituel sur ton serveur, après 12 % de frais.</p>"
+            '<div class="toolbar"><label class="tg">Chance de combo : <input type="number" id="pcombo" min="1" max="100" '
+            'step="1" style="width:64px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;background:var(--bg2);'
+            'color:var(--txt);font:inherit" oninput="planGamble(true)"> %</label>'
+            '<label class="tg"><input type="checkbox" id="popp" checked onchange="planGamble(true)"> Compter mes ressources à '
+            'ce qu’elles rapportent en safe (coût d’opportunité)</label></div>'
+            '<div id="pgamble"></div>'
+            f"<script>window.PLANDATA={data};</script>")
 
 
 def metiers_tab(con, my):
@@ -1054,6 +1154,7 @@ def build(con, cfg, results):
             + table_spikes(ctx, my.get("spikes")) + table_crafts(ctx, my["buy"], "tb", False))
         add("flips", "🔁 Flip", "<h2>Achat → revente (sans craft)</h2>" + table_flips(ctx, my["flips"], cfg))
         add("uniques", "💎 Uniques", "<h2>Équipements Unique : prix bradés</h2>" + table_uniques(ctx, my["uniques"], cfg))
+        add("planning", "📅 Planning", planning_tab(cfg, my))
         add("metiersTab", "🛠️ Mes métiers", metiers_tab(con, my))
         add("plan", "🧮 Mon stock", "<h2>Mon stock → quoi fabriquer</h2>" + stock_calc(ctx, cfg, my["harvest"], my["market"].gather_names())
             + ("<h3>Plan quotidien (config)</h3>" + table_plan(my["plan"]) if my["plan"] else ""))

@@ -5,6 +5,10 @@ Une tâche par ligne. Claude les traite dans l'ordre et coche `[x]` quand c'est 
 - [ ] 
 
 ## Fait
+- [x] Onglet 📅 Planning : plan safe (temps de jeu → quoi récolter, quoi crafter, combien d'annonces, gain) et plan gamble (chaînes blanc → vert → bleu → unique : réussite selon les niveaux, combo 24 %, perte si échec, gain du proc, vendre ou continuer, jackpot)
+- [x] Volumes de vente mesurés sur le serveur (annonces disparues × taille des annonces) au lieu de l'extrapolation Kaisinel
+- [x] Quoi récolter : kinah par heure de récolte (100/h par défaut) et heures avant saturation
+- [x] Capture de la fenêtre des ventes → mes_annonces.json
 - [x] Capture de la fenêtre des ventes → remplissage de mes_annonces.json (accueil, section ④ : coller la capture, copier le fichier, lien vers l'éditeur GitHub)
 - [x] Indice de sûreté (0-100, feu vert/orange/rouge) pour chaque opportunité d'achat : pression de l'offre (nouvelles annonces/h ÷ ventes/h), temps d'écoulement, marge si le prix revient à la normale, âge du pic ; alertes seulement au vert
 - [x] Suivi de mes positions : coût de revient dans mes_annonces.json, alertes « baisse à X (encore rentable) », « sous ton seuil de rentabilité », « le prix chute : vends », temps d'écoulement de mon stock
