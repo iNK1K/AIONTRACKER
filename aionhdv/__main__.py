@@ -90,6 +90,9 @@ def cmd_analyze(con, cfg, send_alerts=False, send_digest=False):
         results.append(res)
         log(f"analyse {s} : {len(res['harvest'])} crafts recolte, {len(res['buy'])} achat-craft, ratio {res['ratio']:.2f}")
         if send_alerts and str(s) == str(cfg["my_server"]):
+            watch = analysis.watched_items(res)
+            analysis.add_safety(con, res, collect.recent_activity(con, s, watch))
+            log(f"activite recente : {len(watch)} items surveilles")
             msgs = alerts.detect(con, cfg, res)
             for m in msgs:
                 alerts.send(cfg, m)
@@ -97,7 +100,8 @@ def cmd_analyze(con, cfg, send_alerts=False, send_digest=False):
             for m in uniques:
                 alerts.send(cfg, m, "unique")
             flips = (alerts.detect_flips(con, cfg, res) + alerts.detect_undercuts(con, cfg, res)
-                     + alerts.detect_patch_moves(con, cfg, res) + alerts.detect_spikes(con, cfg, res))
+                     + alerts.detect_patch_moves(con, cfg, res) + alerts.detect_spikes(con, cfg, res)
+                     + alerts.detect_positions(con, cfg, res))
             for m in flips:
                 alerts.send(cfg, m)
             log(f"alertes : {len(msgs)}, uniques : {len(uniques)}, flips et annonces battues : {len(flips)}")

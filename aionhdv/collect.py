@@ -156,6 +156,26 @@ def activity_from_history(h):
                 points=len(obs), recorded=recorded)
 
 
+def recent_activity(con, server, item_ids, hours=3):
+    """Activite recente des items a surveiller (opportunites, mes annonces) : nouvelles annonces et ventes par heure
+    sur les dernieres heures (repli sur 24 h si trop peu de releves). L'activite 24 h est aussi enregistree."""
+    ts, out = now_iso(), {}
+    since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()[:19]
+    for iid in dict.fromkeys(item_ids):
+        h = a2tracker.history(iid, server, 1)
+        a24 = activity_from_history(h)
+        if not a24:
+            continue
+        con.execute("INSERT OR REPLACE INTO activity VALUES (?,?,?,?,?,?,?,?,?)",
+                    (str(server), iid, ts, a24["hours"], a24["drops_h"], a24["adds_h"], a24["floor_up_drops_h"],
+                     a24["points"], a24["recorded"]))
+        obs = [o for o in h.get("observations", []) if (o.get("fetchedAt") or "")[:19] >= since]
+        a3 = activity_from_history({"observations": obs})
+        out[iid] = dict(a3 if a3 and a3["points"] >= 4 else a24, window=f"{hours} h" if a3 and a3["points"] >= 4 else "24 h")
+    con.commit()
+    return out
+
+
 def collect_activity(con, server, item_ids):
     ts = now_iso()
     n = 0

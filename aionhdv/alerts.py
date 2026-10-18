@@ -35,6 +35,19 @@ def send(cfg, text, channel=None):
     return True
 
 
+def safe(e):
+    """Opportunite d'achat assez sure pour une alerte : feu vert de l'indice de surete."""
+    return (e.get("surete") or {}).get("feu") == "vert"
+
+
+def surete_txt(e):
+    s = e.get("surete")
+    if not s:
+        return ""
+    plancher = f" · ne vends pas sous {fmt(s['prix_plancher'])}" if s.get("prix_plancher") else ""
+    return f"\n🛡️ Sûreté {s['score']}/100 · quantité max ~{fmt(s['qte_max'])}{plancher}"
+
+
 def _once(con, key, message):
     if con.execute("SELECT 1 FROM alerts_sent WHERE key = ?", (key,)).fetchone():
         return False
@@ -95,10 +108,11 @@ def detect(con, cfg, result):
     for e in result["buy"]:
         if e["flags"] or e["marge"] is None:
             continue
-        if e["marge"] >= a["buy_craft_min_margin"] and e["profit_j"] >= a["buy_craft_min_profit_day"] and e["net_pess_u"] > 0:
+        if (e["marge"] >= a["buy_craft_min_margin"] and e["profit_j"] >= a["buy_craft_min_profit_day"] and e["net_pess_u"] > 0
+                and safe(e)):
             msg = (f"🟢 **Achat → craft rentable** [{sname}] {e['objet']} : coût {fmt(e['achats_u'])} → "
                    f"vente {fmt(e['prix_real'])}, net **{fmt(e['net_u'])}/u** (+{e['marge']:.0%}), "
-                   f"~{fmt(e['profit_j'])}/j. Ingrédients : {'; '.join(e['ingredients'])}")
+                   f"~{fmt(e['profit_j'])}/j. Ingrédients : {'; '.join(e['ingredients'])}{surete_txt(e)}")
             if _once(con, f"buy|{result['server']}|{e['item_id']}|{day}", msg):
                 msgs.append(msg)
 
@@ -156,9 +170,15 @@ def detect_undercuts(con, cfg, result):
     for l in result["listings"]:
         if not l["battu"]:
             continue
+        if l["conseil"]:
+            gain = f" (il te reste +{fmt(round(l['conseil'] * (1 - cfg['fees']) - l['cout']))}/u)" if l.get("cout") else ""
+            advice = f"Repasse devant à **{fmt(l['conseil'])}**{gain}."
+        elif l.get("seuil"):
+            advice = f"Le plus bas est sous ton seuil de rentabilité ({fmt(l['seuil'])}) : baisser = vendre à perte."
+        else:
+            advice = "Baisse ton prix ou attends."
         msg = (f"⚔️ **Tu es battu** [{sname}] {l['nom']} : quelqu'un vend à **{fmt(l['plancher'])}** "
-               f"(ton prix {fmt(l['mon_prix'])}, −{fmt(l['ecart'])}) — {l['annonces']} annonce(s). "
-               f"Baisse ton prix ou attends.")
+               f"(ton prix {fmt(l['mon_prix'])}, −{fmt(l['ecart'])}) — {l['annonces']} annonce(s). {advice}")
         if _once(con, f"undercut|{result['server']}|{l['item_id']}|{l['mon_prix']}|{l['plancher']}", msg):
             msgs.append(msg)
     return msgs
@@ -192,14 +212,45 @@ def detect_spikes(con, cfg, result):
     day = datetime.now(timezone.utc).strftime("%Y%m%d")
     msgs = []
     for e in result.get("spikes") or []:
+        if not safe(e):
+            continue                                  # marche deja encombre ou trop risque : pas d'alerte
         depuis = f", depuis {paris(e['depuis'], '%d/%m %H:%M')}" if e["depuis"] else ""
         msg = (f"⚡ **Pic de prix** [{sname}] {e['objet']} affiché **{fmt(e['prix_affiche'])}** "
                f"(habituellement {fmt(e['prix_ref'])}, ×{e['ratio']}{depuis}) — {e['annonces']} annonce(s). "
                f"Acheter les ingrédients ({fmt(e['achats_u'])}/u) et fabriquer rapporte **+{fmt(e['net_affiche_u'])}/u** "
                f"si tu vends au prix affiché, mais **{fmt(e['net_habituel_u'])}/u** si le prix revient à la normale : "
-               f"petite quantité, à vendre vite. Ingrédients : {'; '.join(e['ingredients'])}")
+               f"petite quantité, à vendre vite. Ingrédients : {'; '.join(e['ingredients'])}{surete_txt(e)}")
         if _once(con, f"spike_craft|{result['server']}|{e['item_id']}|{day}", msg):
             msgs.append(msg)
+    return msgs
+
+
+def detect_positions(con, cfg, result):
+    """Mes positions : prix sous mon seuil de rentabilite, chute en cours, stock trop long a ecouler."""
+    srv = con.execute("SELECT name FROM servers WHERE id = ?", (result["server"],)).fetchone()
+    sname = srv["name"] if srv else result["server"]
+    day = datetime.now(timezone.utc).strftime("%Y%m%d")
+    msgs = []
+    for l in result["listings"]:
+        if not l["item_id"]:
+            continue
+        if l["sous_seuil"]:
+            msg = (f"⛔ **Sous ton seuil de rentabilité** [{sname}] {l['nom']} : le plus bas est à **{fmt(l['plancher'])}**, "
+                   f"ton seuil est {fmt(l['seuil'])} (coût {fmt(l['cout'])} + frais). Vendre maintenant = "
+                   f"{fmt(l['marge_u'])}/u. Garde ton stock, ou coupe la perte si le prix continue de baisser.")
+            if _once(con, f"pos_seuil|{result['server']}|{l['item_id']}|{day}", msg):
+                msgs.append(msg)
+        if l["chute"]:
+            msg = (f"📉 **Le prix chute** [{sname}] {l['nom']} : {fmt(l['plancher'])}, soit {l['chute']:.0%} du plus haut "
+                   f"des 3 dernières heures. Si tu veux vendre, c'est maintenant"
+                   + (f" (seuil de rentabilité {fmt(l['seuil'])})." if l.get("seuil") else "."))
+            if _once(con, f"pos_chute|{result['server']}|{l['item_id']}|{day}", msg):
+                msgs.append(msg)
+        if (l.get("ecoulement_h") or 0) > 24:
+            msg = (f"🐢 **Stock long à écouler** [{sname}] {l['nom']} : ~{l['ecoulement_h']:.0f} h au rythme actuel des ventes "
+                   f"({l['annonces']} annonces devant toi). Mets moins d'annonces à la fois, ou garde le reste en stock.")
+            if _once(con, f"pos_lent|{result['server']}|{l['item_id']}|{day}", msg):
+                msgs.append(msg)
     return msgs
 
 
@@ -211,12 +262,12 @@ def detect_flips(con, cfg, result):
     day = datetime.now(timezone.utc).strftime("%Y%m%d")
     msgs = []
     for f in result["flips"]:
-        if not f["acheter"] or f["profit_j"] < a["flip_min_profit_day"]:
+        if not f["acheter"] or f["profit_j"] < a["flip_min_profit_day"] or not safe(f):
             continue
         lots = f" ({f['nb_lots_j']} annonce(s) de {fmt(f['lot_vente'])})" if f.get("nb_lots_j") else ""
         msg = (f"🔁 **Flip** [{sname}] {f['objet']} à **{fmt(f['prix'])}** (achat cible {fmt(f['achat_cible'])}) → "
                f"revendre ~{fmt(f['revente_cible'])}{lots}, net **{fmt(f['net_u'])}/u** (+{f['marge']:.0%}), "
-               f"~{fmt(f['ma_part_j'])}/j → {fmt(f['profit_j'])}/j — {f['annonces']} annonce(s)")
+               f"~{fmt(f['ma_part_j'])}/j → {fmt(f['profit_j'])}/j — {f['annonces']} annonce(s){surete_txt(f)}")
         if _once(con, f"flip|{result['server']}|{f['item_id']}|{day}", msg):
             msgs.append(msg)
     return msgs

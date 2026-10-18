@@ -1,5 +1,6 @@
 """Moteur d'analyse : rentabilite x volume, recolte -> craft, achat -> craft -> revente, cibles de recolte."""
 import json
+import math
 import statistics
 from datetime import datetime, timedelta, timezone
 
@@ -94,14 +95,35 @@ class Market:
         return dict(median=statistics.median(vals), low=min(vals), n=len(vals)) if vals else None
 
     def my_listings(self):
-        """Mes annonces (mes_annonces.json) face au prix le plus bas actuel : suis-je encore le moins cher ?"""
-        out = []
-        for name, mine in (self.cfg.get("my_listings") or {}).items():
+        """Mes annonces (mes_annonces.json) face au prix le plus bas actuel. Une annonce peut etre un simple prix,
+        ou {"prix": .., "cout": .., "quantite": ..} : avec le cout de revient, on calcule le seuil de rentabilite."""
+        fees, out = self.cfg["fees"], []
+        for name, v in (self.cfg.get("my_listings") or {}).items():
+            v = v if isinstance(v, dict) else {"prix": v}
+            mine, cost, qty = v.get("prix"), v.get("cout"), v.get("quantite")
             iid = self.by_base.get(name.strip())
             floor = self.price.get(iid) if iid else None
-            out.append(dict(nom=name, item_id=iid, mon_prix=mine, plancher=floor, annonces=self.listings.get(iid, 0),
-                            battu=floor is not None and floor < mine, ecart=(mine - floor) if floor is not None else None))
+            seuil = math.ceil(cost / (1 - fees)) if cost else None
+            # prix conseille pour repasser devant : 1 sous le plus bas, s'il reste au-dessus du seuil
+            conseil = floor - 1 if floor is not None and mine and floor < mine and (not seuil or floor - 1 >= seuil) else None
+            out.append(dict(nom=name, item_id=iid, mon_prix=mine, cout=cost, quantite=qty, plancher=floor,
+                            annonces=self.listings.get(iid, 0), seuil=seuil, conseil=conseil,
+                            battu=floor is not None and mine is not None and floor < mine,
+                            ecart=(mine - floor) if floor is not None and mine else None,
+                            sous_seuil=bool(seuil and floor is not None and floor < seuil),
+                            marge_u=round(floor * (1 - fees) - cost) if cost and floor is not None else None,
+                            chute=self.price_drop(iid) if iid else None))
         return out
+
+    def price_drop(self, item_id, hours=3):
+        """Chute en cours : prix actuel compare au plus haut des dernieres heures (None si pas de chute nette)."""
+        now = self.price.get(item_id)
+        since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()[:19]
+        recent = [p for t, p in self.price_series(item_id, 1) if t >= since]
+        if not now or not recent:
+            return None
+        top = max(recent)
+        return round(now / top, 2) if now <= 0.75 * top else None
 
     def flips(self, days=3):
         """Achat-revente sans craft : acheter au bas de la fourchette habituelle (1er quartile des prix plancher sur
@@ -430,6 +452,48 @@ class Market:
         out.sort(key=lambda x: -x["net_affiche_u"])
         return out
 
+    def safety(self, e, act, cost, net_usual, since=None):
+        """Indice de surete (0-100) d'une opportunite d'achat : peut-on vraiment revendre, et a quel risque ?
+        act : activite recente de l'item vendu (nouvelles annonces/h, annonces disparues/h)."""
+        score, why = 100, []
+        listings = self.listings.get(e["item_id"], 0)
+        lot = e.get("lot_vente") or 1
+        if act:
+            pressure = act["adds_h"] / max(act["drops_h"], 0.1)
+            sell_h = listings / max(act["drops_h"], 0.05)
+            for lim, pen, txt in ((2, 45, "le stock s'accumule vite"), (1.2, 30, "le stock s'accumule"),
+                                  (0.8, 12, "autant d'arrivées que de ventes")):
+                if pressure > lim:
+                    score -= pen
+                    why.append(f"{txt} : {act['adds_h']:.1f} nouvelles annonces/h pour {act['drops_h']:.1f} vendues ({act['window']})")
+                    break
+            for lim, pen in ((24, 35), (12, 22), (4, 10)):
+                if sell_h > lim:
+                    score -= pen
+                    why.append(f"~{sell_h:.0f} h avant que les {listings} annonces devant toi soient vendues")
+                    break
+            qmax = 2 * act["drops_h"] * lot                       # ~2 h de ventes du marche
+        else:
+            score -= 25
+            sell_h = None
+            why.append("activité du marché inconnue")
+            qmax = None
+        # plafond : ma part du marche sur 2 h ; pendant un pic, peu d'acheteurs suivent au prix haut
+        share = (e.get("ma_part_j") or 0) / 12
+        qmax = max(1, round(min(q for q in (qmax, share) if q is not None) / (3 if since else 1))) if (qmax or share) else 1
+        if net_usual is not None and net_usual < 0:
+            score -= 25
+            why.append(f"à perte ({net_usual:,.0f}/u) si le prix revient à la normale".replace(",", " "))
+        if since:
+            age = (datetime.now(timezone.utc) - _dt(since + ("Z" if len(since) == 19 else ""))).total_seconds() / 3600
+            if age > 6:
+                score -= 10
+                why.append(f"pic vieux de {age:.0f} h : d'autres vendeurs ont eu le temps d'arriver")
+        score = max(0, min(100, score))
+        return dict(score=score, feu="vert" if score >= 70 else "orange" if score >= 40 else "rouge", raisons=why,
+                    qte_max=qmax, prix_plancher=math.ceil(cost / (1 - self.cfg["fees"])) if cost else None,
+                    ecoulement_h=round(sell_h, 1) if sell_h is not None else None)
+
     def sizing(self, item_id, per_day):
         """Combien d'annonces poster et de quelle taille, pour ecouler ma part du jour."""
         lot = self.lot_size(item_id)
@@ -519,6 +583,42 @@ class Market:
         return plan
 
 
+def last_activity(con, server, item_id):
+    """Activite 24 h enregistree (repli quand on n'a pas mesure l'activite recente)."""
+    since = (datetime.now(timezone.utc) - timedelta(hours=30)).isoformat()[:19]
+    r = con.execute("SELECT drops_h, adds_h FROM activity WHERE server=? AND item_id=? AND ts>=? ORDER BY ts DESC LIMIT 1",
+                    (str(server), item_id, since)).fetchone()
+    return dict(drops_h=r["drops_h"], adds_h=r["adds_h"], window="24 h") if r else None
+
+
+def watched_items(res, limit=30):
+    """Items dont il faut mesurer l'activite recente : opportunites d'achat et mes annonces."""
+    ids = [e["item_id"] for e in res["spikes"]] + [e["item_id"] for e in res["buy"] if e["net_u"] > 0 and not e["flags"]][:10]
+    ids += [f["item_id"] for f in res["flips"][:10]] + [l["item_id"] for l in res["listings"] if l["item_id"]]
+    return list(dict.fromkeys(ids))[:limit]
+
+
+def add_safety(con, res, acts=None):
+    """Ajoute l'indice de surete et les garde-fous aux opportunites (pics, achat -> craft, flips)."""
+    m, acts = res["market"], acts or {}
+    act = lambda iid: acts.get(iid) or last_activity(con, res["server"], iid)
+    fees = m.cfg["fees"]
+    for e in res["spikes"]:
+        e["surete"] = m.safety(e, act(e["item_id"]), e["achats_u"], e["net_habituel_u"], e.get("depuis"))
+    for e in res["buy"]:
+        if e["net_u"] > 0 and not e["flags"]:
+            usual = e["prix_ref"] * (1 - fees) - e["achats_u"] if e["prix_ref"] else None
+            e["surete"] = m.safety(e, act(e["item_id"]), e["achats_u"], usual)
+    for f in res["flips"]:
+        f["surete"] = m.safety(f, act(f["item_id"]), f["achat_cible"], f["net_u"])
+    for l in res["listings"]:
+        a = act(l["item_id"]) if l["item_id"] else None
+        if a and l.get("quantite"):
+            lot = m.lot_size(l["item_id"]) or 1
+            l["ecoulement_h"] = round((l["annonces"] + l["quantite"] / lot) / max(a["drops_h"], 0.05), 1)
+    return res
+
+
 def run_all(con, cfg, server=None):
     server = str(server or cfg["my_server"])
     m = Market(con, cfg, server)
@@ -536,6 +636,6 @@ def run_all(con, cfg, server=None):
     con.execute("INSERT INTO analyses VALUES (?,?,?,?,?,?,?)",
                 (run_ts, server, "plan", None, None, None, json.dumps(plan, ensure_ascii=False)))
     con.commit()
-    return dict(run_ts=run_ts, server=server, as_of=m.as_of, ratio=m.ratio, harvest=harvest, buy=buy,
+    return add_safety(con, dict(run_ts=run_ts, server=server, as_of=m.as_of, ratio=m.ratio, harvest=harvest, buy=buy,
                 targets=targets, plan=plan, hours=m.hourly_profile(), uniques=m.uniques(),
-                flips=m.flips(), listings=m.my_listings(), spikes=m.spikes(buy), market=m)
+                flips=m.flips(), listings=m.my_listings(), spikes=m.spikes(buy), market=m))

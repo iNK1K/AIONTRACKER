@@ -507,7 +507,7 @@ def table_crafts(ctx, rows, tid, harvest):
             + _num_td(e["prix_ref"], color=False, x=True) + _num_td(e["net_pess_u"], x=True)
             + _num_td(e["profit_pess_j"], k=True, x=True)
             + ("" if harvest else _num_td(e["capital_j"], color=False, k=True, x=True))
-            + f"<td>{status(e)}</td></tr>")
+            + f"<td>{status(e)}{surete_html(e)}</td></tr>")
     return toolbar(tid) + f'<div class="wrap"><table id="{tid}"><thead>{head}</thead><tbody>{"".join(body)}</tbody></table></div>'
 
 
@@ -600,6 +600,38 @@ def stock_calc(ctx, cfg, harvest, names):
             f'<script>window.CRAFTS={json.dumps(data, ensure_ascii=False).replace("</", "<\\/")};</script>')
 
 
+def surete_html(e, details=True):
+    """Badge de l'indice de surete (raisons au survol) + garde-fous (quantite max, prix plancher)."""
+    s = e.get("surete")
+    if not s:
+        return ""
+    cls, dot = {"vert": ("b-ok", "🟢"), "orange": ("b-warn", "🟠"), "rouge": ("b-bad", "🔴")}[s["feu"]]
+    tip = " · ".join(s["raisons"]) or "marché fluide"
+    out = f'<span class="badge {cls}" title="{esc(tip)}">{dot} Sûreté {s["score"]}</span>'
+    if details:
+        guard = f"max ~{fmt(s['qte_max'])} u"
+        if s.get("prix_plancher"):
+            guard += f" · ne vends pas sous {fmt(s['prix_plancher'])}"
+        out += f'<div class="sub">{guard}</div>'
+    return out
+
+
+def position_advice(l):
+    """Conseil pour une de mes annonces."""
+    if not l["item_id"] or l["plancher"] is None:
+        return ""
+    tips = []
+    if l["conseil"]:
+        tips.append(f"Repasse devant à {fmt(l['conseil'])}")
+    elif l["battu"] and l.get("seuil"):
+        tips.append("Ne baisse pas : le plus bas est sous ton seuil")
+    if l.get("chute"):
+        tips.append("le prix chute : vends maintenant ou garde")
+    if l.get("ecoulement_h"):
+        tips.append(f"écoulement ~{l['ecoulement_h']:.0f} h")
+    return esc(" · ".join(tips))
+
+
 def table_spikes(ctx, spikes):
     """Pics de prix : rentable au prix affiche seulement."""
     if not spikes:
@@ -609,16 +641,19 @@ def table_spikes(ctx, spikes):
         f"{_num_td(e['prix_ref'], color=False)}<td class='n' data-v='{e['ratio']}'><span class='badge b-warn'>×{e['ratio']}</span></td>"
         f"<td class='sub'>{esc(paris(e['depuis'], '%d/%m %H:%M') if e['depuis'] else '–')}</td>"
         f"{_num_td(e['achats_u'], color=False)}{_num_td(e['net_affiche_u'])}{_num_td(e['net_habituel_u'])}"
-        f"{_num_td(e['annonces'], 'mut', color=False)}<td class='ing'>{'<br>'.join(esc(x) for x in e['ingredients'])}</td></tr>"
+        f"{_num_td(e['annonces'], 'mut', color=False)}<td data-v='{(e.get('surete') or {}).get('score', 0)}'>{surete_html(e)}</td>"
+        f"<td class='ing'>{'<br>'.join(esc(x) for x in e['ingredients'])}</td></tr>"
         for e in spikes)
     head = ("<tr>" + _th("Craft") + _th("Prix affiché", None, True) + _th("Prix habituel", "Médiane 3 j sur ton serveur", True)
             + _th("Pic", None, True) + _th("Depuis") + _th("Coût/u", None, True)
             + _th("Net/u si vendu au prix affiché", None, True) + _th("Net/u si le prix redescend", None, True)
-            + _th("Annonces", None, True) + _th("Acheter") + "</tr>")
+            + _th("Annonces", None, True)
+            + _th("Sûreté", "Peut-on revendre ? Pression de l'offre, temps d'écoulement, perte si le prix redescend (détail au survol)")
+            + _th("Acheter") + "</tr>")
     return ("<h3>⚡ Pics de prix : rentable seulement tant que le prix reste haut</h3>"
             "<p class='lead'>Le prix affiché est bien au-dessus du prix habituel depuis peu. Fabriquer et vendre maintenant "
             "rapporte, mais si le prix redescend avant la vente, c’est à perte. Petite quantité, à vendre vite, et "
-            "regarde la courbe 📈 avant de te lancer.</p>"
+            "regarde la courbe 📈 avant de te lancer. 🔴 = d’autres vendeurs arrivent déjà : à éviter.</p>"
             f'<div class="wrap"><table><thead>{head}</thead><tbody>{rows}</tbody></table></div><h3>Toujours rentables</h3>')
 
 
@@ -627,7 +662,7 @@ def table_flips(ctx, flips, cfg):
     body = []
     for f in flips:
         st = ('<span class="badge b-ok">Acheter maintenant</span>' if f["acheter"]
-              else '<span class="badge b-mut">Attendre</span>')
+              else '<span class="badge b-mut">Attendre</span>') + surete_html(f)
         body.append(f"<tr><td>{ctx.label(f['item_id'])}</td><td data-v='{0 if f['acheter'] else 1}'>{st}</td>"
                     f"{_num_td(f['prix'], color=False)}{_num_td(f['achat_cible'], 'big', color=False)}"
                     f"{_num_td(f['revente_cible'], color=False)}{_num_td(f['net_u'])}"
@@ -646,6 +681,7 @@ def table_flips(ctx, flips, cfg):
     lead = ("<p class='lead'>Acheter un item quand il passe en bas de sa fourchette de prix habituelle, le revendre "
             "au prix médian, sans rien fabriquer. Calcul sur les 3 derniers jours ; les items dont le prix monte ou "
             "baisse durablement, le brut (invendable) et les items sans volume de vente connu sont écartés. "
+            "🛡️ Sûreté : 🟢 marché fluide, 🟠 prudence, 🔴 stock qui s’accumule (détail au survol). "
             f"Alerte Discord quand un item passe sous son prix d’achat cible (marge ≥ {a['flip_min_margin']:.0%}, "
             f"profit ≥ {fmt(a['flip_min_profit_day'])}/j).</p>")
     if not flips:
@@ -829,9 +865,9 @@ def home(con, cfg, ctx, my, sname):
     if buys:
         brow = "".join(f"<tr><td>{ctx.label(e['item_id'])}</td><td class='ing'>{'<br>'.join(esc(x) for x in e['ingredients'])}</td>"
                        f"{_num_td(e['achats_u'], color=False)}{_num_td(e['prix_real'], color=False)}{_num_td(e['net_u'])}"
-                       f"{_num_td(e['profit_j'], 'big', k=True)}</tr>" for e in buys[:5])
+                       f"{_num_td(e['profit_j'], 'big', k=True)}<td>{surete_html(e)}</td></tr>" for e in buys[:5])
         buy_html = (f'<div class="wrap"><table><thead><tr>{_th("Craft")}{_th("Acheter")}{_th("Coût/u", None, True)}'
-                    f'{_th("Vendre à", None, True)}{_th("Net/u", None, True)}{_th("Profit/j", None, True)}</tr></thead>'
+                    f'{_th("Vendre à", None, True)}{_th("Net/u", None, True)}{_th("Profit/j", None, True)}{_th("Sûreté")}</tr></thead>'
                     f'<tbody>{brow}</tbody></table></div>')
     else:
         buy_html = ('<div class="card"><span class="mut">Aucun achat → craft → revente n’est sûr aux prix actuels '
@@ -857,13 +893,19 @@ def home(con, cfg, ctx, my, sname):
         rows = "".join(
             f"<tr><td>{ctx.label(l['item_id']) if l['item_id'] else esc(l['nom']) + ' <span class=\"badge b-warn\">nom introuvable</span>'}</td>"
             f"{_num_td(l['mon_prix'], color=False)}{_num_td(l['plancher'], color=False)}"
-            f"<td>{'<span class=\"badge b-bad\">Battu de ' + fmt(l['ecart']) + '</span>' if l['battu'] else ('<span class=\"badge b-ok\">Le moins cher</span>' if l['plancher'] is not None else '<span class=\"badge b-mut\">Pas en vente</span>')}</td></tr>"
+            f"<td>{'<span class=\"badge b-bad\">Battu de ' + fmt(l['ecart']) + '</span>' if l['battu'] else ('<span class=\"badge b-ok\">Le moins cher</span>' if l['plancher'] is not None else '<span class=\"badge b-mut\">Pas en vente</span>')}"
+            f"{'<span class=\"badge b-bad\">⛔ sous ton seuil</span>' if l.get('sous_seuil') else ''}"
+            f"{'<span class=\"badge b-bad\">📉 chute</span>' if l.get('chute') else ''}</td>"
+            f"{_num_td(l.get('seuil'), color=False)}{_num_td(l.get('marge_u'))}"
+            f"<td class='sub'>{position_advice(l)}</td></tr>"
             for l in mine)
         mine_html = (f'<div class="wrap"><table><thead><tr>{_th("Mon annonce")}{_th("Mon prix", None, True)}'
-                     f'{_th("Prix le plus bas", None, True)}{_th("Statut")}</tr></thead><tbody>{rows}</tbody></table></div>')
+                     f'{_th("Prix le plus bas", None, True)}{_th("Statut")}'
+                     f'{_th("Seuil de rentabilité", "Coût de revient + 12 % de frais : ne vends pas en dessous", True)}'
+                     f'{_th("Gain/u au plus bas", None, True)}{_th("Conseil")}</tr></thead><tbody>{rows}</tbody></table></div>')
     else:
-        mine_html = ('<p class="mut">Liste tes annonces dans <code>mes_annonces.json</code> (nom exact : prix) pour être '
-                     'alerté quand quelqu’un vend moins cher que toi.</p>')
+        mine_html = ('<p class="mut">Liste tes annonces dans <code>mes_annonces.json</code> (nom exact : prix, ou prix + coût '
+                     'de revient + quantité) pour être alerté quand quelqu’un vend moins cher que toi ou sous ton seuil.</p>')
 
     # 6. annonces officielles
     news = con.execute("SELECT * FROM news WHERE key NOT LIKE 'reddit|%' ORDER BY posted DESC LIMIT 6").fetchall()

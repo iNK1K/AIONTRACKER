@@ -196,3 +196,40 @@ Vérifié sur les sites HDV (Hadala) : le lingot vaut habituellement **1 500 à 
 - Mon stock : seuls les crafts faisables sont proposés, et la consommation de ressources tient compte des échecs (ex. 300 Bois d'Asvata → 145 Pièces au lieu de 150 à 97 %).
 - Pour un item fabricable par plusieurs métiers (ex. Lingot : Forge d'armes ou d'armures), le site prend la façon la plus favorable selon tes niveaux.
 - Sans niveau renseigné pour un métier, rien ne change pour ses crafts.
+
+---
+
+# Sûreté des achats et suivi des positions — 18/10/2026 (soir)
+
+## Ce qui s'est passé sur tes lingots et ton papier
+- **Lingot d'orichalque** : pic à 20 000 à 15h41, puis le nombre d'annonces passe de 11 à 50 en 4 h (tout le monde a crafté, aidé par l'alerte de pic) et le prix retombe à 10 000. 4,8 nouvelles annonces/h pour 3,7 vendues : le stock s'accumule. Seuil de rentabilité ~11 600 (coût ~10 200 + 12 % de frais).
+- **Papier d'Asvata** : prix en baisse continue (7 400 → 6 000), annonces 13 → 44, 1,7 nouvelle annonce/h pour 0,3 vendue : ~5 jours pour écouler une nouvelle annonce.
+
+## 1. Indice de sûreté (0-100, 🟢 / 🟠 / 🔴)
+Calculé pour chaque opportunité d'achat (pics de prix, achat → craft, flips), sur l'item que tu revends :
+- **pression de l'offre** = nouvelles annonces/h ÷ annonces vendues/h, mesurée **sur les 3 dernières heures** à chaque passage horaire pour les items surveillés (repli sur 24 h) ; > 0,8 : −12, > 1,2 : −30, > 2 : −45 ;
+- **temps d'écoulement** = annonces devant toi ÷ ventes/h ; > 4 h : −10, > 12 h : −22, > 24 h : −35 ;
+- **perte si le prix revient à la normale** : −25 ;
+- **pic vieux de plus de 6 h** (d'autres vendeurs ont eu le temps d'arriver) : −10 ;
+- activité inconnue : −25.
+🟢 ≥ 70, 🟠 40–69, 🔴 < 40. Le détail des raisons s'affiche au survol du badge.
+**Les alertes « ⚡ Pic de prix », « Achat → craft » et « Flip » ne partent plus qu'au 🟢.**
+
+## 2. Suivi de mes positions
+`mes_annonces.json` accepte maintenant le coût de revient et la quantité :
+```json
+"annonces": {
+  "Lingot d'orichalque": {"prix": 15000, "cout": 10200, "quantite": 20},
+  "Papier d'Asvata": 6500
+}
+```
+Alertes (une fois par jour et par item, sauf « battu » : une par nouveau prix plus bas) :
+- **⚔️ Tu es battu** : avec le prix pour repasser devant et ce qu'il te reste par unité, ou « le plus bas est sous ton seuil : baisser = vendre à perte » ;
+- **⛔ Sous ton seuil de rentabilité** : le plus bas est passé sous coût + frais ;
+- **📉 Le prix chute** : prix actuel ≤ 75 % du plus haut des 3 dernières heures ;
+- **🐢 Stock long à écouler** : plus de 24 h au rythme actuel des ventes pour ta quantité.
+Accueil, section ④ : seuil de rentabilité, gain/u au plus bas, et conseil (repasser devant à X, ne pas baisser, vendre maintenant, temps d'écoulement).
+Testé sur les données réelles de 20h29 avec une position fictive de 20 lingots à 12 000 (coût 10 200) : les 4 alertes attendues sont sorties (battu → ne baisse pas, sous ton seuil −1 400/u, chute de 50 % en 3 h, papier : repasse devant à 5 999).
+
+## 3. Garde-fous chiffrés
+Sous chaque badge : **quantité max conseillée** (~2 h de ventes du marché, plafonnée à ta part de marché sur 2 h, divisée par 3 pendant un pic) et **« ne vends pas sous X »** (prix plancher = coût ÷ 0,88). Repris dans les alertes Discord.

@@ -1,4 +1,4 @@
 {
-  "_": "Ce que tu as en vente et à quel prix (nom exact du jeu : prix unitaire). Alerte Discord dès que quelqu'un vend moins cher. Exemple : \"Élixir du vent\": 5790",
+  "_": "Ce que tu as en vente (nom exact du jeu). Simple : \"Élixir du vent\": 5790. Complet (seuil de rentabilité, conseils, temps d'écoulement) : \"Lingot d'orichalque\": {\"prix\": 15000, \"cout\": 10200, \"quantite\": 20} — cout = ce que t'a coûté une unité (ingrédients + PNJ).",
   "annonces": {}
 }
