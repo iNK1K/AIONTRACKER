@@ -1,0 +1,41 @@
+{
+  "my_server": "2310",
+  "watch_servers": ["2310", "2315"],
+  "reference_server": "1304",
+  "locale": "fr-FR",
+
+  "market_share": 0.20,
+  "fees": 0.12,
+  "npc_reagent_price": 400,
+  "max_listings": 10,
+
+  "masteries": {
+    "Alchemy": 999,
+    "Handicrafting": 999,
+    "Armorsmithing": 999,
+    "Blacksmithing": 999,
+    "Cooking": 999
+  },
+
+  "harvest_per_day": {},
+
+  "discord_webhook_url": "",
+
+  "_map_worlds": "zones accessibles sur ta version : 1110 Altgard, 1111 Morheim, 1100 Ishalgen, 20 Reshanta inférieure",
+  "map_worlds": ["1110"],
+
+  "alerts": {
+    "bargain_ratio": 0.40,
+    "bargain_min_median": 1000,
+    "spike_ratio": 1.50,
+    "dump_ratio": 0.70,
+    "buy_craft_min_margin": 0.30,
+    "buy_craft_min_profit_day": 100000
+  },
+
+  "http": {
+    "user_agent": "aion-hdv-perso/0.1 (outil personnel, 1 passage par heure)",
+    "delay_seconds": 0.35,
+    "timeout_seconds": 30
+  }
+}

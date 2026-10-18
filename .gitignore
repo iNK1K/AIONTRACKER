@@ -1,0 +1,13 @@
+# secrets et environnement local
+config.local.json
+.runtime/
+
+# genere a chaque passage
+data/aion.db
+data/aion.db-*
+data/raw/
+logs/
+reports/
+site/
+__pycache__/
+*.pyc

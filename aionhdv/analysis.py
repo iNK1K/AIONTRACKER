@@ -1,0 +1,351 @@
+"""Moteur d'analyse : rentabilite x volume, recolte -> craft, achat -> craft -> revente, cibles de recolte."""
+import json
+import statistics
+from datetime import datetime, timedelta, timezone
+
+# equivalences Asmodiens -> Elyseens (Kaisinel, serveur de reference, est elyseen)
+ELYOS_EQ = [("Asvata", "Yggdrasil"), ("conide", "l'inina"), ("pujery", "cypri"), ("d'ohkra", "de kukuru"),
+            ("dragon noir", "dragon blanc")]
+
+
+def _dt(s):
+    return datetime.fromisoformat(s.replace("Z", "+00:00"))
+
+
+def elyos_equivalent(con, item_id):
+    it = con.execute("SELECT base_name FROM items WHERE id = ?", (item_id,)).fetchone()
+    if not it:
+        return None
+    name = it["base_name"]
+    for a, b in ELYOS_EQ:
+        name = name.replace(a, b)
+    name = name.replace("Pâtes de l'inina", "Pâtes à l'inina")
+    if name == it["base_name"]:
+        return None
+    r = con.execute("SELECT id FROM items WHERE name = ? AND bound = 0", (name,)).fetchone()
+    return r["id"] if r else None
+
+
+class Market:
+    def __init__(self, con, cfg, server):
+        self.con, self.cfg, self.server = con, cfg, str(server)
+        ref = con.execute("SELECT ax_id FROM servers WHERE id = ?", (cfg["reference_server"],)).fetchone()
+        self.ref_ax = ref["ax_id"] if ref else 11304
+        self.items = {r["id"]: dict(r) for r in con.execute("SELECT * FROM items")}
+        self.by_base = {}
+        for it in self.items.values():
+            if not it["bound"]:
+                self.by_base.setdefault(it["base_name"], it["id"])
+        self._load_prices()
+        self._ref = {}
+        self.ratio = self._activity_ratio()
+        srow = con.execute("SELECT faction FROM servers WHERE id = ?", (self.server,)).fetchone()
+        self.faction = (srow["faction"] if srow else "").lower()      # 'asmodian' / 'elyos'
+        self.recipes_by_item = {}
+        for r in con.execute("SELECT * FROM recipes WHERE method='craft' AND visible=1 AND combo_result=0"):
+            if r["faction"] and self.faction and r["faction"].lower() != self.faction:
+                continue                                              # recette de l'autre faction
+            self.recipes_by_item.setdefault(r["item_id"], []).append(dict(r))
+        self.ingredients = {}
+        for ri in con.execute("SELECT * FROM recipe_ingredients ORDER BY recipe_id, slot, is_alternative"):
+            self.ingredients.setdefault(ri["recipe_id"], {}).setdefault(ri["slot"], []).append(dict(ri))
+
+    # ------------------------------------------------------------ donnees de marche
+    def _load_prices(self):
+        last = self.con.execute("SELECT MAX(ts) AS ts FROM quotes WHERE server = ?", (self.server,)).fetchone()["ts"]
+        self.as_of = last
+        self.price, self.listings = {}, {}
+        if not last:
+            return
+        since = (_dt(last) - timedelta(hours=3)).isoformat()[:19]
+        for r in self.con.execute("""SELECT item_id, price, listings FROM quotes q
+                                     WHERE server = ? AND ts = (SELECT MAX(ts) FROM quotes q2
+                                       WHERE q2.server = q.server AND q2.item_id = q.item_id AND q2.ts >= ?)""",
+                                  (self.server, since)):
+            self.price[r["item_id"]] = r["price"]
+            self.listings[r["item_id"]] = r["listings"]
+
+    def median_price(self, item_id, days=7):
+        """Mediane des prix plancher horaires recents (quotes + historique aion2.exchange)."""
+        since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()[:19]
+        vals = [r["price"] for r in self.con.execute(
+            "SELECT price FROM quotes WHERE server=? AND item_id=? AND ts>=?", (self.server, item_id, since))]
+        srv = self.con.execute("SELECT ax_id FROM servers WHERE id=?", (self.server,)).fetchone()
+        if srv and srv["ax_id"]:
+            vals += [r["avg"] for r in self.con.execute(
+                "SELECT avg FROM ax_prices WHERE ax_server=? AND item_id=? AND ts>=? AND avg IS NOT NULL",
+                (srv["ax_id"], item_id, since))]
+        return statistics.median(vals) if vals else None
+
+    def ref(self, item_id):
+        """Volume quotidien et prix moyen de vente sur le serveur de reference."""
+        if item_id in self._ref:
+            return self._ref[item_id]
+        res = None
+        for iid in (item_id, elyos_equivalent(self.con, item_id)):
+            if not iid:
+                continue
+            rows = [dict(r) for r in self.con.execute(
+                "SELECT * FROM ref_volume WHERE ax_server=? AND item_id=? ORDER BY registered", (self.ref_ax, iid))]
+            rows = [r for r in rows if r["units_sold"] is not None]
+            if not rows or not rows[-1]["units_sold"]:
+                continue
+            last = rows[-1]
+            first = next(r for r in rows if r["units_sold"])
+            eff_days = min(28.0, (_dt(last["registered"]) - _dt(first["registered"])).days + 1.0)
+            recent = [r for r in rows if _dt(r["registered"]) > _dt(last["registered"]) - timedelta(days=7)
+                      and r["units_delta"] is not None and r["days_since_previous"]]
+            if eff_days < 28 and len(recent) >= 3:
+                daily = sum(r["units_delta"] for r in recent) / sum(r["days_since_previous"] for r in recent)
+            else:
+                daily = last["units_sold"] / eff_days
+            # prix moyen sur ~7 jours, deduit des moyennes glissantes
+            avg = last["avg_price"]
+            old = [r for r in rows if _dt(r["registered"]) <= _dt(last["registered"]) - timedelta(days=7)]
+            if old and old[-1]["units_sold"] and last["units_sold"] > old[-1]["units_sold"] and old[-1]["avg_price"]:
+                o = old[-1]
+                w = (last["avg_price"] * last["units_sold"] - o["avg_price"] * o["units_sold"]) / (last["units_sold"] - o["units_sold"])
+                if w > 0:
+                    avg = w
+            res = dict(daily=max(daily, 0.0), avg_price=avg, ref_item=iid, as_of=last["registered"])
+            break
+        self._ref[item_id] = res
+        return res
+
+    def _activity_ratio(self):
+        ref_server = str(self.cfg["reference_server"])
+        since = (datetime.now(timezone.utc) - timedelta(hours=30)).isoformat()[:19]
+
+        def latest(server):
+            out = {}
+            for r in self.con.execute("SELECT item_id, drops_h, ts FROM activity WHERE server=? AND ts>=? ORDER BY ts",
+                                      (server, since)):
+                out[r["item_id"]] = r["drops_h"]
+            return out
+        a, b = latest(self.server), latest(ref_server)
+        ratios = [a[i] / b[i] for i in a if i in b and b[i] >= 0.5]
+        if len(ratios) >= 8:
+            return max(0.05, min(3.0, statistics.median(ratios)))
+        return 0.40
+
+    # ------------------------------------------------------------ prix d'achat / de vente
+    def buy_price(self, item_id):
+        iid = item_id
+        if iid not in self.price:
+            it = self.items.get(iid)
+            iid = self.by_base.get(it["base_name"]) if it else None
+            if iid not in self.price:
+                return None
+        ask = self.price[iid]
+        ref = self.ref(iid)
+        k = ref["avg_price"] if ref else None
+        real, pess = ask, ask * 1.5
+        if k:
+            if ask < k:
+                real = (ask + k) / 2
+            pess = max(ask, k)
+        return dict(item_id=iid, ask=ask, real=real, pess=pess, listings=self.listings.get(iid, 0))
+
+    def sell_price(self, item_id):
+        ask = self.price.get(item_id)
+        if ask is None:
+            return None
+        ref = self.ref(item_id)
+        k = ref["avg_price"] if ref else None
+        real = (ask + k) / 2 if (k and ask > k) else ask
+        pess = min(real, k) if k else real * 0.7
+        return dict(ask=ask, real=real, pess=pess, ref=k, listings=self.listings.get(item_id, 0))
+
+    # ------------------------------------------------------------ cout d'une recette
+    def recipe_cost(self, recipe, mode, depth=0):
+        """mode 'harvest' : ressources de recolte gratuites ; mode 'buy' : tout s'achete a l'HDV."""
+        npc = self.cfg["npc_reagent_price"]
+        cost_r = cost_p = 0.0
+        lines, gather, buys, thin_list = [], {}, {}, []
+        ok = True
+        for slot, opts in sorted(self.ingredients.get(recipe["id"], {}).items()):
+            gopt = next((o for o in opts if self.items.get(o["item_id"], {}).get("is_gather")), None)
+            if gopt and mode == "harvest":
+                base = self.items[gopt["item_id"]]["base_name"]
+                gather[base] = gather.get(base, 0) + gopt["qty"]
+                lines.append(f"{base} x{gopt['qty']:g} (récolte)")
+                continue
+            best = None
+            for thin_ok in (False, True):          # d'abord les ingredients achetables en volume (>= 2 annonces)
+                for o in opts:
+                    bp = self.buy_price(o["item_id"])
+                    if bp and (thin_ok or bp["listings"] >= 2):
+                        c = bp["real"] * o["qty"]
+                        if best is None or c < best[0]:
+                            best = (c, bp["pess"] * o["qty"], o, bp)
+                if best:
+                    break
+            if best:
+                cost_r += best[0]
+                cost_p += best[1]
+                name = self.items[best[3]["item_id"]]["name"]
+                buys[best[3]["item_id"]] = buys.get(best[3]["item_id"], 0) + best[2]["qty"]
+                thin = best[3]["listings"] <= 1
+                if thin:
+                    thin_list.append(name)
+                lines.append(f"{name} x{best[2]['qty']:g} @{best[3]['real']:,.0f}".replace(",", " ")
+                             + (" (1 annonce)" if thin else ""))
+                continue
+            o = opts[0]
+            it = self.items.get(o["item_id"], {})
+            if it.get("is_gather") and mode == "buy":
+                ok = False
+                lines.append(f"{it.get('base_name')} x{o['qty']:g} INTROUVABLE")
+                continue
+            sub = self.recipes_by_item.get(self.by_base.get(it.get("base_name")) or o["item_id"]) or \
+                self.recipes_by_item.get(o["item_id"])
+            if depth == 0 and not sub:
+                # version liee : chercher la recette de l'objet de meme nom
+                for rid_item, rs in self.recipes_by_item.items():
+                    if self.items.get(rid_item, {}).get("base_name") == it.get("base_name"):
+                        sub = rs
+                        break
+            if depth == 0 and sub:
+                sc = self.recipe_cost(sub[0], mode, depth + 1)
+                per = o["qty"] / (sub[0]["output_qty"] or 1)
+                cost_r += sc["cost_r"] * per
+                cost_p += sc["cost_p"] * per
+                for g, q in sc["gather"].items():
+                    gather[g] = gather.get(g, 0) + q * per
+                for b, q in sc["buys"].items():
+                    buys[b] = buys.get(b, 0) + q * per
+                thin_list += sc["thin"]
+                ok = ok and sc["ok"]
+                lines.append(f"[{it.get('base_name')} x{o['qty']:g} à fabriquer : {', '.join(sc['lines'])}]")
+            else:
+                cost_r += npc * o["qty"]
+                cost_p += npc * o["qty"]
+                lines.append(f"{it.get('base_name')} x{o['qty']:g} PNJ ~{npc}")
+        return dict(cost_r=cost_r, cost_p=cost_p, lines=lines, gather=gather, buys=buys, ok=ok, thin=thin_list)
+
+    # ------------------------------------------------------------ evaluation
+    def evaluate(self, recipe, mode):
+        oid = recipe["item_id"]
+        sp = self.sell_price(oid)
+        ref = self.ref(oid)
+        if not sp:
+            return None
+        masteries = self.cfg.get("masteries", {})
+        if (recipe["mastery"] or 0) > masteries.get(recipe["profession"], 999):
+            return None
+        c = self.recipe_cost(recipe, mode)
+        if not c["ok"]:
+            return None
+        q = recipe["output_qty"] or 1
+        fees = self.cfg["fees"]
+        cost_u, cost_pu = c["cost_r"] / q, c["cost_p"] / q
+        net_u = sp["real"] * (1 - fees) - cost_u
+        net_pu = sp["pess"] * (1 - fees) - cost_pu
+        # sans reference (item jamais vendu sur Kaisinel) : volume inconnu, on garde l'item mais signale
+        vol = ref["daily"] * self.ratio if ref else 0
+        mine = vol * self.cfg["market_share"]
+        res_u = sum(c["gather"].values()) / q
+        flags = [] if ref else ["volume de vente inconnu (pas de référence)"]
+        if sp["listings"] <= 1:
+            flags.append("1 seule annonce en vente")
+        if sp["ref"] and sp["ask"] > 5 * sp["ref"]:
+            flags.append("prix affiché > 5x le prix de vente de référence")
+        if c["thin"]:
+            flags.append("ingrédient introuvable en volume : " + ", ".join(sorted(set(c["thin"]))))
+        return dict(
+            mode=mode, recipe_id=recipe["id"], item_id=oid, objet=self.items[oid]["name"],
+            metier=recipe["profession"], maitrise=recipe["mastery"], lot=q,
+            ingredients=c["lines"], ressources={k: v / q for k, v in c["gather"].items()},
+            achats_u=round(cost_u), achats_pess_u=round(cost_pu),
+            prix_affiche=sp["ask"], prix_ref=sp["ref"] and round(sp["ref"]), prix_real=round(sp["real"]),
+            annonces=sp["listings"], net_u=round(net_u), net_pess_u=round(net_pu),
+            marge=round(net_u / cost_u, 3) if cost_u > 0 else None,
+            ressources_u=res_u, net_par_ressource=round(net_u / res_u) if res_u else None,
+            vol_serveur_j=round(vol), ma_part_j=round(mine),
+            profit_j=round(mine * net_u), profit_pess_j=round(mine * net_pu),
+            capital_j=round(mine * cost_u), flags=flags)
+
+    def best_per_item(self, mode):
+        out = []
+        for oid, recipes in self.recipes_by_item.items():
+            best = None
+            for r in recipes:
+                if r["unresolved"]:
+                    continue
+                if mode == "harvest" and not any(self.items.get(o["item_id"], {}).get("is_gather")
+                                                  for opts in self.ingredients.get(r["id"], {}).values() for o in opts):
+                    continue
+                e = self.evaluate(r, mode)
+                if e and (best is None or e["profit_j"] > best["profit_j"]):
+                    best = e
+            if best:
+                out.append(best)
+        out.sort(key=lambda e: -e["profit_j"])
+        return out
+
+    def gather_targets(self, harvest_rows):
+        """Pour chaque ressource : meilleur usage (net par ressource) et quantite que le marche absorbe."""
+        # toutes les ressources apparaissent ; les usages douteux (drapeaux) ou a perte sont montres apres les fiables
+        targets = {}
+        for e in harvest_rows:
+            if not e["ressources_u"]:
+                continue
+            for res, per_u in e["ressources"].items():
+                net_res = e["net_u"] / e["ressources_u"]
+                t = targets.setdefault(res, [])
+                t.append(dict(objet=e["objet"], net_par_ressource=round(net_res),
+                              ressources_j=round(e["ma_part_j"] * per_u), profit_j=e["profit_j"],
+                              fiable=e["net_u"] > 0 and not e["flags"], flags=e["flags"]))
+        out = []
+        for res, uses in targets.items():
+            uses.sort(key=lambda u: (not u["fiable"], -u["net_par_ressource"]))
+            good = [u for u in uses if u["fiable"]]
+            out.append(dict(ressource=res, prix_brut=self.price.get(self.by_base.get(res)), usages=uses[:4],
+                            meilleur=good[0]["net_par_ressource"] if good else None,
+                            absorbable_j=sum(u["ressources_j"] for u in good)))
+        out.sort(key=lambda t: (t["meilleur"] is None, -(t["meilleur"] or 0)))
+        return out
+
+    def production_plan(self, harvest_rows, harvest):
+        """Repartit la recolte quotidienne entre les crafts (glouton par net/ressource), max N produits."""
+        stock = {k: float(v) for k, v in (harvest or {}).items()}
+        if not stock:
+            return []
+        cands = [e for e in harvest_rows if e["net_u"] > 0 and not e["flags"] and e["ressources_u"]]
+        cands.sort(key=lambda e: -(e["net_u"] / e["ressources_u"]))
+        plan = []
+        for e in cands:
+            if len(plan) >= self.cfg["max_listings"]:
+                break
+            if any(res not in stock for res in e["ressources"]):
+                continue
+            n = min([e["ma_part_j"]] + [stock[res] / per for res, per in e["ressources"].items() if per > 0])
+            n = int(n)
+            if n <= 0:
+                continue
+            for res, per in e["ressources"].items():
+                stock[res] -= n * per
+            plan.append(dict(objet=e["objet"], quantite_j=n, prix_conseille=e["prix_real"], net_u=e["net_u"],
+                             kinah_j=n * e["net_u"], ressources={r: round(n * p) for r, p in e["ressources"].items()}))
+        return plan
+
+
+def run_all(con, cfg, server=None):
+    server = str(server or cfg["my_server"])
+    m = Market(con, cfg, server)
+    harvest = m.best_per_item("harvest")
+    buy = m.best_per_item("buy")
+    targets = m.gather_targets(harvest)
+    plan = m.production_plan(harvest, cfg.get("harvest_per_day"))
+    run_ts = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    for kind, rows in (("harvest", harvest), ("buy", buy)):
+        for e in rows:
+            con.execute("INSERT INTO analyses VALUES (?,?,?,?,?,?,?)",
+                        (run_ts, server, kind, e["item_id"], e["recipe_id"], e["profit_j"], json.dumps(e, ensure_ascii=False)))
+    con.execute("INSERT INTO analyses VALUES (?,?,?,?,?,?,?)",
+                (run_ts, server, "targets", None, None, None, json.dumps(targets, ensure_ascii=False)))
+    con.execute("INSERT INTO analyses VALUES (?,?,?,?,?,?,?)",
+                (run_ts, server, "plan", None, None, None, json.dumps(plan, ensure_ascii=False)))
+    con.commit()
+    return dict(run_ts=run_ts, server=server, as_of=m.as_of, ratio=m.ratio, harvest=harvest, buy=buy,
+                targets=targets, plan=plan, market=m)
