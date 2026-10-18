@@ -10,6 +10,8 @@ Objectif : générer un maximum de kinah via l'hôtel des ventes d'Aion 2 (serve
 ```
 Rapport : ouvrir `reports\index.html` dans le navigateur (onglets, filtres, tri, bouton **MAP** sur les ressources, bouton **📈** pour la courbe de prix, clic sur un nom pour le copier).
 
+Onglet **Mon stock** : coller une capture de la réserve (Ctrl + V) remplit le stock automatiquement (reconnaissance des icônes et des quantités dans le navigateur, `aionhdv/scan.js`).
+
 Mode test : ajouter `--dry-run` (ex. `python -m aionhdv hourly --dry-run`) pour ne rien envoyer sur Discord.
 
 Python est **portable** (`.runtime\python`) : rien n'est installé sur le système. Supprimer le dossier suffit.

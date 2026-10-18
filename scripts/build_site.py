@@ -12,7 +12,7 @@ SITE = ROOT / "site"
 if SITE.exists():
     shutil.rmtree(SITE)
 (SITE / "data").mkdir(parents=True)
-for f in ("index.html", "map.html", "map_data.js", "prices.js"):
+for f in ("index.html", "map.html", "map_data.js", "prices.js", "scan.js"):
     text = (ROOT / "reports" / f).read_text(encoding="utf-8")
     # les pages sont servies depuis la racine du site : ../data/ -> data/
     (SITE / f).write_text(text.replace("../data/", "data/"), encoding="utf-8")

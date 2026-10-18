@@ -112,3 +112,26 @@ Tout est poussé sur `main` et repris automatiquement par le passage horaire Git
 - Annonces battues, flips, notes de patch × prix, tendances : testés sur des copies de la base.
 - Construction du site : `prices.js` bien publié.
 - **Non vérifié** : la sauvegarde/restauration via la release GitHub (elle ne peut tourner que sur GitHub ; premier essai au prochain passage daily, 17h40 Paris). À contrôler dans l'onglet Releases du dépôt.
+
+---
+
+# Lecture d'une capture de la réserve — 18/10/2026 (soir)
+
+## Ce que ça fait
+Dans l'onglet **🧮 Mon stock**, cadre **📷 Lire une capture de ta réserve** : coller une capture (Ctrl + V), la glisser sur le cadre ou choisir le fichier. Le navigateur repère la grille, reconnaît chaque ressource de récolte et lit sa quantité, puis remplit « Coller une liste » : il ne reste qu'à vérifier et cliquer sur **Remplir**. Les autres objets (potions, viandes, planches…) et les cases vides sont ignorés. Rien n'est envoyé nulle part.
+
+## Comment
+- **Grille** : repérage des fines lignes sombres entre les cases, au 1/20 de pixel, axe par axe (les cases ne sont pas carrées : ~57,0 × 59,2 px sur tes captures). Les cases coupées sur les bords (jusqu'à 25 %) sont gardées.
+- **Icônes** : comparaison avec les 33 icônes officielles des ressources de ta faction (aucune icône en double une fois les ressources élyséennes écartées). Une case n'est retenue que si elle ressemble nettement plus à une ressource qu'à toute ressource d'une autre famille, et si elle n'est pas vide.
+- **Quantités** : pas d'outil externe. Les chiffres du jeu ont toujours la même police : j'ai appris leur forme sur tes deux captures (148 chiffres), le site compare chaque chiffre à ces modèles.
+- Fichier `aionhdv/scan.js`, chargé seulement au premier collage.
+
+## Fiabilité mesurée (tes 2 captures)
+- Ressources : **66 sur 66** reconnues, **0** objet pris à tort pour une ressource.
+- Quantités : **65 sur 66** justes ; la fausse (69 au lieu de 169, case coupée à droite) est signalée « à vérifier » avec sa vignette.
+- Limites : mesuré sur 2 captures à la même résolution. Une autre taille d'écran ou d'interface peut dégrader la lecture des chiffres ; envoie-moi alors une capture et je réentraîne les modèles. Les cases coupées à droite ou en bas sont toujours signalées « à vérifier ».
+- La lecture ne marche que sur le site en ligne (un navigateur interdit de lire les pixels des icônes depuis un fichier local).
+
+## Corrigé au passage
+- **Ressources élyséennes** : Mon stock filtre maintenant les ressources d'après les zones de récolte de la carte (Targena, Coriolus, Méla, Aria… écartées pour un Asmodien). 33 ressources sur Hadala.
+- Mes lectures à l'œil de tes captures contenaient des erreurs que l'outil corrige : les « 9 » sont du **Bois d'Asvata pur**, les « 8 » de l'**Od pur**, les « 89 » de l'**Od d'une grande pureté**.

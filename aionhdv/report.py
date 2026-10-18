@@ -2,7 +2,9 @@
 import html
 import json
 import re
+import shutil
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from .catalog import node_name
 from .collect import BOUND_RE, paris
@@ -177,11 +179,26 @@ function normName(s){return s.normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').
 function importStock(){const txt=document.getElementById('paste').value,inputs=[...document.querySelectorAll('#stock input[data-r]')];
  const by={};inputs.forEach(i=>by[normName(i.dataset.r)]=i);const got={},unknown=[];
  txt.split(/\\n/).forEach(line=>{const m=line.replace(/\\(li[ée]+s?\\)/i,'').match(/^\\s*[-•*]?\\s*(.+?)\\s*[:=x×\\s]\\s*(\\d[\\d\\s.]*)\\s*$/i);
-  if(!m)return;const n=normName(m[1]),q=parseInt(m[2].replace(/[\\s.]/g,''),10);if(!q)return;
+  if(!m||line.trim().startsWith('#'))return;const n=normName(m[1]),q=parseInt(m[2].replace(/[\\s.]/g,''),10);if(!q)return;
   if(by[n])got[n]=(got[n]||0)+q;else unknown.push(m[1].trim())});
  const mode=document.getElementById('pmode').value;if(mode==='replace')inputs.forEach(i=>i.value='');
  Object.entries(got).forEach(([n,q])=>{const i=by[n];i.value=(mode==='add'?(parseFloat(i.value)||0):0)+q});calc();
  document.getElementById('pmsg').textContent=Object.keys(got).length+' ressource(s) remplie(s)'+(unknown.length?' · non reconnues : '+unknown.join(', '):'')}
+function scanLoad(){return window.reserveToList?Promise.resolve():new Promise((ok,ko)=>{const sc=document.createElement('script');
+ sc.src='scan.js';sc.onload=ok;sc.onerror=()=>ko('outil de lecture introuvable');document.head.appendChild(sc)})}
+async function scanFile(file){if(!file||!(file.type||'').startsWith('image/'))return;const msg=document.getElementById('smsg'),box=document.getElementById('sthumbs');
+ msg.textContent='Lecture de la capture…';box.innerHTML='';
+ try{await scanLoad();const url=URL.createObjectURL(file);
+  const img=await new Promise((ok,ko)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=()=>ko('image illisible');i.src=url});
+  const r=await reserveToList(img,m=>msg.textContent=m);URL.revokeObjectURL(url);
+  document.getElementById('paste').value=r.text;document.getElementById('pdet').open=true;
+  msg.textContent=r.found+' ressource(s) reconnue(s), '+r.ignored+' case(s) ignorée(s) (autres objets ou cases vides). '
+   +'Vérifie la liste ci-dessous puis clique sur Remplir.'+(r.thumbs.length?' Quantités à vérifier :':'');
+  r.thumbs.forEach(t=>{const d=document.createElement('span');d.className='chip';d.appendChild(t.cv);
+   d.appendChild(document.createTextNode(t.c.name+' : '+(t.c.qty==null?'?':t.c.qty)));box.appendChild(d)})
+ }catch(e){msg.textContent='Lecture impossible : '+e+' (la lecture fonctionne sur le site en ligne)'}}
+document.addEventListener('paste',e=>{const sec=document.getElementById('plan');if(!sec||!sec.classList.contains('on'))return;
+ const it=[...((e.clipboardData||{}).items||[])].find(i=>(i.type||'').startsWith('image/'));if(it){e.preventDefault();scanFile(it.getAsFile())}});
 function clearStock(){document.querySelectorAll('#stock input[data-r]').forEach(i=>i.value='');calc()}
 document.addEventListener('DOMContentLoaded',()=>{let t='home';try{t=localStorage.getItem('tab')||t;
  if(localStorage.getItem('detail')){document.body.classList.add('detail');document.querySelectorAll('input.dt').forEach(x=>x.checked=true)}}catch(e){}
@@ -257,6 +274,13 @@ class Ctx:
         local = it.get("icon_file") and (DATA_DIR / it["icon_file"]).exists()
         src = f"../data/{it['icon_file']}" if local else it.get("icon_url")
         return f'<img class="ic" loading="lazy" src="{esc(src)}" alt="">' if src else ""
+
+    def icon_src(self, name):
+        """Image locale d'une ressource (meme origine que la page : necessaire pour lire ses pixels)."""
+        it = self.by_base.get(name)
+        if it and it.get("icon_file") and (DATA_DIR / it["icon_file"]).exists():
+            return f"../data/{it['icon_file']}"
+        return None
 
     def mapbtn(self, name):
         base = node_name(BOUND_RE.sub("", name or ""))
@@ -439,9 +463,17 @@ def stock_calc(ctx, cfg, harvest, names):
             '<label class="tg"><input type="checkbox" id="risky" onchange="calc()"> '
             'Inclure les crafts douteux (volume inconnu, prix suspect)</label>'
             '<button class="mapbtn" onclick="clearStock()">Tout effacer</button></div>'
-            '<details class="card" style="margin:0 0 12px"><summary style="cursor:pointer"><b>📋 Coller une liste</b> '
+            '<div class="card" id="sdrop" style="margin:0 0 12px" ondragover="event.preventDefault()" '
+            'ondrop="event.preventDefault();scanFile(event.dataTransfer.files[0])"><b>📷 Lire une capture de ta réserve</b>'
+            '<span class="mut">Fais une capture de ta réserve (Win + Maj + S), recadrée au plus près de la grille, puis colle-la '
+            'ici avec <b>Ctrl + V</b>, glisse le fichier sur ce cadre, ou <label style="color:var(--acc);cursor:pointer;'
+            'text-decoration:underline">choisis un fichier<input type="file" accept="image/*" hidden '
+            'onchange="scanFile(this.files[0])"></label>. La capture reste dans ton navigateur.</span>'
+            '<span id="smsg" class="mut"></span><div class="chips" id="sthumbs"></div></div>'
+            f'<script>window.GATHER={json.dumps([dict(n=n, s=ctx.icon_src(n)) for n in names if ctx.icon_src(n)], ensure_ascii=False)};</script>'
+            '<details class="card" id="pdet" style="margin:0 0 12px"><summary style="cursor:pointer"><b>📋 Coller une liste</b> '
             '<span class="mut">— une ligne par ressource : « Bois d\'Asvata 300 » ou « Saphir brut : 96 ». '
-            'Astuce : envoie une capture de ta réserve à Claude, il te rend la liste prête à coller.</span></summary>'
+            'Rempli automatiquement par la lecture de capture ci-dessus, modifiable avant de cliquer sur Remplir.</span></summary>'
             '<textarea id="paste" placeholder="Bois d\'Asvata 300&#10;Saphir brut : 96&#10;Rubis brut d\'une grande pureté x169"></textarea>'
             '<div class="toolbar" style="margin:0"><select id="pmode" class="search" style="width:auto">'
             '<option value="replace">Remplacer tout le stock</option><option value="add">Ajouter au stock</option></select>'
@@ -713,6 +745,7 @@ def build(con, cfg, results):
     ctx = Ctx(con, map_world_ids(con, cfg))
     write_map_data(con, cfg)
     ctx.charted = write_price_data(con, cfg)
+    shutil.copy(Path(__file__).with_name("scan.js"), REPORT_DIR / "scan.js")   # lecture des captures, chargee a la demande
     names = {r["id"]: r["name"] for r in con.execute("SELECT id, name FROM servers")}
     my = next((r for r in results if r["server"] == str(cfg["my_server"])), results[0] if results else None)
     sname = names.get(my["server"], my["server"]) if my else "?"
