@@ -2,7 +2,7 @@
 #   - toutes les heures a hh:07 UTC : hourly (prix de tout le marche, analyses, alertes)
 #   - chaque jour a 15:40 UTC       : daily (volumes de reference, activite, historique, resume Discord)
 # La base SQLite est conservee dans le cache d'Actions ; a defaut, elle repart de seed/aion.db.gz.
-# Secrets : DISCORD_WEBHOOK_URL (optionnel), SITE_PASSWORD (obligatoire).
+# Secrets : SITE_PASSWORD (obligatoire), DISCORD_WEBHOOK_URL, DISCORD_WEBHOOK_UNIQUE_URL, DISCORD_WEBHOOK_NEWS_URL (facultatifs).
 name: HDV Aion 2
 
 on:
@@ -63,6 +63,8 @@ jobs:
       - name: Passage ${{ steps.job.outputs.name }}
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          DISCORD_WEBHOOK_UNIQUE_URL: ${{ secrets.DISCORD_WEBHOOK_UNIQUE_URL }}
+          DISCORD_WEBHOOK_NEWS_URL: ${{ secrets.DISCORD_WEBHOOK_NEWS_URL }}
         run: python -X utf8 -m aionhdv ${{ steps.job.outputs.name }}
 
       - name: Fusionner le journal SQLite

@@ -20,6 +20,9 @@
   "harvest_per_day": {},
 
   "discord_webhook_url": "",
+  "_discord_webhooks": "facultatif : salons dedies aux Unique bradés et aux annonces officielles (sinon salon principal)",
+  "discord_webhook_unique_url": "",
+  "discord_webhook_news_url": "",
 
   "_map_worlds": "zones accessibles sur ta version : 1110 Altgard, 1111 Morheim, 1100 Ishalgen, 20 Reshanta inférieure",
   "map_worlds": ["1110"],
@@ -30,7 +33,19 @@
     "spike_ratio": 1.50,
     "dump_ratio": 0.70,
     "buy_craft_min_margin": 0.30,
-    "buy_craft_min_profit_day": 100000
+    "buy_craft_min_profit_day": 100000,
+    "unique_ratio": 0.60,
+    "unique_min_median": 10000,
+    "unique_min_samples": 12
+  },
+
+  "news": {
+    "_": "annonces officielles envoyées sur Discord : tableaux du site officiel (update_fr = notes de version, notice_fr = avis) + Reddit filtré par mots-clés",
+    "boards": ["update_fr", "notice_fr"],
+    "lang": "fr-fr",
+    "exclude": ["Restrictions de compte"],
+    "reddit": "aion2",
+    "reddit_keywords": ["patch note", "patch notes", "maintenance", "NCSOFT", "official", "announcement", "dev note", "roadmap"]
   },
 
   "http": {

@@ -12,11 +12,12 @@ def fmt(n):
     return f"{n:,.0f}".replace(",", " ") if n is not None else "?"
 
 
-def send(cfg, text):
+def send(cfg, text, channel=None):
+    """channel : 'unique' ou 'news' pour un salon Discord dedie (discord_webhook_<channel>_url), sinon le salon principal."""
     LOG_DIR.mkdir(exist_ok=True)
     with open(LOG_DIR / "alerts.log", "a", encoding="utf-8") as f:
         f.write(f"--- {datetime.now().isoformat(timespec='seconds')}\n{text}\n")
-    url = cfg.get("discord_webhook_url")
+    url = (channel and cfg.get(f"discord_webhook_{channel}_url")) or cfg.get("discord_webhook_url")
     if not url:
         return False
     chunks, cur = [], ""
@@ -53,8 +54,10 @@ def detect(con, cfg, result):
     day = datetime.now(timezone.utc).strftime("%Y%m%d")
     msgs = []
 
-    # 1. annonces bradees (tout item suivi)
+    # 1. annonces bradees (tout item suivi ; les Unique ont leur propre suivi, detect_uniques)
     for iid, price in m.price.items():
+        if m.items.get(iid, {}).get("grade") == "Unique":
+            continue
         med = m.median_price(iid, 7)
         if not med or med < a["bargain_min_median"]:
             continue
@@ -124,6 +127,24 @@ def detect(con, cfg, result):
                    f"et vends tes crafts avant que leurs prix ne baissent.")
             if _once(con, f"unlock|{result['server']}|{day}", msg):
                 msgs.append(msg)
+    return msgs
+
+
+def detect_uniques(con, cfg, result):
+    """Objets Unique vendus bien en dessous de leur mediane des 7 derniers jours."""
+    a = cfg["alerts"]
+    srv = con.execute("SELECT name FROM servers WHERE id = ?", (result["server"],)).fetchone()
+    sname = srv["name"] if srv else result["server"]
+    day = datetime.now(timezone.utc).strftime("%Y%m%d")
+    msgs = []
+    for u in result["uniques"]:
+        if u["ratio"] > a["unique_ratio"] or u["releves"] < a["unique_min_samples"] or u["mediane"] < a["unique_min_median"]:
+            continue
+        msg = (f"💎 **Unique bradé** [{sname}] {u['objet']} à **{fmt(u['prix'])}** "
+               f"(médiane 7 j : {fmt(u['mediane'])}, soit {u['ratio']:.0%} ; plus bas vu : {fmt(u['plus_bas'])}) "
+               f"— {u['annonces']} annonce(s)")
+        if _once(con, f"unique|{result['server']}|{u['item_id']}|{day}", msg):
+            msgs.append(msg)
     return msgs
 
 

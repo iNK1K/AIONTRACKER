@@ -9,7 +9,8 @@ Commandes :
   backfill    historique de prix aion2.exchange depuis le 5 octobre
   servers     instantane de tous les serveurs launch asmodiens EU (comparaison)
   analyze     calculs + rapport HTML
-  hourly      snapshot + analyze + alertes
+  news        annonces officielles (site officiel, Reddit) -> Discord
+  hourly      snapshot + analyze + alertes + annonces officielles
   daily       refvolume + activity + historique + servers + resume du jour
   report      regenere seulement le rapport HTML
 """
@@ -18,7 +19,7 @@ import time
 import traceback
 from datetime import datetime, timedelta, timezone
 
-from . import alerts, analysis, catalog, collect, report
+from . import alerts, analysis, catalog, collect, news, report
 from .config import LOG_DIR, load_config
 from .db import connect
 
@@ -89,12 +90,27 @@ def cmd_analyze(con, cfg, send_alerts=False, send_digest=False):
             msgs = alerts.detect(con, cfg, res)
             for m in msgs:
                 alerts.send(cfg, m)
-            log(f"alertes : {len(msgs)}")
+            uniques = alerts.detect_uniques(con, cfg, res)
+            for m in uniques:
+                alerts.send(cfg, m, "unique")
+            log(f"alertes : {len(msgs)}, uniques : {len(uniques)}")
         if send_digest and str(s) == str(cfg["my_server"]):
             alerts.send(cfg, alerts.digest(con, cfg, res))
     path = report.build(con, cfg, results)
     log(f"rapport : {path}")
     return results
+
+
+def cmd_news(con, cfg):
+    """Ne fait jamais echouer le passage : une source injoignable est seulement notee dans le journal."""
+    try:
+        msgs, errors = news.check(con, cfg)
+    except Exception as e:
+        log(f"annonces : erreur {e}")
+        return
+    for m in msgs:
+        alerts.send(cfg, m, "news")
+    log(f"annonces : {len(msgs)} nouvelle(s)" + (f", sources en erreur : {'; '.join(errors)}" if errors else ""))
 
 
 def main(argv):
@@ -124,9 +140,12 @@ def main(argv):
             cmd_analyze(con, cfg)
         elif cmd == "report":
             cmd_analyze(con, cfg)
+        elif cmd == "news":
+            cmd_news(con, cfg)
         elif cmd == "hourly":
             cmd_snapshot(con, cfg)
             cmd_analyze(con, cfg, send_alerts=True)
+            cmd_news(con, cfg)
         elif cmd == "daily":
             cmd_refvolume(con, cfg)
             cmd_activity(con, cfg)

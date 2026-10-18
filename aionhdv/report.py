@@ -75,7 +75,16 @@ code{background:var(--card2);padding:1px 6px;border-radius:5px}
 .hours{display:flex;gap:3px;align-items:flex-end;height:96px;margin-top:4px}
 .hb{flex:1;min-width:0;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:3px}
 .hb i{display:block;width:100%;background:var(--line);border-radius:3px 3px 0 0;min-height:2px}
-.hb.on i{background:var(--acc)}.hb span{font-size:10px;color:var(--mut);height:12px;line-height:12px}
+.hb.on i{background:var(--acc)}
+.nm{cursor:copy}.nm:hover{text-decoration:underline dotted}
+#toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--card2);border:1px solid var(--acc);color:var(--txt);
+ padding:8px 14px;border-radius:8px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:60;max-width:90vw}
+#toast.on{opacity:1}
+.stock{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:8px;margin:0 0 16px}
+.sk{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px 10px;font-size:13.5px}
+.sk span{flex:1;min-width:0}
+.sk input{width:92px;padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:var(--bg2);color:var(--txt);font:inherit;text-align:right}
+.sk input:focus{outline:none;border-color:var(--acc)}.hb span{font-size:10px;color:var(--mut);height:12px;line-height:12px}
 """
 
 JS = """
@@ -93,9 +102,37 @@ function sortT(th){const t=th.closest('table'),i=[...th.parentNode.children].ind
  [...b.rows].sort((x,y)=>{const a=x.cells[i].dataset.v??x.cells[i].textContent,c=y.cells[i].dataset.v??y.cells[i].textContent;
  const na=parseFloat(a),nc=parseFloat(c);const r=(!isNaN(na)&&!isNaN(nc))?na-nc:a.localeCompare(c,'fr');return asc?r:-r}).forEach(r=>b.appendChild(r));th.dataset.a=asc?'1':'0'}
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeMap()});
+function toast(msg){let el=document.getElementById('toast');if(!el){el=document.createElement('div');el.id='toast';document.body.appendChild(el)}
+ el.textContent=msg;el.classList.add('on');clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('on'),1600)}
+function copyOld(t,done){const a=document.createElement('textarea');a.value=t;a.style.position='fixed';a.style.opacity='0';
+ document.body.appendChild(a);a.select();try{document.execCommand('copy');done()}catch(e){}a.remove()}
+document.addEventListener('click',e=>{const n=e.target.closest('.nm');if(!n)return;const t=n.textContent.trim(),done=()=>toast('Copié : '+t);
+ if(navigator.clipboard&&window.isSecureContext)navigator.clipboard.writeText(t).then(done,()=>copyOld(t,done));else copyOld(t,done)});
+const NF=new Intl.NumberFormat('fr-FR',{maximumFractionDigits:0});
+function kf(n){const a=Math.abs(n);return a>=1e6?(n/1e6).toFixed(2).replace('.',',')+' M':a>=1e4?Math.round(n/1e3)+' k':NF.format(n)}
+function escH(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function calc(){const box=document.getElementById('stock');if(!box||!window.CRAFTS)return;const st={};
+ box.querySelectorAll('input[data-r]').forEach(i=>{const v=parseFloat(i.value);if(v>0)st[i.dataset.r]=v});
+ try{localStorage.setItem('stock',JSON.stringify(st))}catch(e){}
+ const cap=document.getElementById('cap').checked,left={...st},rows=[];let tot=0;
+ for(const c of CRAFTS){const need=Object.entries(c.r);if(!need.length||need.some(([k])=>!(left[k]>0)))continue;
+  let n=Math.min(...need.map(([k,q])=>left[k]/q));if(cap)n=Math.min(n,c.c);n=Math.floor(n);if(n<=0)continue;
+  need.forEach(([k,q])=>left[k]-=n*q);tot+=n*c.n;rows.push([c,n])}
+ document.getElementById('stot').textContent=rows.length?kf(tot):'–';
+ document.querySelector('#splan tbody').innerHTML=rows.length?rows.map(([c,n])=>{const l=c.l?Math.min(c.l,n):0;
+  return `<tr><td><span class="nm" title="Cliquer pour copier">${escH(c.o)}</span></td><td class="n">${NF.format(n)}</td>`
+  +`<td class="n">${NF.format(c.p)}</td><td class="n pos">${NF.format(c.n)}</td><td class="n big pos">${kf(n*c.n)}</td>`
+  +`<td>${l?Math.max(1,Math.round(n/l))+' annonce(s) de '+NF.format(l):'–'}</td>`
+  +`<td class="sub">${escH(Object.entries(c.r).map(([k,q])=>k+' ×'+NF.format(Math.ceil(n*q))).join(', '))}</td></tr>`}).join('')
+  :'<tr><td colspan="7" class="mut">Entre tes quantités de ressources ci-dessus.</td></tr>';
+ const rest=Object.entries(left).filter(([k,v])=>v>=1).map(([k,v])=>k+' ×'+NF.format(Math.floor(v)));
+ document.getElementById('sleft').textContent=rest.length?'Ressources non utilisées : '+rest.join(', '):''}
+function clearStock(){document.querySelectorAll('#stock input[data-r]').forEach(i=>i.value='');calc()}
 document.addEventListener('DOMContentLoaded',()=>{let t='home';try{t=localStorage.getItem('tab')||t;
  if(localStorage.getItem('detail')){document.body.classList.add('detail');document.querySelectorAll('input.dt').forEach(x=>x.checked=true)}}catch(e){}
- if(!document.getElementById(t))t='home';show(t);document.querySelectorAll('th').forEach(th=>th.onclick=()=>sortT(th))});
+ if(!document.getElementById(t))t='home';show(t);
+ try{const s=JSON.parse(localStorage.getItem('stock')||'null');if(s)document.querySelectorAll('#stock input[data-r]').forEach(i=>i.value=s[i.dataset.r]||'')}catch(e){}
+ calc();document.querySelectorAll('th').forEach(th=>th.onclick=()=>sortT(th))});
 """
 
 MAP_HTML = """<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -174,7 +211,7 @@ class Ctx:
     def label(self, item_id=None, name=None, sub=None):
         nm = name or (self.items.get(item_id) or {}).get("name") or item_id
         s = f'<div class="sub">{esc(sub)}</div>' if sub else ""
-        return f'<span class="it">{self.icon(item_id, name)}<span><span class="nm">{esc(nm)}</span>{self.mapbtn(nm)}{s}</span></span>'
+        return f'<span class="it">{self.icon(item_id, name)}<span><span class="nm" title="Cliquer pour copier">{esc(nm)}</span>{self.mapbtn(nm)}{s}</span></span>'
 
 
 def _cls(v):
@@ -316,6 +353,56 @@ def hours_html(h):
             f'<div class="hours">{bars}</div></div>')
 
 
+def stock_calc(ctx, cfg, harvest):
+    """Je saisis mes ressources, la page calcule quoi fabriquer et combien ca rapporte (calcul dans le navigateur)."""
+    crafts = [e for e in harvest if is_good(e) and e["ressources_u"]]
+    crafts.sort(key=lambda e: -(e["net_u"] / e["ressources_u"]))
+    data = [dict(o=e["objet"], n=e["net_u"], p=e["prix_real"], c=e["ma_part_j"], l=e.get("lot_vente"),
+                 r={k: round(v, 4) for k, v in e["ressources"].items()}) for e in crafts]
+    names = sorted({k for e in crafts for k in e["ressources"]})
+    preset = cfg.get("harvest_per_day") or {}
+    inputs = "".join(f'<label class="sk">{ctx.icon(name=n)}<span>{esc(n)}</span><input type="number" min="0" step="1" '
+                     f'inputmode="numeric" data-r="{esc(n)}" value="{esc(preset.get(n, ""))}" oninput="calc()"></label>'
+                     for n in names)
+    head = (f'<tr>{_th("Craft")}{_th("Quantité", None, True)}{_th("Vendre à", None, True)}{_th("Net/u", None, True)}'
+            f'{_th("Kinah", None, True)}{_th("Mettre en vente", "Taille habituelle des lots vendus sur le marché")}'
+            f'{_th("Ressources utilisées")}</tr>')
+    return ('<p class="lead">Entre les ressources que tu possèdes : la page choisit les crafts qui rapportent le plus '
+            'par ressource et calcule le gain. Tes quantités restent enregistrées dans ce navigateur.</p>'
+            '<div class="toolbar"><label class="tg"><input type="checkbox" id="cap" checked onchange="calc()"> '
+            'Ne pas dépasser ce que le marché absorbe en un jour</label>'
+            '<button class="mapbtn" onclick="clearStock()">Tout effacer</button></div>'
+            f'<div class="stock" id="stock">{inputs}</div>'
+            '<div class="kpis"><div class="kpi"><div class="l">Total estimé</div><div class="v pos" id="stot">–</div>'
+            '<div class="s">kinah une fois tout vendu</div></div></div>'
+            f'<div class="wrap"><table id="splan"><thead>{head}</thead><tbody></tbody></table></div>'
+            '<p class="mut" id="sleft"></p>'
+            f'<script>window.CRAFTS={json.dumps(data, ensure_ascii=False).replace("</", "<\\/")};</script>')
+
+
+def table_uniques(ctx, uniques, cfg):
+    a = cfg["alerts"]
+    body = []
+    for u in uniques:
+        deal = u["ratio"] <= a["unique_ratio"] and u["releves"] >= a["unique_min_samples"]
+        badge = (f'<span class="badge {"b-ok" if deal else "b-mut"}">{u["ratio"]:.0%}</span>')
+        body.append(f"<tr><td>{ctx.label(u['item_id'])}</td><td class='sub'>{esc(u['categorie'])}</td>"
+                    f"{_num_td(u['prix'], 'big', color=False)}{_num_td(u['mediane'], color=False)}"
+                    f"<td class='n' data-v='{u['ratio']}'>{badge}</td>{_num_td(u['plus_bas'], color=False)}"
+                    f"{_num_td(u['annonces'], 'mut', color=False)}{_num_td(u['releves'], 'mut', color=False)}</tr>")
+    head = ("<tr>" + _th("Objet Unique") + _th("Catégorie") + _th("Prix actuel", None, True)
+            + _th("Médiane 7 j", "Prix plancher médian des 7 derniers jours", True)
+            + _th("Prix / médiane", "Plus c'est bas, plus c'est une affaire", True)
+            + _th("Plus bas vu", "Prix plancher le plus bas des 7 derniers jours", True)
+            + _th("Annonces", None, True) + _th("Relevés", "Nombre de prix relevés sur 7 j (fiabilité de la médiane)", True)
+            + "</tr>")
+    lead = (f"<p class='lead'>Tous les objets Unique en vente, les moins chers par rapport à leur prix habituel d’abord. "
+            f"Alerte Discord quand un Unique passe sous <b>{a['unique_ratio']:.0%}</b> de sa médiane 7 j "
+            f"(médiane d’au moins {fmt(a['unique_min_median'])} kinah, au moins {a['unique_min_samples']} relevés).</p>")
+    return (lead + toolbar("uniques", f'<span class="mut">{len(uniques)} objets Unique en vente</span>')
+            + f'<div class="wrap"><table id="uniques"><thead>{head}</thead><tbody>{"".join(body)}</tbody></table></div>')
+
+
 def table_plan(plan):
     if not plan:
         return ('<div class="card"><b>Pas encore de plan.</b><span class="mut">Renseigne <code>harvest_per_day</code> dans '
@@ -414,7 +501,7 @@ def home(con, cfg, ctx, my, sname):
             tip = '<span class="badge b-bad">📉 Prix bas : garde ton stock</span>'
         else:
             tip = '<span class="badge b-mut">Prix stable</span>'
-        res = "".join(f'<span class="chip">{ctx.icon(name=k)}{esc(k)} ×{v:g}{ctx.mapbtn(k)}</span>'
+        res = "".join(f'<span class="chip">{ctx.icon(name=k)}<span class="nm" title="Cliquer pour copier">{esc(k)}</span> ×{v:g}{ctx.mapbtn(k)}</span>'
                       for k, v in e["ressources"].items())
         cards.append(
             f'<div class="card">{ctx.label(e["item_id"], sub=f"{METIERS.get(e["metier"], e["metier"])} · lot ×{e["lot"]:g}")}'
@@ -492,7 +579,9 @@ def build(con, cfg, results):
         add("buy", "Achat → craft",
             f"<h2>Acheter les ingrédients → fabriquer → revendre</h2><p class='lead'>{hyp}</p>"
             + table_crafts(ctx, my["buy"], "tb", False))
-        add("plan", "Plan du jour", "<h2>Plan de production du jour</h2>" + table_plan(my["plan"]))
+        add("uniques", "💎 Uniques", "<h2>Objets Unique : prix bradés</h2>" + table_uniques(ctx, my["uniques"], cfg))
+        add("plan", "🧮 Mon stock", "<h2>Mon stock → quoi fabriquer</h2>" + stock_calc(ctx, cfg, my["harvest"])
+            + ("<h3>Plan quotidien (config)</h3>" + table_plan(my["plan"]) if my["plan"] else ""))
         sep()
     others = [r for r in results if r is not my]
     if others:

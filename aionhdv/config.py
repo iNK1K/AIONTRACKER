@@ -21,6 +21,7 @@ def load_config():
     if local.exists():
         with open(local, encoding="utf-8") as f:
             cfg.update(json.load(f))
-    if os.environ.get("DISCORD_WEBHOOK_URL"):
-        cfg["discord_webhook_url"] = os.environ["DISCORD_WEBHOOK_URL"]
+    for key in ("discord_webhook_url", "discord_webhook_unique_url", "discord_webhook_news_url"):
+        if os.environ.get(key.upper()):
+            cfg[key] = os.environ[key.upper()]
     return cfg

@@ -67,8 +67,8 @@ class Market:
             self.price[r["item_id"]] = r["price"]
             self.listings[r["item_id"]] = r["listings"]
 
-    def median_price(self, item_id, days=7):
-        """Mediane des prix plancher horaires recents (quotes + historique aion2.exchange)."""
+    def price_stats(self, item_id, days=7):
+        """Mediane, plus bas et nombre de releves des prix plancher recents (quotes + historique aion2.exchange)."""
         since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()[:19]
         vals = [r["price"] for r in self.con.execute(
             "SELECT price FROM quotes WHERE server=? AND item_id=? AND ts>=?", (self.server, item_id, since))]
@@ -77,7 +77,27 @@ class Market:
             vals += [r["avg"] for r in self.con.execute(
                 "SELECT avg FROM ax_prices WHERE ax_server=? AND item_id=? AND ts>=? AND avg IS NOT NULL",
                 (srv["ax_id"], item_id, since))]
-        return statistics.median(vals) if vals else None
+        return dict(median=statistics.median(vals), low=min(vals), n=len(vals)) if vals else None
+
+    def median_price(self, item_id, days=7):
+        st = self.price_stats(item_id, days)
+        return st["median"] if st else None
+
+    def uniques(self, days=7):
+        """Objets Unique en vente : prix actuel compare a la mediane des 7 derniers jours (les moins chers d'abord)."""
+        out = []
+        for iid, price in self.price.items():
+            it = self.items.get(iid) or {}
+            if it.get("grade") != "Unique" or it.get("bound"):
+                continue
+            st = self.price_stats(iid, days)
+            if not st or not st["median"]:
+                continue
+            out.append(dict(item_id=iid, objet=it["name"], categorie=it.get("auction_category") or it.get("sub_category"),
+                            prix=price, annonces=self.listings.get(iid, 0), mediane=round(st["median"]),
+                            plus_bas=st["low"], releves=st["n"], ratio=round(price / st["median"], 3)))
+        out.sort(key=lambda u: u["ratio"])
+        return out
 
     def ref(self, item_id):
         """Volume quotidien et prix moyen de vente sur le serveur de reference."""
@@ -406,4 +426,4 @@ def run_all(con, cfg, server=None):
                 (run_ts, server, "plan", None, None, None, json.dumps(plan, ensure_ascii=False)))
     con.commit()
     return dict(run_ts=run_ts, server=server, as_of=m.as_of, ratio=m.ratio, harvest=harvest, buy=buy,
-                targets=targets, plan=plan, hours=m.hourly_profile(), market=m)
+                targets=targets, plan=plan, hours=m.hourly_profile(), uniques=m.uniques(), market=m)
