@@ -278,12 +278,22 @@ function renderMetiers(){const box=document.getElementById('metiers');if(!box||!
 function importLevelsFromHash(){const h=decodeURIComponent(location.hash||'');if(!h.startsWith('#metiers='))return;
  const st=lvState();h.slice(9).split('.').forEach(x=>{const [p,l]=x.split('-');if(PROF[p]&&l!=='')st.lv[p]=+l});lvSave(st);
  history.replaceState(null,'',location.pathname+location.search);toast('Niveaux de métier importés');show('metiersTab')}
+// Quoi recolter : kinah par heure de recolte, selon ce que je recolte par heure (100 par defaut)
+function rates(){try{return JSON.parse(localStorage.getItem('rates')||'{}')}catch(e){return{}}}
+function rateCalc(inp){const R=rates();if(inp){const r=inp.closest('tr').dataset.res;if(inp.value==='')delete R[r];else R[r]=+inp.value;
+ try{localStorage.setItem('rates',JSON.stringify(R))}catch(e){}}
+ document.querySelectorAll('#targets tr[data-res]').forEach(tr=>{const r=tr.dataset.res,i=tr.querySelector('.rate');
+  if(!inp&&R[r]!=null)i.value=R[r];const rate=i.value===''?100:+i.value,best=+tr.dataset.best,abs=+tr.dataset.abs;
+  const kh=tr.querySelector('.kh'),hj=tr.querySelector('.hj');
+  if(!best||!rate){kh.textContent='–';kh.dataset.v=0;hj.textContent='–';hj.dataset.v=0;return}
+  const v=best*rate;kh.textContent=kf(v);kh.dataset.v=v;const h=abs/rate;hj.dataset.v=h;
+  hj.textContent=h>=24?'24 h +':(h<1?Math.round(h*60)+' min':h.toFixed(1).replace('.',',')+' h')})}
 function clearStock(){document.querySelectorAll('#stock input[data-r]').forEach(i=>i.value='');calc()}
 document.addEventListener('DOMContentLoaded',()=>{let t='home';try{t=localStorage.getItem('tab')||t;
  if(localStorage.getItem('detail')){document.body.classList.add('detail');document.querySelectorAll('input.dt').forEach(x=>x.checked=true)}}catch(e){}
  if(!document.getElementById(t))t='home';show(t);
  try{const s=JSON.parse(localStorage.getItem('stock')||'null');if(s)document.querySelectorAll('#stock input[data-r]').forEach(i=>i.value=s[i.dataset.r]||'')}catch(e){}
- importLevelsFromHash();applyLevels();document.querySelectorAll('th').forEach(th=>th.onclick=()=>sortT(th))});
+ importLevelsFromHash();applyLevels();rateCalc();document.querySelectorAll('th').forEach(th=>th.onclick=()=>sortT(th))});
 """
 
 MAP_HTML = """<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -546,17 +556,30 @@ def table_crafts(ctx, rows, tid, harvest):
 def table_targets(ctx, targets):
     body = []
     for t in targets:
+        # gain moyen par ressource quand la recolte du jour est repartie sur les crafts fiables, selon ce que chacun absorbe
+        ok = [u for u in t["usages"] if u["fiable"] and u["ressources_j"]]
+        avg = round(sum(u["net_par_ressource"] * u["ressources_j"] for u in ok) / sum(u["ressources_j"] for u in ok)) if ok else 0
         uses = '<div class="uses">' + "".join(
             f"<div>{esc(u['objet'])} : <b class='{_cls(u['net_par_ressource'])}'>{fmt(u['net_par_ressource'])}</b> / ressource"
             + (f" <span class='mut'>· ~{fmt(u['ressources_j'])} ressources/j</span>" if u["fiable"] else "")
             + ("" if u["fiable"] else f" <span class='badge b-warn'>⚠ {esc('; '.join(u['flags']) or 'à perte')}</span>")
             + "</div>" for u in t["usages"]) + "</div>"
-        body.append(f"<tr class='{'' if t['meilleur'] else 'dim'}'><td>{ctx.label(name=t['ressource'])}</td>"
-                    f"{_num_td(t['prix_brut'], color=False)}{_num_td(t['meilleur'], 'big')}"
-                    f"<td>{uses}</td>{_num_td(t['absorbable_j'], color=False)}</tr>")
-    head = ("<tr>" + _th("Ressource") + _th("Prix brut HDV", "Prix du brut en vente (tu ne peux pas le vendre)", True)
+        body.append(f"<tr class='{'' if t['meilleur'] else 'dim'}' data-res=\"{esc(t['ressource'])}\" "
+                    f"data-best='{avg}' data-abs='{t['absorbable_j'] or 0}'><td>{ctx.label(name=t['ressource'])}</td>"
+                    f"<td class='n'><input type='number' min='0' step='10' class='rate' placeholder='100' "
+                    f"style='width:74px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;background:var(--bg2);"
+                    f"color:var(--txt);font:inherit;text-align:right' oninput='rateCalc(this)'></td>"
+                    f"<td class='n big pos kh' data-v='0'>–</td><td class='n hj' data-v='0'>–</td>"
+                    f"{_num_td(t['meilleur'], 'big')}<td>{uses}</td>{_num_td(t['absorbable_j'], color=False)}"
+                    f"{_num_td(t['prix_brut'], color=False, x=True)}</tr>")
+    head = ("<tr>" + _th("Ressource")
+            + _th("Récolte / heure", "Ce que tu récoltes en une heure (100 par défaut) : modifiable, enregistré dans ce navigateur")
+            + _th("Kinah / heure", "Récolte par heure × gain moyen par ressource, la récolte étant répartie sur les crafts "
+                  "fiables selon ce que chacun absorbe (après frais)", True)
+            + _th("Heures / jour", "Heures de récolte avant de saturer ce que le marché absorbe par jour", True)
             + _th("Meilleur net / ressource", "Ce que te rapporte chaque ressource récoltée dans son meilleur craft fiable", True)
             + _th("Que fabriquer avec") + _th("Utilisable/j", "Ressources que le marché absorbe par jour via les crafts fiables", True)
+            + _th("Prix brut HDV", "Prix du brut en vente (non vendable pour toi : toujours transformer)", True, True)
             + "</tr>")
     return (toolbar("targets") + f'<div class="wrap"><table id="targets"><thead>{head}</thead>'
             f'<tbody>{"".join(body)}</tbody></table></div>')
@@ -1016,7 +1039,10 @@ def build(con, cfg, results):
             f"Activité ×{my['ratio']:.2f} par rapport à Kaisinel.</p>" + table_crafts(ctx, my["harvest"], "th", True))
         add("targets", "Quoi récolter",
             "<h2>Quoi récolter, et en quoi le transformer</h2><p class='lead'>Classement des ressources par gain réel "
-            "une fois transformées. Les usages douteux ou à perte sont indiqués en orange.</p>" + table_targets(ctx, my["targets"]))
+            "une fois transformées (le brut n’est jamais vendu). Indique ce que tu récoltes par heure pour chaque ressource "
+            "(100 par défaut) : <b>Kinah / heure</b> dit où passer ton temps, <b>Heures / jour</b> combien de temps de récolte "
+            "le marché absorbe avant que les prix baissent. Clique sur un en-tête pour trier. "
+            "Les usages douteux ou à perte sont indiqués en orange.</p>" + table_targets(ctx, my["targets"]))
         add("buy", "Achat → craft",
             f"<h2>Acheter les ingrédients → fabriquer → revendre</h2><p class='lead'>{hyp}</p>"
             + table_spikes(ctx, my.get("spikes")) + table_crafts(ctx, my["buy"], "tb", False))
