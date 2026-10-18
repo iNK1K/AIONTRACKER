@@ -1,0 +1,116 @@
+# Releve des prix Aion 2 + publication du site (GitHub Pages, branche gh-pages)
+#   - toutes les heures a hh:07 UTC : hourly (prix de tout le marche, analyses, alertes)
+#   - chaque jour a 15:40 UTC       : daily (volumes de reference, activite, historique, resume Discord)
+# La base SQLite est conservee dans le cache d'Actions ; a defaut, elle repart de seed/aion.db.gz.
+# Secrets : DISCORD_WEBHOOK_URL (optionnel), SITE_PASSWORD (obligatoire).
+name: HDV Aion 2
+
+on:
+  schedule:
+    - cron: "7 * * * *"
+    - cron: "40 15 * * *"
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "Commande a lancer"
+        type: choice
+        options: [hourly, daily, analyze]
+        default: hourly
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hdv
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Restaurer la base
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            data/aion.db
+            data/icons
+          key: hdv-db-${{ github.run_id }}
+          restore-keys: hdv-db-
+
+      - name: Base de depart si le cache est vide
+        run: |
+          if [ ! -s data/aion.db ]; then
+            echo "cache vide : depart depuis seed/aion.db.gz"
+            gunzip -c seed/aion.db.gz > data/aion.db
+          fi
+
+      - name: Choix de la commande
+        id: job
+        run: |
+          job="${{ inputs.job }}"
+          if [ -z "$job" ]; then
+            if [ "${{ github.event.schedule }}" = "40 15 * * *" ]; then job=daily; else job=hourly; fi
+          fi
+          echo "name=$job" >> "$GITHUB_OUTPUT"
+
+      - name: Passage ${{ steps.job.outputs.name }}
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: python -X utf8 -m aionhdv ${{ steps.job.outputs.name }}
+
+      - name: Fusionner le journal SQLite
+        if: always()
+        run: python -c "import sqlite3; c=sqlite3.connect('data/aion.db'); c.execute('PRAGMA wal_checkpoint(TRUNCATE)'); c.close()"
+
+      - name: Sauver la base
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            data/aion.db
+            data/icons
+          key: hdv-db-${{ github.run_id }}
+
+      - name: Copie de secours quotidienne
+        if: steps.job.outputs.name == 'daily'
+        run: gzip -c data/aion.db > aion.db.gz
+
+      - name: Envoyer la copie de secours
+        if: steps.job.outputs.name == 'daily'
+        uses: actions/upload-artifact@v4
+        with:
+          name: aion-db-${{ github.run_id }}
+          path: aion.db.gz
+          retention-days: 14
+
+      - name: Construire le site
+        run: python -X utf8 scripts/build_site.py
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Chiffrer la page principale
+        env:
+          SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}
+        run: |
+          if [ -z "$SITE_PASSWORD" ]; then echo "::error::secret SITE_PASSWORD manquant"; exit 1; fi
+          # le sel est lu dans .staticrypt.json : le "se souvenir de moi" reste valable d'un passage a l'autre
+          npx --yes staticrypt@3 site/index.html -p "$SITE_PASSWORD" -d site --short
+
+      - name: Publier sur gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site
+          force_orphan: true
+          user_name: "github-actions[bot]"
+          user_email: "github-actions[bot]@users.noreply.github.com"
+          commit_message: "site ${{ steps.job.outputs.name }}"
