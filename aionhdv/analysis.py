@@ -169,7 +169,7 @@ class Market:
                 mk = r["d"] * 24 if r and r["n"] and r["d"] else None
                 lot = self.lot_size(iid)
             it["lot_outil"] = lot
-            it["marche_unites_j"] = mk * lot if mk and lot else None
+            it["marche_unites_j"] = mk * (lot or 1) if mk else None      # comme sales() : 1 par annonce sans taille connue
             it["estime_unites_j"] = it["marche_unites_j"] * share if it["marche_unites_j"] else None
             it["part"] = it["unites_j"] / it["marche_unites_j"] if it["unites_j"] and it["marche_unites_j"] else None
             # prix : ce que le marche payait pendant la periode (ventes observees sur les releves horaires)

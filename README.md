@@ -14,6 +14,10 @@ Onglet **Mon stock** : coller une capture de la réserve (Ctrl + V) remplit le s
 
 Onglet **Mes métiers** : niveaux de métier enregistrés dans le navigateur ; les crafts impossibles sont grisés partout et le profit tient compte du taux de réussite du jeu (tables extraites du client, mises à jour par le passage daily).
 
+Onglet **Mes gains** : coller une capture de l’historique des ventes en jeu remplit `mes_ventes.json` (objet, quantité, prix, montant reçu, date) ; l’onglet compare tes ventes réelles aux estimations (ventes par jour, part de marché réelle, prix obtenu, ventes à perte).
+
+Tests des calculs : `python -m unittest discover tests`.
+
 Mode test : ajouter `--dry-run` (ex. `python -m aionhdv hourly --dry-run`) pour ne rien envoyer sur Discord.
 
 Python est **portable** (`.runtime\python`) : rien n'est installé sur le système. Supprimer le dossier suffit.
@@ -22,6 +26,8 @@ Python est **portable** (`.runtime\python`) : rien n'est installé sur le systè
 - `my_server` / `watch_servers` : ids a2-tracker (2310 Hadala, 2315 Zemurru, 2318 Baba…)
 - `masteries` : ta maîtrise par métier (filtre les recettes)
 - `mes_annonces.json` : ce que tu as en vente (`"Nom exact": prix`) → alerte « Tu es battu » quand quelqu'un vend moins cher
+- `mes_ventes.json` : mes ventes réelles (rempli depuis l’onglet Mes gains)
+- `alerts.types` : alertes envoyées en cours de journée (par défaut `annonces`, `achat_craft`, `notes`, `restriction` ; possibles aussi `bonne_affaire`, `prix`, `flip`, `uniques`) ; `alerts.resume_seul: true` = rien en journée, tout dans le résumé quotidien
 - `alerts.flip_min_margin`, `flip_min_samples`, `flip_min_profit_day` : seuils de l'onglet et de l'alerte Flip
 - `harvest_per_day` : ta récolte quotidienne, ex. `{"Bois d'Asvata": 300, "Azpha": 150}` → plan de production
 - `discord_webhook_url` : URL du webhook (sinon les alertes vont dans `logs\alerts.log`)
