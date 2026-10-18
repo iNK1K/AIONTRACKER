@@ -398,3 +398,65 @@ Vérifié en jeu par toi : la transmutation donne des ressources **non liées**,
   - **🔁 Achat d'Od → transmutation → craft → vente** : ingrédients récoltables remplacés par l'Od de même rareté (seulement les crafts où l'Od sert).
   Pour chaque craft présent dans les deux : **barre et badge verts** (« ✔ mieux que via Od / que l'achat à l'HDV, +X/u ») du côté qui rapporte le plus, **rouges** de l'autre. Exemple : Pièce de bois d'Asvata −16 496/u en achetant le Bois à l'HDV, +1 304/u via Od ; Potion de soin supérieure : mieux à l'HDV.
 - Ordre des onglets : Aujourd'hui · Planning · Récolte · Achat → craft · Flip · Uniques · Mes métiers · Mon stock · Autres serveurs · Marché · Carte.
+
+---
+
+# Accueil fiable — 19/10/2026
+
+- **Taxe de l'HDV = 10 %** (et non plus 15 %) : vérifiée sur l'historique des ventes (810 000 vendus → 729 000 reçus). Tous les calculs et textes du site l'utilisent.
+- **Prix habituel = prix des ventes observées** : quand le nombre d'annonces baisse d'une heure à l'autre, les annonces parties l'ont été au prix plancher de l'heure précédente. Prix habituel = médiane de ces ventes sur 48 h (au moins 5), sinon 7 jours ; à défaut médiane des prix plancher sur 7 jours hors jours en pic (> 1,6 × la médiane des jours), puis Kaisinel.
+  Vérification face à tes ventes réelles : Pièce de bois d'Asvata **13 590** (tu as vendu à 13 500), Mijoté de pujery de maître **23 000** (tu as vendu à 24 000). Un pic où personne n'achète (Lingot d'orichalque affiché 8 000) ne fausse plus le prix habituel (**1 199**, 95 ventes en 48 h).
+- **Potentiel du jour** (accueil) = gain du **Planning safe** (temps de jeu, récolte par heure, marchés partagés), et non plus la somme des 5 meilleurs crafts.
+- **Non retenu : compter seulement les annonces disparues suivies d'une hausse du plancher** (« vrais achats »). Mesuré sur Mijoté : ~3 événements par jour, alors que tu vendais toi-même 6 à 8 annonces par jour. Cette méthode sous-compte les ventes de 7 à 14 fois ; on garde toutes les disparitions.
+
+---
+
+# Accueil orienté action — 19/10/2026
+
+En haut de l'accueil, une seule liste **✅ À faire maintenant** :
+- annonces à ajuster (tu es battu → prix conseillé, sous ton seuil, prix qui chute, stock trop long à écouler) ;
+- jusqu'à 2 achats → craft au feu vert (HDV ou via Od) ;
+- notes de version des dernières 48 h ;
+- **plan du jour** (calculé dans le navigateur avec le Planning safe) : quoi récolter et combien de temps, quoi fabriquer, gain estimé, puis **quand poster** (meilleur créneau) et combien d'annonces de quelle taille.
+
+À gain égal, le plan propose la ressource elle-même avant l'Od transmuté.
+
+---
+
+# Suivi des vrais gains — onglet 💰 Mes gains — 19/10/2026
+
+## Utilisation
+1. En jeu, ouvre l'**historique des ventes**, capture la liste (Win + Maj + S).
+2. Onglet **💰 Mes gains** → **Ctrl + V** (plusieurs captures s'ajoutent, les ventes déjà connues ne sont pas doublées).
+3. **📋 Copier le fichier** → **✏️ Ouvrir mes_ventes.json sur GitHub** → coller → « Commit changes ». Le prochain passage horaire met l'onglet à jour.
+
+## Lecture de la capture (dans le navigateur, `aionhdv/scan.js`)
+- Chaque ligne a deux pièces (prix de vente, montant reçu) : elles repèrent les lignes. Objet reconnu par son **icône** ; quand deux objets ont la même icône (Mijoté de pujery / de maître), la **couleur du nom** (rareté) les départage.
+- Chiffres des prix, des « par unité » et de la date appris sur tes 3 captures ; quantité = prix total ÷ prix unitaire.
+- **Contrôles automatiques** : reçu = prix − 10 % (arrondi inférieur), date valide (chaque chiffre à sa place possible), dates dans l'ordre. Une ligne douteuse est en orange.
+- Résultat sur tes 3 captures : **24 ventes sur 24 lues sans erreur** (objet, quantité, prix, reçu, date) en 0,4 s. Seul l'Arc éclatant d'Asvata est signalé « objet incertain » (lu correctement).
+
+## Ce que compare l'onglet
+Par objet : ventes, unités, kinah reçus, prix obtenu face au prix du marché pendant la même période, **marge par unité** (avec le coût de `mes_annonces.json`), **unités vendues par jour réelles vs prévues**, **part de marché réelle**, taille moyenne des achats vs taille d'annonce utilisée par l'outil. Les rythmes ne sont calculés qu'à partir de 3 ventes d'un même objet.
+
+## Premiers résultats (24 ventes, 15/10 → 18/10)
+- **12,16 M reçus**, soit **3,70 M par jour** après la taxe.
+- **Mijoté de pujery de maître** (18 ventes) : **74 unités/jour vendues contre 42 prévues** (×1,73) → **part réelle 35 %** (l'outil suppose 20 %). Tes acheteurs prennent **13 unités par achat**, l'outil compte des annonces de 5 (mesure de Kaisinel).
+- **⚠ Mijoté vendu à perte** : 24 307 reçus par unité après la taxe pour un coût de 26 200 dans `mes_annonces.json` (−1 893 /u). Si ce coût est juste, arrête l'achat → craft du Mijoté à ce prix, ou vends au-dessus de 29 112.
+- Un seul objet vendu au moins 3 fois : **trop tôt pour changer la part de marché de 20 %** dans `config.json`. Ajoute des captures au fil des jours ; l'onglet indique quand il y a assez de données (3 objets ou plus).
+
+---
+
+# Alertes plus calmes — 19/10/2026
+
+- `config.json` → `alerts.types` choisit les alertes envoyées en cours de journée. **Par défaut** : `annonces` (battu, sous le seuil, chute, stock long), `achat_craft` (feu vert seulement, pics de prix compris), `notes` (notes de version et leur effet sur les prix), `restriction` (levée de la restriction sur le brut).
+- **Coupées** : `bonne_affaire`, `prix` (hausse / baisse de tes crafts), `flip`, `uniques`. Pour en réactiver une, ajoute son nom à la liste. Les onglets du site restent complets.
+- **Option `alerts.resume_seul: true`** : aucune alerte en journée ; le résumé quotidien (17 h 40) reprend les alertes des dernières 24 h (types choisis seulement) et les dernières annonces officielles.
+
+---
+
+# Code consolidé — 19/10/2026
+
+- Le JavaScript de la page est sorti de `report.py` dans **`aionhdv/site.js`** (295 lignes), publié à côté de la page comme `scan.js`. Le lien contient une empreinte du fichier (`site.js?v=…`) : après une mise à jour, le navigateur ne garde pas l'ancienne version.
+- **Tests automatiques** : `python -m unittest discover tests` (15 tests, 0,1 s, sur une petite base fabriquée en mémoire) : transmutation (Od moins cher, achat direct, transmutation forcée, récolte gratuite), ventes mesurées, prix habituel (avec et sans ventes observées), indice de sûreté (feu vert / rouge, quantité max, prix plancher, vieux pic), chaînes gamble (étapes, ressources, taux de combo), vrais gains, syntaxe de `site.js` et `scan.js`.
+- Les tests ont déjà trouvé un écart : sans taille d'annonce connue, les vrais gains ne calculaient pas de part de marché alors que les ventes comptent 1 unité par annonce (corrigé). En les écrivant, j'ai aussi repéré et corrigé une erreur introduite pendant cette session (un commentaire qui coupait une ligne du plan du jour) ; elle n'avait pas été publiée.

@@ -2,13 +2,13 @@
 
 Une tâche par ligne. Claude les traite dans l'ordre et coche `[x]` quand c'est fait.
 
-- [ ] Accueil fiable : potentiel du jour = Planning safe (pas la somme des 5 meilleurs crafts) ; « prix habituel » qui écarte les périodes de pic (médiane 7 j hors jours en pic) ; ventes comptées sur les disparitions au prix plancher suivies d'une hausse du plancher (vrais achats), pas sur toutes les disparitions
-- [ ] Accueil orienté action : une seule liste « à faire maintenant » (plan du jour, annonces à ajuster, alertes importantes, ventes à poster ce soir)
-- [ ] Suivi des vrais gains : captures de l'historique des ventes en jeu → kinah réellement gagnés comparés aux estimations, pour calibrer l'outil (dont l'hypothèse des 20 % de part de marché)
-- [ ] Alertes plus calmes : couper les « bonne affaire », garder mes annonces, achat → craft au vert, notes de patch ; option « résumé quotidien uniquement »
-- [ ] Code consolidé : JavaScript du site sorti dans un fichier à part (comme scan.js) + tests automatiques des calculs clés (sûreté, ventes, chaînes, transmutation)
 
 ## Fait
+- [x] Accueil fiable : taxe 10 %, prix habituel = prix des ventes observées (48 h), potentiel du jour = Planning safe (compter seulement les « vrais achats » écarté : sous-compte 7 à 14 fois, voir rapport.md)
+- [x] Accueil orienté action : liste « ✅ À faire maintenant » (annonces à ajuster, achats sûrs, plan du jour, quand poster, notes de version)
+- [x] Suivi des vrais gains : onglet 💰 Mes gains (capture de l'historique des ventes → mes_ventes.json, réel vs estimé, part de marché réelle, ventes à perte)
+- [x] Alertes plus calmes : alerts.types (par défaut annonces, achat-craft au vert, notes, restriction) + option alerts.resume_seul
+- [x] Code consolidé : JavaScript dans aionhdv/site.js + tests automatiques (python -m unittest discover tests)
 - [x] Transmutation intégrée (Od → ressource de même rareté, gratuite, sans échec, non liée) : Quoi récolter, Achat → craft (Od si moins cher), Mon stock, Planning safe (marchés partagés)
 - [x] Onglet 📅 Planning : plan safe (temps de jeu → quoi récolter, quoi crafter, combien d'annonces, gain) et plan gamble (chaînes blanc → vert → bleu → unique : réussite selon les niveaux, combo 24 %, perte si échec, gain du proc, vendre ou continuer, jackpot)
 - [x] Volumes de vente mesurés sur le serveur (annonces disparues × taille des annonces) au lieu de l'extrapolation Kaisinel
