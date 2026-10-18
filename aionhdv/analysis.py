@@ -63,6 +63,13 @@ class Market:
         self.ingredients = {}
         for ri in con.execute("SELECT * FROM recipe_ingredients ORDER BY recipe_id, slot, is_alternative"):
             self.ingredients.setdefault(ri["recipe_id"], {}).setdefault(ri["slot"], []).append(dict(ri))
+        # transmutation : 1 Od -> 1 ressource de meme rarete, gratuite, sans echec, non liee (verifie en jeu)
+        self.transmute = {}                                   # ressource (nom de base) -> id de l'Od source
+        for r in con.execute("SELECT r.faction, i.base_name AS target, j.id AS src FROM recipes r "
+                             "JOIN items i ON i.id = r.item_id JOIN recipe_ingredients ri ON ri.recipe_id = r.id "
+                             "JOIN items j ON j.id = ri.item_id WHERE r.method = 'convert' AND j.is_gather = 1 AND j.bound = 0"):
+            if not r["faction"] or not self.faction or r["faction"].lower() == self.faction:
+                self.transmute[r["target"]] = r["src"]
 
     # ------------------------------------------------------------ donnees de marche
     def _load_prices(self):
@@ -369,11 +376,14 @@ class Market:
             best = None
             for thin_ok in (False, True):          # d'abord les ingredients achetables en volume (>= 2 annonces)
                 for o in opts:
-                    bp = self.buy_price(o["item_id"])
-                    if bp and (thin_ok or bp["listings"] >= 2):
-                        c = bp["real"] * o["qty"]
-                        if best is None or c < best[0]:
-                            best = (c, bp["pess"] * o["qty"], o, bp)
+                    # la ressource elle-meme, ou l'Od de meme rarete a transmuter (1 pour 1)
+                    target = self.items.get(o["item_id"], {}).get("base_name")
+                    for src, via in ((o["item_id"], None), (self.transmute.get(target), target)):
+                        bp = self.buy_price(src) if src else None
+                        if bp and (thin_ok or bp["listings"] >= 2):
+                            c = bp["real"] * o["qty"]
+                            if best is None or c < best[0]:
+                                best = (c, bp["pess"] * o["qty"], o, bp, via)
                 if best:
                     break
             if best:
@@ -385,7 +395,7 @@ class Market:
                 if thin:
                     thin_list.append(name)
                 lines.append(f"{name} x{best[2]['qty']:g} @{best[3]['real']:,.0f}".replace(",", " ")
-                             + (" (1 annonce)" if thin else ""))
+                             + (f" → transmuté en {best[4]}" if best[4] else "") + (" (1 annonce)" if thin else ""))
                 continue
             o = opts[0]
             it = self.items.get(o["item_id"], {})
@@ -627,6 +637,11 @@ class Market:
                 t.append(dict(objet=e["objet"], item_id=e["item_id"], net_par_ressource=round(net_res),
                               ressources_j=round(e["ma_part_j"] * per_u), profit_j=e["profit_j"], per_u=per_u,
                               lot=e.get("lot_vente"), fiable=e["net_u"] > 0 and not e["flags"], flags=e["flags"]))
+        for target, src in self.transmute.items():
+            sname = self.items.get(src, {}).get("base_name")
+            if sname and target in targets:
+                targets.setdefault(sname, []).extend(
+                    dict(u, objet=f"{u['objet']} (Od → {target})", via=target) for u in targets[target])
         out = []
         for res, uses in targets.items():
             uses.sort(key=lambda u: (not u["fiable"], -u["net_par_ressource"]))

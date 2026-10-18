@@ -136,15 +136,17 @@ function calc(){const box=document.getElementById('stock');if(!box||!window.CRAF
  for(const c0 of CRAFTS){if(c0.f&&!risky)continue;const info=craftInfo(c0.i);if(info&&!info.ok)continue;
   const p=info&&info.rate?info.rate:1,c={...c0,n:c0.s!=null?Math.round(c0.s-(lose?c0.a/p:c0.a)):c0.n,r:{}};
   Object.entries(c0.r).forEach(([k,q])=>c.r[k]=lose?q/p:q);if(c.n<=0)continue;
-  const need=Object.entries(c.r);if(!need.length||need.some(([k])=>!(left[k]>0)))continue;
-  let n=Math.min(...need.map(([k,q])=>left[k]/q));if(cap&&!c.f)n=Math.min(n,c.c);n=Math.floor(n);if(n<=0)continue;
-  need.forEach(([k,q])=>left[k]-=n*q);tot+=n*c.n;rows.push([c,n])}
+  const T=window.TRANSMUTE||{},avail=k=>(left[k]||0)+(T[k]?(left[T[k]]||0):0);   // Od transmutable 1 pour 1
+  const need=Object.entries(c.r);if(!need.length||need.some(([k])=>!(avail(k)>0)))continue;
+  let n=Math.min(...need.map(([k,q])=>avail(k)/q));if(cap&&!c.f)n=Math.min(n,c.c);n=Math.floor(n);if(n<=0)continue;
+  need.forEach(([k,q])=>{let want=n*q;const own=Math.min(want,left[k]||0);left[k]=(left[k]||0)-own;want-=own;
+   if(want>0&&T[k]){left[T[k]]-=want;c.trans=(c.trans||0)+want;c.transFrom=T[k]}});tot+=n*c.n;rows.push([c,n])}
  document.getElementById('stot').textContent=rows.length?kf(tot):'–';
  document.querySelector('#splan tbody').innerHTML=rows.length?rows.map(([c,n])=>{const l=c.l?Math.min(c.l,n):0;
   return `<tr><td><span class="nm" title="Cliquer pour copier">${escH(c.o)}</span>${c.f?`<div><span class="badge b-warn">⚠ ${escH(c.f)}</span></div>`:''}</td><td class="n">${NF.format(n)}</td>`
   +`<td class="n">${NF.format(c.p)}</td><td class="n pos">${NF.format(c.n)}</td><td class="n big pos">${kf(n*c.n)}</td>`
   +`<td>${l?Math.max(1,Math.round(n/l))+' annonce(s) de '+NF.format(l):'–'}</td>`
-  +`<td class="sub">${escH(Object.entries(c.r).map(([k,q])=>k+' ×'+NF.format(Math.ceil(n*q))).join(', '))}</td></tr>`}).join('')
+  +`<td class="sub">${escH(Object.entries(c.r).map(([k,q])=>k+' ×'+NF.format(Math.ceil(n*q))).join(', ')+(c.trans?' (dont '+NF.format(Math.ceil(c.trans))+' '+c.transFrom+' transmuté)':''))}</td></tr>`}).join('')
   :'<tr><td colspan="7" class="mut">Entre tes quantités de ressources ci-dessus.</td></tr>';
  const rest=Object.entries(left).filter(([k,v])=>v>=1).map(([k,v])=>k+' ×'+NF.format(Math.floor(v)));
  document.getElementById('sleft').textContent=rest.length?'Ressources non utilisées (aucun craft rentable ou limite du marché atteinte) : '+rest.join(', '):''}
@@ -301,8 +303,9 @@ function planSafe(save){const box=document.getElementById('psafe');if(!box||!win
   t.u.forEach(u=>{const info=craftInfo(u.i);if(info&&!info.ok)return;const p=info&&info.rate?info.rate:1;
    slots.push({r:t.r,rate:rate,o:u.o,n:u.n*(st.lose?p:1),cap:u.cap,per:u.per/(st.lose?p:1),lot:u.lot})})});
  slots.sort((a,b)=>b.n*b.rate-a.n*a.rate);const plan={};let tot=0;
- for(const s of slots){if(left<=0)break;const h=Math.min(left,s.cap/s.rate);if(h<=0.05)continue;left-=h;
-  const res=h*s.rate,units=Math.floor(res/s.per);tot+=units*s.per*s.n;
+ const used={};                                     // capacite deja prise par craft (partagee Od / ressource)
+ for(const s of slots){if(left<=0)break;const room=s.cap-(used[s.i]||0);const h=Math.min(left,room/s.rate);if(h<=0.05)continue;left-=h;
+  const res=h*s.rate,units=Math.floor(res/s.per);used[s.i]=(used[s.i]||0)+res;tot+=units*s.per*s.n;
   (plan[s.r]=plan[s.r]||{h:0,res:0,k:0,c:[]});plan[s.r].h+=h;plan[s.r].res+=res;plan[s.r].k+=units*s.per*s.n;
   plan[s.r].c.push({o:s.o,units:units,lot:s.lot,k:units*s.per*s.n})}
  const rows=Object.entries(plan).sort((a,b)=>b[1].k-a[1].k);
@@ -713,7 +716,7 @@ def hours_html(h):
             f'<div class="hours">{bars}</div></div>')
 
 
-def stock_calc(ctx, cfg, harvest, names):
+def stock_calc(ctx, cfg, harvest, names, transmute=None):
     """Je saisis mes ressources, la page calcule quoi fabriquer et combien ca rapporte (calcul dans le navigateur).
     Les crafts fiables passent d'abord ; les douteux (drapeaux) seulement si on coche l'option."""
     crafts = [e for e in harvest if e["net_u"] > 0 and e["ressources_u"]]
@@ -756,7 +759,8 @@ def stock_calc(ctx, cfg, harvest, names):
             '<div class="s">kinah une fois tout vendu</div></div></div>'
             f'<div class="wrap"><table id="splan"><thead>{head}</thead><tbody></tbody></table></div>'
             '<p class="mut" id="sleft"></p>'
-            f'<script>window.CRAFTS={json.dumps(data, ensure_ascii=False).replace("</", "<\\/")};</script>')
+            f'<script>window.CRAFTS={json.dumps(data, ensure_ascii=False).replace("</", "<\\/")};'
+            f'window.TRANSMUTE={json.dumps(transmute, ensure_ascii=False)};</script>')
 
 
 def surete_html(e, details=True):
@@ -1156,7 +1160,8 @@ def build(con, cfg, results):
         add("uniques", "💎 Uniques", "<h2>Équipements Unique : prix bradés</h2>" + table_uniques(ctx, my["uniques"], cfg))
         add("planning", "📅 Planning", planning_tab(cfg, my))
         add("metiersTab", "🛠️ Mes métiers", metiers_tab(con, my))
-        add("plan", "🧮 Mon stock", "<h2>Mon stock → quoi fabriquer</h2>" + stock_calc(ctx, cfg, my["harvest"], my["market"].gather_names())
+        add("plan", "🧮 Mon stock", "<h2>Mon stock → quoi fabriquer</h2>" + stock_calc(ctx, cfg, my["harvest"], my["market"].gather_names(),
+                         {t: my["market"].items[s]["base_name"] for t, s in my["market"].transmute.items()})
             + ("<h3>Plan quotidien (config)</h3>" + table_plan(my["plan"]) if my["plan"] else ""))
         sep()
     others = [r for r in results if r is not my]

@@ -362,3 +362,12 @@ Limites : les gains dépendent de la capacité des marchés (Papier d'Asvata sat
    - Mon stock et Planning safe : l'Od en stock est utilisé comme Bois/gemmes/minerai quand c'est plus rentable ; le plan indique « transmuter N Od en Bois ».
    - Niveau de maîtrise requis vérifié avec Mes métiers (🔒 sinon).
 2. **Alerte « Od bon marché »** : quand Od × (prix) est nettement sous la valeur du Bois en Pièces de bois (marge ≥ 25 % et marché des Pièces non saturé), avec la quantité max conseillée.
+
+## Mise à jour : transmutation intégrée
+Vérifié en jeu par toi : la transmutation donne des ressources **non liées**, **gratuite**, **sans échec**. Intégrée partout :
+- **Achat → craft** : pour chaque ingrédient récoltable, coût = le moins cher entre la ressource et l'Od de même rareté (ligne « Od x2 @4 898 → transmuté en Bois d'Asvata »). Résultat : **Pièce de bois d'Asvata via Od : coût 10 196, +3 483/pièce (+34 %), sûreté 🟢** — l'alerte « Achat → craft » partira. Papier via Od : +113 % mais marché saturé (🔴).
+- **Quoi récolter** : l'Od est valorisé avec les usages des ressources en lesquelles il se transmute (« Papier d'Asvata (Od → Bois d'Asvata) ») : **~6 900 par Od au lieu de 3 249**.
+- **Mon stock** : l'Od en stock remplace la ressource qui manque (Bois, gemmes, minerai, herbes de même rareté) ; la ligne indique « dont N Od transmuté ».
+- **Planning safe** : Od et Bois alimentent les mêmes crafts : la capacité des marchés est partagée (pas de double comptage).
+- Les chaînes du Planning gamble profitent aussi de l'Od à la place du minerai quand il est moins cher.
+- Limite : le niveau de maîtrise des transmutations (Débutant 1 pour le commun, 30 pour les raretés supérieures selon les données) n'est pas vérifié par le site : le métier « Jewelcrafting » des données ne correspond à aucun de tes 5 métiers.
