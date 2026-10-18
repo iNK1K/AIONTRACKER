@@ -5,7 +5,7 @@ import re
 from datetime import datetime, timezone
 
 from .catalog import node_name
-from .collect import BOUND_RE
+from .collect import BOUND_RE, paris
 from .config import DATA_DIR, REPORT_DIR
 
 MAP_DIR = DATA_DIR / "maps"
@@ -421,7 +421,7 @@ def home(con, cfg, ctx, my, sname):
     since = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0).isoformat(timespec="seconds")
     al = con.execute("SELECT ts, message FROM alerts_sent WHERE ts >= ? ORDER BY ts DESC LIMIT 12", (since,)).fetchall()
     alert_html = ('<div class="uses">' + "".join(
-        f'<div class="card" style="padding:10px 14px"><span><span class="mut">{esc(a["ts"][11:16])} UTC</span> · {_md(a["message"])}</span></div>'
+        f'<div class="card" style="padding:10px 14px"><span><span class="mut">{esc(paris(a["ts"], "%H:%M"))}</span> · {_md(a["message"])}</span></div>'
         for a in al) + "</div>") if al else '<p class="mut">Aucune alerte aujourd’hui.</p>'
 
     return (f"<h2>Aujourd’hui sur {esc(sname)}</h2><p class='lead'>Ce qu’il faut faire aujourd’hui pour gagner un maximum de kinah. "
@@ -482,7 +482,7 @@ def build(con, cfg, results):
     page = f"""<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>HDV Aion 2</title><style>{CSS}</style><script>{JS}</script></head><body>
 <header><h1>HDV Aion 2 · <b>{esc(sname)}</b></h1>
-<div class="meta">Prix relevés le {esc(as_of[:16].replace('T', ' à '))} UTC<br>Page générée le {datetime.now().strftime('%d/%m/%Y à %H:%M')}</div></header>
+<div class="meta">Prix relevés le {esc(paris(as_of) if my and as_of else "?")} (heure de Paris)<br>Page générée le {esc(paris())}</div></header>
 <nav>{''.join(navs)}</nav><main>{''.join(sections)}</main>
 <div id="modal" onclick="if(event.target===this)closeMap()"><div class="box"><div class="bar"><b id="mtitle"></b>
 <button class="mapbtn" onclick="closeMap()">Fermer ✕</button></div><iframe id="mframe"></iframe></div></div>

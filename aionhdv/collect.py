@@ -11,6 +11,23 @@ def now_iso():
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
+try:
+    from zoneinfo import ZoneInfo
+    PARIS = ZoneInfo("Europe/Paris")
+except Exception:          # Windows sans le paquet tzdata : on reste en UTC
+    PARIS = None
+
+
+def paris(ts=None, fmt="%d/%m/%Y à %H:%M"):
+    """Horodatage UTC (texte ISO, ou maintenant) affiche a l'heure de Paris."""
+    d = datetime.now(timezone.utc) if ts is None else datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+    if d.tzinfo is None:
+        d = d.replace(tzinfo=timezone.utc)
+    if PARIS is None:
+        return d.astimezone(timezone.utc).strftime(fmt) + " UTC"
+    return d.astimezone(PARIS).strftime(fmt)
+
+
 def log_run(con, job, status, detail=""):
     con.execute("INSERT INTO runs VALUES (?,?,?,?)", (now_iso(), job, status, str(detail)[:1000]))
     con.commit()

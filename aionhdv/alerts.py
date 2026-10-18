@@ -4,6 +4,7 @@ import statistics
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
+from .collect import paris
 from .config import LOG_DIR
 
 
@@ -129,7 +130,7 @@ def detect(con, cfg, result):
 def digest(con, cfg, result, top=8):
     srv = con.execute("SELECT name FROM servers WHERE id = ?", (result["server"],)).fetchone()
     sname = srv["name"] if srv else result["server"]
-    lines = [f"📊 **Résumé du jour : {sname}** (prix de {result['as_of']} UTC, activité x{result['ratio']:.2f} par rapport à la référence)",
+    lines = [f"📊 **Résumé du jour : {sname}** (prix de {paris(result['as_of'], '%H:%M')} heure de Paris, activité x{result['ratio']:.2f} par rapport à la référence)",
              "", "**Ma récolte → craft → vente** (profit par jour à 20 % du marché)"]
     for i, e in enumerate([e for e in result["harvest"] if not e["flags"]][:top], 1):
         lines.append(f"{i}. {e['objet']} : vends à ~{fmt(e['prix_real'])}, net {fmt(e['net_u'])}/u, "
