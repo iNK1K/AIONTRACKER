@@ -62,3 +62,30 @@ Secrets à créer dans Settings > Secrets and variables > Actions :
 Pour lancer un passage à la main : onglet Actions > HDV Aion 2 > Run workflow.
 
 En local, le webhook se range dans `config.local.json`, qui n'est jamais versionné.
+
+## Installer chez soi
+
+Les secrets (mot de passe du site, webhook Discord) ne sont pas dans le dépôt : chacun met les siens.
+
+### Son propre site automatique (GitHub, rien à installer)
+1. Bouton **Fork** en haut du dépôt.
+2. Dans le fork, onglet **Actions** > *I understand my workflows, go ahead and enable them* (GitHub désactive les tâches planifiées des forks).
+3. Settings > Secrets and variables > Actions : créer `SITE_PASSWORD` (obligatoire) et `DISCORD_WEBHOOK_URL` (facultatif).
+4. Dans `config.json`, choisir son serveur : `my_server` et `watch_servers` (ids a2-tracker : 2310 Hadala, 2315 Zemurru, 2318 Baba…).
+5. Remplacer le sel de `.staticrypt.json` par une valeur à soi (`openssl rand -hex 16`), puis commit.
+6. Actions > HDV Aion 2 > **Run workflow** une première fois, puis Settings > Pages : *Deploy from a branch*, `gh-pages`, `/ (root)`.
+
+Le site est publié sur `https://<pseudo>.github.io/<nom-du-depot>/` et se met à jour tout seul ensuite.
+
+### En local (sans site)
+Python 3.10+ suffit : le code n'utilise que la bibliothèque standard.
+```bash
+git clone https://github.com/iNK1K/AIONTRACKER.git && cd AIONTRACKER
+gunzip -c seed/aion.db.gz > data/aion.db
+python3 -X utf8 -m aionhdv hourly
+```
+Rapport : `reports/index.html`. Sous Windows, `run.ps1` attend un Python portable dans `.runtime\python` (absent du dépôt) : avec un Python installé, lancer directement `python -X utf8 -m aionhdv hourly`.
+
+### Ce qui est public
+- Le dépôt : code, `config.json`, base de départ (prix déjà publics).
+- Le site : seule `index.html` est protégée par mot de passe ; `map.html` et les images restent accessibles par leur adresse.
