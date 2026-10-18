@@ -92,7 +92,10 @@ code{background:var(--card2);padding:1px 6px;border-radius:5px}
 .sk{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px 10px;font-size:13.5px}
 .sk span{flex:1;min-width:0}
 .sk input{width:92px;padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:var(--bg2);color:var(--txt);font:inherit;text-align:right}
-.sk input:focus{outline:none;border-color:var(--acc)}.hb span{font-size:10px;color:var(--mut);height:12px;line-height:12px}
+.sk input:focus{outline:none;border-color:var(--acc)}
+#paste{width:100%;min-height:110px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg2);color:var(--txt);
+ font:13px/1.5 ui-monospace,Consolas,monospace;margin:6px 0}
+#paste:focus{outline:none;border-color:var(--acc)}.hb span{font-size:10px;color:var(--mut);height:12px;line-height:12px}
 """
 
 JS = """
@@ -170,6 +173,15 @@ function drawChart(id){const box=document.getElementById('cbody'),raw=(PRICES.s[
  ch.onmousemove=move;ch.ontouchmove=e=>move(e.touches[0]);
  ch.onmouseleave=()=>{tip.style.display='none';['cx1','cx2','cd'].forEach(i=>document.getElementById(i).setAttribute('visibility','hidden'))}}
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeChart()});
+function normName(s){return s.normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[’`]/g,"'").replace(/\\s+/g,' ').trim().toLowerCase()}
+function importStock(){const txt=document.getElementById('paste').value,inputs=[...document.querySelectorAll('#stock input[data-r]')];
+ const by={};inputs.forEach(i=>by[normName(i.dataset.r)]=i);const got={},unknown=[];
+ txt.split(/\\n/).forEach(line=>{const m=line.replace(/\\(li[ée]+s?\\)/i,'').match(/^\\s*[-•*]?\\s*(.+?)\\s*[:=x×\\s]\\s*(\\d[\\d\\s.]*)\\s*$/i);
+  if(!m)return;const n=normName(m[1]),q=parseInt(m[2].replace(/[\\s.]/g,''),10);if(!q)return;
+  if(by[n])got[n]=(got[n]||0)+q;else unknown.push(m[1].trim())});
+ const mode=document.getElementById('pmode').value;if(mode==='replace')inputs.forEach(i=>i.value='');
+ Object.entries(got).forEach(([n,q])=>{const i=by[n];i.value=(mode==='add'?(parseFloat(i.value)||0):0)+q});calc();
+ document.getElementById('pmsg').textContent=Object.keys(got).length+' ressource(s) remplie(s)'+(unknown.length?' · non reconnues : '+unknown.join(', '):'')}
 function clearStock(){document.querySelectorAll('#stock input[data-r]').forEach(i=>i.value='');calc()}
 document.addEventListener('DOMContentLoaded',()=>{let t='home';try{t=localStorage.getItem('tab')||t;
  if(localStorage.getItem('detail')){document.body.classList.add('detail');document.querySelectorAll('input.dt').forEach(x=>x.checked=true)}}catch(e){}
@@ -427,6 +439,13 @@ def stock_calc(ctx, cfg, harvest, names):
             '<label class="tg"><input type="checkbox" id="risky" onchange="calc()"> '
             'Inclure les crafts douteux (volume inconnu, prix suspect)</label>'
             '<button class="mapbtn" onclick="clearStock()">Tout effacer</button></div>'
+            '<details class="card" style="margin:0 0 12px"><summary style="cursor:pointer"><b>📋 Coller une liste</b> '
+            '<span class="mut">— une ligne par ressource : « Bois d\'Asvata 300 » ou « Saphir brut : 96 ». '
+            'Astuce : envoie une capture de ta réserve à Claude, il te rend la liste prête à coller.</span></summary>'
+            '<textarea id="paste" placeholder="Bois d\'Asvata 300&#10;Saphir brut : 96&#10;Rubis brut d\'une grande pureté x169"></textarea>'
+            '<div class="toolbar" style="margin:0"><select id="pmode" class="search" style="width:auto">'
+            '<option value="replace">Remplacer tout le stock</option><option value="add">Ajouter au stock</option></select>'
+            '<button class="mapbtn" onclick="importStock()">Remplir</button><span class="mut" id="pmsg"></span></div></details>'
             f'<div class="stock" id="stock">{inputs}</div>'
             '<div class="kpis"><div class="kpi"><div class="l">Total estimé</div><div class="v pos" id="stot">–</div>'
             '<div class="s">kinah une fois tout vendu</div></div></div>'
