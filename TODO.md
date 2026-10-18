@@ -2,7 +2,7 @@
 
 Une tâche par ligne. Claude les traite dans l'ordre et coche `[x]` quand c'est fait.
 
-- [ ] 
+- [ ] Transmutation dans l'analyse (Od → ressource de même rareté) : Quoi récolter, Achat → craft, Mon stock, Planning ; alerte « Od bon marché » — en attente : la ressource liée est-elle acceptée dans les crafts ? quel métier (« Jewelcrafting ») ?
 
 ## Fait
 - [x] Onglet 📅 Planning : plan safe (temps de jeu → quoi récolter, quoi crafter, combien d'annonces, gain) et plan gamble (chaînes blanc → vert → bleu → unique : réussite selon les niveaux, combo 24 %, perte si échec, gain du proc, vendre ou continuer, jackpot)

@@ -316,3 +316,49 @@ Sur GitHub, ces mesures se rempliront au prochain passage **daily** (17h40), ou 
 - Par chaîne : **espérance par essai** de l'étape 1, **jackpot** (chance de tout réussir avec combo et gain si ça arrive), nombre d'essais permis par ton stock (Mon stock). Chaînes triées par espérance ; « ⚠ prix douteux » si un objet normal est plus cher que sa version éclatante (annonce aberrante).
 - Exemple (Alchimie Débutant 41) : Orbe de vérité → éclatant (370 k) → éclatant d'expert (4,4 M) → éclatant de maître (22,5 M) ; réussite 92 % / 91 % / 88 % ; échec à l'étape 3 = −6 M ; espérance par essai +299 k ; jackpot ~1 %.
 - **Limites** : les objets éclatants hauts (bleu, unique) ont des ventes **non mesurées** (peu d'échanges) : leur prix habituel est fiable, mais **le temps pour les vendre est inconnu**. Les chaînes s'arrêtent au dernier palier ayant un prix sur Hadala (pas de prix pour les « Roi dragon »).
+
+---
+
+# Transmutation (étude) — 18/10/2026 (soir)
+
+## Ce que disent les données du jeu
+Onglet « Transmutation » du jeu = recettes de **conversion** (278 dans les données, dont 58 de « matériaux récoltables »). Pour les matériaux, c'est toujours le même schéma : **1 Od → 1 ressource de même rareté**, **100 % de réussite**, **sans coût** indiqué, résultat **lié** (invendable).
+
+| Od utilisé | Ressources obtenues (Asmodiens) | Maîtrise demandée (données) |
+|---|---|---|
+| Od (commun) | Bois d'Asvata, Saphir/Diamant/Rubis bruts | « Jewelcrafting » 1 |
+| | Minerai d'orichalque | Forge (Blacksmithing) 1 |
+| | Azpha (1), Calendula (10), Morfa/Ohkra/Raydam (10), Conide/Pujery (20) | Alchimie |
+| Od d'une grande pureté | mêmes ressources « d'une grande pureté », Azpha/Calendula fraîches | Jewelcrafting / Forge / Alchimie 30 |
+| Od pur | mêmes ressources « pures » | 30 |
+| Od éclatant | mêmes ressources « éclatantes » | 30 |
+
+À vérifier en jeu :
+1. **Les crafts acceptent-ils la ressource liée ?** Les recettes demandent « Bois d'Asvata » (non lié) ; la transmutation donne « Bois d'Asvata (lié) ». Les données ne permettent pas de trancher.
+2. Quel métier correspond à « Jewelcrafting » (aucun craft de ce nom ; sans doute l'Artisanat) ?
+3. Aucun coût ni échec : à confirmer.
+
+## Rentabilité (Hadala, prix du 18/10 22h50, si la ressource liée est acceptée)
+Valeur d'une ressource = gain moyen par ressource dans ses crafts fiables, après frais (onglet Quoi récolter), dans la limite de ce que les marchés absorbent.
+
+**Od commun (prix habituel 5 268, actuel 4 500)** :
+
+| Transmuté en | Gain par ressource (crafts) | Absorbé/j | Acheter un Od pour ça |
+|---|---|---|---|
+| **Bois d'Asvata** (→ Papier, Pièces de bois) | **7 132** | ~795 | **+1 864 par Od (+35 %)** au prix habituel, +2 632 (+58 %) au prix actuel |
+| Ohkra (→ Bœuf Wellington) | 4 679 | ~57 | −588 |
+| Pujery, Azpha, Saphir brut… | 2 100–2 500 | | −2 700 à −3 200 |
+
+- **Ta propre récolte d'Od** : aujourd'hui son meilleur usage direct est le Bœuf Wellington (3 249 par Od, ~32 par jour). **Transmuté en Bois, chaque Od vaut ~7 100**, comme le Bois lui-même : récolter de l'Od devient aussi rentable que récolter du Bois (mais les deux remplissent les mêmes marchés : Papier et Pièces de bois).
+- **Acheter de l'Od pour le transmuter en Bois** puis crafter est rentable (+35 % au prix habituel) — oui, ton intuition est juste : l'Od coûte moins cher que le Bois (Bois brut affiché 7 500) pour le même usage.
+- **Od d'une grande pureté** (habituel 4 594) → Azpha/Calendula fraîches : à perte (−44 à −49 %). Les autres conversions « grande pureté », « pur », « éclatant » n'ont aucun craft rentable en ce moment.
+
+Limites : les gains dépendent de la capacité des marchés (Papier d'Asvata saturé en ce moment, Pièces de bois ~350/j pour ta part) ; acheter beaucoup d'Od fera monter son prix.
+
+## Fonctionnalité proposée
+1. **Transmutation dans l'analyse** : pour chaque ressource, le site considère aussi « Od de même rareté → ressource » quand c'est plus avantageux.
+   - Quoi récolter : la ligne Od affiche son meilleur usage via transmutation (ex. « Od → Bois d'Asvata → Pièce de bois : 7 100/Od ») et son vrai kinah/heure ; capacité partagée avec le Bois.
+   - Achat → craft : coût d'un ingrédient = le moins cher entre la ressource et l'Od de même rareté (marqué « via Od transmuté »), avec indice de sûreté.
+   - Mon stock et Planning safe : l'Od en stock est utilisé comme Bois/gemmes/minerai quand c'est plus rentable ; le plan indique « transmuter N Od en Bois ».
+   - Niveau de maîtrise requis vérifié avec Mes métiers (🔒 sinon).
+2. **Alerte « Od bon marché »** : quand Od × (prix) est nettement sous la valeur du Bois en Pièces de bois (marge ≥ 25 % et marché des Pièces non saturé), avec la quantité max conseillée.
