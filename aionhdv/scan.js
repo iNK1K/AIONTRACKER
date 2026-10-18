@@ -341,13 +341,21 @@ window.reserveToList = async function (img, progress) {
     const keep = diffs.slice(0, Math.ceil(diffs.length * 0.75));
     return keep.length ? keep.reduce((u, v) => u + v, 0) / keep.length : 999;
   }
-  async function iconRefs(thumbOf) {
+  // icones de reference : chargees en parallele (par lots), une seule fois tant que la page reste ouverte
+  async function iconRefs(thumbOf, progress) {
     if (refs) return refs;
-    refs = [];
-    for (const r of window.MARKET_ICONS || []) {
-      try { const img = await new Promise((ok, ko) => { const i = new Image(); i.onload = () => ok(i); i.onerror = ko; i.src = r.s; });
-            refs.push({ n: r.n, t: thumbOf(img, 0, 0, img.naturalWidth, img.naturalHeight) }); } catch (e) {}
+    const all = window.MARKET_ICONS || [], out = [], batch = 24;
+    for (let k = 0; k < all.length; k += batch) {
+      progress(`Chargement des icônes de référence : ${k} / ${all.length} (seulement au premier collage)…`);
+      const got = await Promise.all(all.slice(k, k + batch).map(r => new Promise(ok => {
+        const i = new Image();
+        i.onload = () => ok({ n: r.n, t: thumbOf(i, 0, 0, i.naturalWidth, i.naturalHeight) });
+        i.onerror = () => ok(null);
+        i.src = r.s;
+      })));
+      got.forEach(g => g && out.push(g));
     }
+    refs = out;
     return refs;
   }
 
@@ -367,7 +375,9 @@ window.reserveToList = async function (img, progress) {
   window.scanListings = async function (img, opts) {
     opts = opts || {};
     const models = opts.models || PRICE_MODELS, thumbOf = window.__thumb, distOf = robustDist;
-    const { P, rows } = window.__listingRows(img), list = await iconRefs(thumbOf), out = [];
+    const progress = opts.progress || (() => {});
+    const { P, rows } = window.__listingRows(img), list = await iconRefs(thumbOf, progress), out = [];
+    progress(`Lecture des ${rows.length} annonce(s)…`);
     for (const r of rows) {
       const ic = r.icon, t = thumbOf(img, ic.x, ic.y, ic.w, ic.h);
       const scored = list.map(x => ({ n: x.n, d: distOf(t, x.t) })).sort((a, b) => a.d - b.d);

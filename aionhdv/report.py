@@ -213,7 +213,7 @@ async function scanSales(file){if(!file||!(file.type||'').startsWith('image/'))r
  msg.textContent='Lecture de la capture…';
  try{await scanLoad();const url=URL.createObjectURL(file);
   const img=await new Promise((ok,ko)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=()=>ko('image illisible');i.src=url});
-  const rows=await scanListings(img);URL.revokeObjectURL(url);
+  const rows=await scanListings(img,{progress:m=>msg.textContent=m});URL.revokeObjectURL(url);
   rows.forEach(r=>{const cv=document.createElement('canvas');cv.width=cv.height=40;cv.getContext('2d').drawImage(img,r.x,r.y,r.w,r.h,0,0,40,40);r.cv=cv});
   SALES=SALES.concat(rows);renderSales();
   msg.textContent=rows.length+' annonce(s) lue(s)'+(SALES.length>rows.length?' (ajoutées aux précédentes : colle d’autres captures si tes ventes tiennent sur plusieurs écrans)':'')
