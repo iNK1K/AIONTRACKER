@@ -31,6 +31,10 @@
   "map_worlds": ["1110"],
 
   "alerts": {
+    "_types": "alertes envoyées en cours de journée. Possibles : annonces (mes annonces battues, sous le seuil, chute), achat_craft (achat → craft au feu vert), notes (notes de version), restriction (levée de la restriction sur le brut), bonne_affaire, prix (hausse/baisse de mes crafts), flip, uniques",
+    "types": ["annonces", "achat_craft", "notes", "restriction"],
+    "_resume_seul": "true = aucune alerte en cours de journée : tout est repris dans le résumé quotidien (17 h 40)",
+    "resume_seul": false,
     "bargain_ratio": 0.40,
     "bargain_min_median": 1000,
     "spike_ratio": 1.50,

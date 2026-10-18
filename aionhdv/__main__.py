@@ -98,18 +98,20 @@ def cmd_analyze(con, cfg, send_alerts=False, send_digest=False):
             watch = analysis.watched_items(res)
             analysis.add_safety(con, res, collect.recent_activity(con, s, watch))
             log(f"activite recente : {len(watch)} items surveilles")
-            msgs = alerts.detect(con, cfg, res)
-            for m in msgs:
-                alerts.send(cfg, m)
-            uniques = alerts.detect_uniques(con, cfg, res)
-            for m in uniques:
-                alerts.send(cfg, m, "unique")
-            flips = (alerts.detect_flips(con, cfg, res) + alerts.detect_undercuts(con, cfg, res)
-                     + alerts.detect_patch_moves(con, cfg, res) + alerts.detect_spikes(con, cfg, res)
-                     + alerts.detect_positions(con, cfg, res))
-            for m in flips:
-                alerts.send(cfg, m)
-            log(f"alertes : {len(msgs)}, uniques : {len(uniques)}, flips et annonces battues : {len(flips)}")
+            # seulement les types d'alertes choisis (config alerts.types) ; en mode « resume seul », elles sont
+            # enregistrees (alerts_sent) et reprises dans le resume quotidien au lieu d'etre envoyees
+            on = lambda kind: alerts.enabled(cfg, kind)
+            found = [(m, None) for m in alerts.detect(con, cfg, res)]
+            found += [(m, "unique") for m in (alerts.detect_uniques(con, cfg, res) if on("uniques") else [])]
+            found += [(m, None) for m in (alerts.detect_flips(con, cfg, res) if on("flip") else [])]
+            found += [(m, None) for m in (alerts.detect_undercuts(con, cfg, res) + alerts.detect_positions(con, cfg, res)
+                                          if on("annonces") else [])]
+            found += [(m, None) for m in (alerts.detect_patch_moves(con, cfg, res) if on("notes") else [])]
+            found += [(m, None) for m in (alerts.detect_spikes(con, cfg, res) if on("achat_craft") else [])]
+            if not alerts.digest_only(cfg):
+                for m, channel in found:
+                    alerts.send(cfg, m, channel)
+            log(f"alertes : {len(found)}" + (" (gardees pour le resume quotidien)" if alerts.digest_only(cfg) else ""))
         if send_digest and str(s) == str(cfg["my_server"]):
             alerts.send(cfg, alerts.digest(con, cfg, res))
             if datetime.now(collect.PARIS or timezone.utc).weekday() == 6:      # dimanche
@@ -126,8 +128,10 @@ def cmd_news(con, cfg):
     except Exception as e:
         log(f"annonces : erreur {e}")
         return
-    for m in msgs:
-        alerts.send(cfg, m, "news")
+    # notes de version : salon dedie, sauf si ce type est coupe ou en mode « resume seul » (elles sont dans le resume)
+    if alerts.enabled(cfg, "notes") and not alerts.digest_only(cfg):
+        for m in msgs:
+            alerts.send(cfg, m, "news")
     log(f"annonces : {len(msgs)} nouvelle(s)" + (f", sources en erreur : {'; '.join(errors)}" if errors else ""))
 
 

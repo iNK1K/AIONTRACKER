@@ -8,6 +8,33 @@ from .collect import paris
 from .config import LOG_DIR
 
 
+# types d'alertes envoyees en cours de journee (config alerts.types) ; les autres restent visibles sur le site
+TYPES = {
+    "annonces": "mes annonces : battu, sous le seuil, chute, stock long a ecouler",
+    "achat_craft": "achat -> craft au feu vert (dont les pics de prix)",
+    "notes": "notes de version et annonces officielles, effet d'une note sur les prix",
+    "restriction": "levee probable de la restriction sur le brut",
+    "bonne_affaire": "annonce bradee (tout item)",
+    "prix": "hausse / baisse du prix de mes crafts",
+    "flip": "achat -> revente sans craft",
+    "uniques": "equipement Unique brade",
+}
+DEFAULT_TYPES = ("annonces", "achat_craft", "notes", "restriction")
+# debut de la cle d'une alerte deja envoyee (alerts_sent) -> type
+KEY_TYPES = {"bargain": "bonne_affaire", "spike": "prix", "dump": "prix", "buy": "achat_craft", "spike_craft": "achat_craft",
+             "unlock": "restriction", "unique": "uniques", "flip": "flip", "undercut": "annonces", "pos_seuil": "annonces",
+             "pos_chute": "annonces", "pos_lent": "annonces", "patch": "notes"}
+
+
+def enabled(cfg, kind):
+    return kind in (cfg["alerts"].get("types") or DEFAULT_TYPES)
+
+
+def digest_only(cfg):
+    """Option « resume quotidien uniquement » : rien n'est envoye en cours de journee, le resume reprend les alertes."""
+    return bool(cfg["alerts"].get("resume_seul"))
+
+
 def fmt(n):
     return f"{n:,.0f}".replace(",", " ") if n is not None else "?"
 
@@ -68,7 +95,7 @@ def detect(con, cfg, result):
     msgs = []
 
     # 1. annonces bradees (tout item suivi ; les Unique ont leur propre suivi, detect_uniques)
-    for iid, price in m.price.items():
+    for iid, price in (m.price.items() if enabled(cfg, "bonne_affaire") else ()):
         if m.items.get(iid, {}).get("grade") == "Unique":
             continue
         med = m.median_price(iid, 7)
@@ -88,7 +115,7 @@ def detect(con, cfg, result):
                 msgs.append(msg)
 
     # 2. envolee / chute du prix de mes produits (top recolte -> craft)
-    for e in result["harvest"][:15]:
+    for e in (result["harvest"][:15] if enabled(cfg, "prix") else ()):
         med = m.median_price(e["item_id"], 3)
         if not med:
             continue
@@ -105,7 +132,7 @@ def detect(con, cfg, result):
                 msgs.append(msg)
 
     # 3. achat -> craft -> revente rentable
-    for e in result["buy"]:
+    for e in (result["buy"] if enabled(cfg, "achat_craft") else ()):
         if e["flags"] or e["marge"] is None:
             continue
         if (e["marge"] >= a["buy_craft_min_margin"] and e["profit_j"] >= a["buy_craft_min_profit_day"] and e["net_pess_u"] > 0
@@ -117,7 +144,8 @@ def detect(con, cfg, result):
                 msgs.append(msg)
 
     # 4. signal de levee de la restriction anti-bot : le brut revient en masse et son prix chute
-    gather_ids = [i for i, it in m.items.items() if it["is_gather"] and not it["bound"] and i in m.price]
+    gather_ids = [i for i, it in m.items.items() if it["is_gather"] and not it["bound"] and i in m.price] \
+        if enabled(cfg, "restriction") else []
     now = datetime.now(timezone.utc)
     drops = []
     for iid in gather_ids:
@@ -345,6 +373,15 @@ def digest(con, cfg, result, top=8):
         lines += ["", "**Plan de production pour ta récolte**"]
         for p in result["plan"]:
             lines.append(f"• {p['quantite_j']} × {p['objet']} à ~{fmt(p['prix_conseille'])} → {fmt(p['kinah_j'])}/j")
+    if digest_only(cfg):
+        # alertes de la journee, gardees pour le resume (premiere ligne de chacune)
+        since = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat(timespec="seconds")
+        kept = [r for r in con.execute("SELECT key, message FROM alerts_sent WHERE ts >= ? ORDER BY ts", (since,))
+                if enabled(cfg, KEY_TYPES.get(r["key"].split("|")[0]))]
+        lines += ["", f"**Alertes des dernières 24 h** ({len(kept)})"]
+        lines += [f"• {r['message'].splitlines()[0][:300]}" for r in kept[:25]] or ["Aucune."]
+        if len(kept) > 25:
+            lines.append(f"… et {len(kept) - 25} autre(s) (voir le site).")
     official = con.execute("SELECT title, url, posted FROM news WHERE key NOT LIKE 'reddit|%' "
                            "ORDER BY posted DESC LIMIT 3").fetchall()
     if official:
