@@ -5,6 +5,13 @@ from datetime import datetime, timedelta, timezone
 
 from .collect import PARIS
 
+# types d'equipement (harmonisation : meme rang et meme type)
+EQUIP_TYPES = {"Sword": "Épée", "Greatsword": "Espadon", "Dagger": "Dague", "Bow": "Arc", "Mace": "Masse", "Staff": "Bâton",
+               "Orb": "Orbe", "Magicbook": "Grimoire", "Guarder": "Bouclier", "Helmet": "Casque", "Shoulder": "Épaulières",
+               "Torso": "Plastron", "Pants": "Jambières", "Gloves": "Gants", "Boots": "Bottes", "Cape": "Cape",
+               "Necklace": "Collier", "Earring": "Boucle d'oreille", "Ring": "Anneau", "Bracelet": "Bracelet",
+               "Belt": "Ceinture", "Amulet": "Amulette"}
+
 # equivalences Asmodiens -> Elyseens (Kaisinel, serveur de reference, est elyseen)
 ELYOS_EQ = [("Asvata", "Yggdrasil"), ("conide", "l'inina"), ("pujery", "cypri"), ("d'ohkra", "de kukuru"),
             ("dragon noir", "dragon blanc")]
@@ -84,16 +91,17 @@ class Market:
         return st["median"] if st else None
 
     def uniques(self, days=7):
-        """Objets Unique en vente : prix actuel compare a la mediane des 7 derniers jours (les moins chers d'abord)."""
+        """Equipements Unique en vente (armes, armures, accessoires : ce qui sert a l'harmonisation, qui consomme une piece
+        de meme rang et de meme type) : prix actuel compare a la mediane des 7 derniers jours, les moins chers d'abord."""
         out = []
         for iid, price in self.price.items():
             it = self.items.get(iid) or {}
-            if it.get("grade") != "Unique" or it.get("bound"):
+            if it.get("grade") != "Unique" or it.get("bound") or it.get("category") != "Equip":
                 continue
             st = self.price_stats(iid, days)
             if not st or not st["median"]:
                 continue
-            out.append(dict(item_id=iid, objet=it["name"], categorie=it.get("auction_category") or it.get("sub_category"),
+            out.append(dict(item_id=iid, objet=it["name"], categorie=EQUIP_TYPES.get(it.get("sub_category"), it.get("sub_category")),
                             prix=price, annonces=self.listings.get(iid, 0), mediane=round(st["median"]),
                             plus_bas=st["low"], releves=st["n"], ratio=round(price / st["median"], 3)))
         out.sort(key=lambda u: u["ratio"])

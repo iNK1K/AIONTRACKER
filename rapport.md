@@ -37,6 +37,7 @@ Tout est poussé sur `main` et repris automatiquement par le passage horaire Git
 - **Alerte Discord « 💎 Unique bradé »** quand le prix passe sous **60 %** de la médiane 7 j, si la médiane fait au moins 10 000 kinah et repose sur au moins 12 relevés (réglable dans `config.json` > `alerts`). Une alerte par objet et par jour.
 - Salon Discord dédié possible : secret GitHub `DISCORD_WEBHOOK_UNIQUE_URL` (sinon salon principal).
 - Les Unique sont retirés de l'alerte « Bonne affaire » générale pour éviter les doublons.
+- **Mise à jour** : seuls les **équipements** Unique sont suivis (armes, armures, accessoires), c'est-à-dire ce qui sert à l'harmonisation (qui consomme une pièce de même rang et de même type). Les autres Unique (titres, ailes, décorations, ressources, apparences) sont ignorés. Une colonne **Type** en français (Épée, Plastron, Anneau…) permet de repérer les pièces compatibles ; la recherche filtre par type. 58 équipements Unique en vente sur Hadala au 18/10.
 - **À savoir** : l'historique des Unique ne date que du 18/10. Les alertes démarreront quand chaque objet aura 12 relevés (environ 12 h de passages horaires).
 
 ### 4. Annonces officielles sur Discord

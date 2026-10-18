@@ -140,7 +140,7 @@ def detect_uniques(con, cfg, result):
     for u in result["uniques"]:
         if u["ratio"] > a["unique_ratio"] or u["releves"] < a["unique_min_samples"] or u["mediane"] < a["unique_min_median"]:
             continue
-        msg = (f"💎 **Unique bradé** [{sname}] {u['objet']} à **{fmt(u['prix'])}** "
+        msg = (f"💎 **Unique bradé** [{sname}] {u['objet']} ({u['categorie']}) à **{fmt(u['prix'])}** "
                f"(médiane 7 j : {fmt(u['mediane'])}, soit {u['ratio']:.0%} ; plus bas vu : {fmt(u['plus_bas'])}) "
                f"— {u['annonces']} annonce(s)")
         if _once(con, f"unique|{result['server']}|{u['item_id']}|{day}", msg):

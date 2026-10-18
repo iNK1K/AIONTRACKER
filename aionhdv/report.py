@@ -390,16 +390,18 @@ def table_uniques(ctx, uniques, cfg):
                     f"{_num_td(u['prix'], 'big', color=False)}{_num_td(u['mediane'], color=False)}"
                     f"<td class='n' data-v='{u['ratio']}'>{badge}</td>{_num_td(u['plus_bas'], color=False)}"
                     f"{_num_td(u['annonces'], 'mut', color=False)}{_num_td(u['releves'], 'mut', color=False)}</tr>")
-    head = ("<tr>" + _th("Objet Unique") + _th("Catégorie") + _th("Prix actuel", None, True)
+    head = ("<tr>" + _th("Équipement Unique") + _th("Type", "L'harmonisation consomme une pièce de même rang et de même type") + _th("Prix actuel", None, True)
             + _th("Médiane 7 j", "Prix plancher médian des 7 derniers jours", True)
             + _th("Prix / médiane", "Plus c'est bas, plus c'est une affaire", True)
             + _th("Plus bas vu", "Prix plancher le plus bas des 7 derniers jours", True)
             + _th("Annonces", None, True) + _th("Relevés", "Nombre de prix relevés sur 7 j (fiabilité de la médiane)", True)
             + "</tr>")
-    lead = (f"<p class='lead'>Tous les objets Unique en vente, les moins chers par rapport à leur prix habituel d’abord. "
+    lead = (f"<p class='lead'>Équipements Unique en vente (armes, armures, accessoires), utilisables pour l’harmonisation "
+            f"(une pièce de même rang et de même type). Les moins chers par rapport à leur prix habituel d’abord ; "
+            f"tape un type (ex. « Épée ») dans la recherche pour ne voir que celui-là. "
             f"Alerte Discord quand un Unique passe sous <b>{a['unique_ratio']:.0%}</b> de sa médiane 7 j "
             f"(médiane d’au moins {fmt(a['unique_min_median'])} kinah, au moins {a['unique_min_samples']} relevés).</p>")
-    return (lead + toolbar("uniques", f'<span class="mut">{len(uniques)} objets Unique en vente</span>')
+    return (lead + toolbar("uniques", f'<span class="mut">{len(uniques)} équipements Unique en vente</span>')
             + f'<div class="wrap"><table id="uniques"><thead>{head}</thead><tbody>{"".join(body)}</tbody></table></div>')
 
 
@@ -579,7 +581,7 @@ def build(con, cfg, results):
         add("buy", "Achat → craft",
             f"<h2>Acheter les ingrédients → fabriquer → revendre</h2><p class='lead'>{hyp}</p>"
             + table_crafts(ctx, my["buy"], "tb", False))
-        add("uniques", "💎 Uniques", "<h2>Objets Unique : prix bradés</h2>" + table_uniques(ctx, my["uniques"], cfg))
+        add("uniques", "💎 Uniques", "<h2>Équipements Unique : prix bradés</h2>" + table_uniques(ctx, my["uniques"], cfg))
         add("plan", "🧮 Mon stock", "<h2>Mon stock → quoi fabriquer</h2>" + stock_calc(ctx, cfg, my["harvest"])
             + ("<h3>Plan quotidien (config)</h3>" + table_plan(my["plan"]) if my["plan"] else ""))
         sep()
