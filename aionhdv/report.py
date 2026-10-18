@@ -94,6 +94,8 @@ code{background:var(--card2);padding:1px 6px;border-radius:5px}
 .mcard{display:flex;flex-direction:column;gap:8px}.mcard .lv{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .mcard input{width:72px;padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:var(--bg2);color:var(--txt);font:inherit;font-size:18px;font-weight:700;text-align:center}
 .mcard .up{font-size:15px;padding:6px 14px}
+.todo ol{margin:4px 0 0;padding-left:22px;display:flex;flex-direction:column;gap:6px;font-size:14.5px}
+.todo li.td-bad::marker{color:var(--bad)}.todo li.td-warn::marker{color:var(--warn)}.todo li.td-ok::marker{color:var(--ok)}
 .nm{cursor:copy}.nm:hover{text-decoration:underline dotted}
 #toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--card2);border:1px solid var(--acc);color:var(--txt);
  padding:8px 14px;border-radius:8px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:60;max-width:90vw}
@@ -300,13 +302,14 @@ function pset(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
 function stepRate(st,s){const lv=st.lv[s.prof],c=s.cv!=null&&window.CRAFTDATA&&CRAFTDATA.curves[s.cv];
  if(lv==null||lv==='')return{p:c?c[0]/1e8:1,known:false};if(lv<s.m)return{p:0,known:true,locked:true};
  return{p:c?c[Math.min(lv-s.m,c.length-1)]/1e8:1,known:true}}
+const fmtH=h=>h<1?Math.round(h*60)+' min':h.toFixed(1).replace('.',',')+' h';
 function planSafe(save){const box=document.getElementById('psafe');if(!box||!window.PLANDATA)return;
  const hEl=document.getElementById('phours');if(save)pset('phours',+hEl.value);else hEl.value=pget('phours',3);
  let left=+hEl.value||0;const R=rates(),st=lvState(),slots=[];
  PLANDATA.targets.forEach(t=>{const rate=R[t.r]!=null?R[t.r]:100;if(!rate)return;
   t.u.forEach(u=>{const info=craftInfo(u.i);if(info&&!info.ok)return;const p=info&&info.rate?info.rate:1;
-   slots.push({r:t.r,rate:rate,o:u.o,n:u.n*(st.lose?p:1),cap:u.cap,per:u.per/(st.lose?p:1),lot:u.lot})})});
- slots.sort((a,b)=>b.n*b.rate-a.n*a.rate);const plan={};let tot=0;
+   slots.push({r:t.r,rate:rate,o:u.o,i:u.i,v:u.v,n:u.n*(st.lose?p:1),cap:u.cap,per:u.per/(st.lose?p:1),lot:u.lot})})});
+ slots.sort((a,b)=>(b.n*b.rate-a.n*a.rate)||(a.v-b.v));   // a egalite : la ressource elle-meme avant l'Od transmuteconst plan={};let tot=0;
  const used={};                                     // capacite deja prise par craft (partagee Od / ressource)
  for(const s of slots){if(left<=0)break;const room=s.cap-(used[s.i]||0);const h=Math.min(left,room/s.rate);if(h<=0.05)continue;left-=h;
   const res=h*s.rate,units=Math.floor(res/s.per);used[s.i]=(used[s.i]||0)+res;tot+=units*s.per*s.n;
@@ -314,10 +317,17 @@ function planSafe(save){const box=document.getElementById('psafe');if(!box||!win
   plan[s.r].c.push({o:s.o,units:units,lot:s.lot,k:units*s.per*s.n})}
  const rows=Object.entries(plan).sort((a,b)=>b[1].k-a[1].k);
  window.SAFEPLAN={tot:tot,hours:(+hEl.value||0)-left,rows:rows};
+ const tp=document.getElementById('todo-plan');
+ if(tp){const crafts=rows.flatMap(([r,p])=>p.c.filter(c=>c.units>0));
+  tp.innerHTML=rows.length?'🌲 Récolter '+rows.slice(0,2).map(([r,p])=>'<b>'+escH(r)+'</b> '+fmtH(p.h)).join(' puis ')
+   +' → fabriquer '+crafts.slice(0,3).map(c=>'<b>'+NF.format(c.units)+'</b> × '+escH(c.o)).join(', ')
+   +' (~<b class="pos">'+kf(tot)+'</b>). 🕘 Mettre en vente entre <b>'+PLANDATA.best+'</b>'
+   +(crafts.some(c=>c.lot)?' : '+crafts.slice(0,3).filter(c=>c.lot).map(c=>Math.max(1,Math.round(c.units/Math.min(c.lot,c.units)))+' annonce(s) de '+NF.format(Math.min(c.lot,c.units))+' '+escH(c.o)).join(', '):'')+'.'
+   :'Plan du jour : aucun craft rentable avec ton temps de jeu (Planning).'}
  const kp=document.getElementById('kpot');if(kp){kp.textContent=kf(tot);document.getElementById('kpots').textContent=
   'en '+String(+hEl.value||0).replace('.',',')+' h de jeu (Planning safe, récolte '+(Object.keys(R).length?'saisie':'100/h par défaut')+')'}
  if(!rows.length){box.innerHTML='<p class="mut">Aucun craft rentable à planifier.</p>';return}
- const fmtH=h=>h<1?Math.round(h*60)+' min':h.toFixed(1).replace('.',',')+' h';
+
  box.innerHTML='<div class="kpis"><div class="kpi"><div class="l">Gain estimé</div><div class="v pos">'+kf(tot)+'</div><div class="s">kinah, une fois tout vendu</div></div>'
   +'<div class="kpi"><div class="l">Temps utilisé</div><div class="v">'+fmtH((+hEl.value||0)-left)+'</div><div class="s">'+(left>0.05?'au-delà, les marchés sont saturés':'de récolte')+'</div></div>'
   +'<div class="kpi"><div class="l">Mise en vente</div><div class="v" style="font-size:20px">'+PLANDATA.best+'</div><div class="s">meilleur moment pour poster</div></div></div>'
@@ -544,6 +554,7 @@ def planning_tab(cfg, my):
     targets = []
     for t in my["targets"]:
         uses = [dict(o=u["objet"], i=u["item_id"], n=u["net_par_ressource"], cap=u["ressources_j"], per=round(u["per_u"], 4),
+                     v=1 if u.get("via") else 0,
                      lot=u.get("lot")) for u in t["usages"] if u["fiable"] and u["ressources_j"]]
         if uses:
             avg = sum(u["n"] * u["cap"] for u in uses) / sum(u["cap"] for u in uses)
@@ -736,6 +747,43 @@ def lots_txt(e):
     if not n:
         return "–"
     return f"{n} annonce{'s' if n > 1 else ''} de {fmt(lot)}"
+
+
+def todo_html(con, my):
+    """« A faire maintenant » : les actions du jour, par ordre d'importance. Plan de recolte et mise en vente sont
+    completes dans le navigateur (Planning safe : temps de jeu, recolte/heure, niveaux)."""
+    items = []
+    for l in my.get("listings") or []:                       # 1. mes annonces
+        if not l["item_id"] or l["plancher"] is None:
+            continue
+        if l.get("chute"):
+            items.append(("bad", f"📉 <b>{esc(l['nom'])}</b> : le prix chute ({fmt(l['plancher'])}). Si tu veux vendre, c’est maintenant."))
+        if l.get("sous_seuil"):
+            items.append(("bad", f"⛔ <b>{esc(l['nom'])}</b> : le plus bas ({fmt(l['plancher'])}) est sous ton seuil "
+                                 f"({fmt(l['seuil'])}). Ne baisse pas ; garde ou coupe la perte."))
+        elif l.get("conseil"):
+            items.append(("warn", f"⚔️ <b>{esc(l['nom'])}</b> : tu es battu. Repasse devant à <b>{fmt(l['conseil'])}</b>."))
+        if (l.get("ecoulement_h") or 0) > 24:
+            items.append(("warn", f"🐢 <b>{esc(l['nom'])}</b> : ~{l['ecoulement_h']:.0f} h pour écouler ton stock : "
+                                  "mets moins d’annonces à la fois."))
+    seen = set()                                              # 2. achats surs (vert)
+    for e in (my.get("buy_trans") or []) + (my.get("buy_direct") or []):
+        s_ = e.get("surete") or {}
+        if s_.get("feu") == "vert" and e["net_u"] > 0 and not e["flags"] and e["item_id"] not in seen:
+            seen.add(e["item_id"])
+            how = "via Od transmuté" if any("transmuté" in x for x in e["ingredients"]) else "à l’HDV"
+            items.append(("ok", f"🟢 Achat → craft <b>{esc(e['objet'])}</b> ({how}) : +{fmt(e['net_u'])}/u, "
+                                f"max ~{fmt(s_['qte_max'])} u, ne vends pas sous {fmt(s_['prix_plancher'])}."))
+        if len(seen) >= 2:
+            break
+    since = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()[:19]
+    for n in con.execute("SELECT * FROM news WHERE key LIKE 'update%' AND posted >= ? ORDER BY posted DESC LIMIT 2", (since,)):
+        items.append(("mut", f"🛠️ Nouvelle note de version : <a href=\"{esc(n['url'])}\" target=\"_blank\" rel=\"noopener\" "
+                             f"style=\"color:var(--acc)\">{esc(n['title'])}</a>"))
+    order = {"bad": 0, "warn": 1, "ok": 2, "mut": 3}
+    rows = "".join(f'<li class="td-{k}">{t}</li>' for k, t in sorted(items, key=lambda x: order[x[0]]))
+    return ('<div class="card todo"><b>✅ À faire maintenant</b><ol id="todo">' + rows
+            + '<li id="todo-plan" class="td-plan">Plan du jour : calcul en cours…</li></ol></div>')
 
 
 def hours_html(h):
@@ -1147,7 +1195,7 @@ def home(con, cfg, ctx, my, sname):
         '<p class="mut">Les annonces officielles apparaîtront ici après le prochain passage.</p>'
 
     return (f"<h2>Aujourd’hui sur {esc(sname)}</h2><p class='lead'>Ce qu’il faut faire aujourd’hui pour gagner un maximum de kinah. "
-            "Les tableaux complets sont dans les autres onglets.</p>" + kpis
+            "Les tableaux complets sont dans les autres onglets.</p>" + kpis + todo_html(con, my)
             + "<h3>① Fabriquer et vendre</h3>" + hours_html(my.get("hours")) + "<br>" + craft_html
             + "<h3>② Quoi récolter</h3>" + gather_html
             + "<h3>③ Acheter → fabriquer → revendre</h3>" + buy_html
