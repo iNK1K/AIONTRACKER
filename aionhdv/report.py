@@ -316,8 +316,8 @@ function planSafe(save){const box=document.getElementById('psafe');if(!box||!win
   +(Object.keys(R).length?'':'<p class="sub">Récolte par heure : 100 par défaut pour chaque ressource ; indique tes vraies valeurs dans « Quoi récolter ».</p>')}
 function planGamble(save){const box=document.getElementById('pgamble');if(!box||!window.PLANDATA)return;
  const cEl=document.getElementById('pcombo'),oEl=document.getElementById('popp');
- const def=PLANDATA.chains.length?Math.round(PLANDATA.chains[0].steps[0].c*100):24;
- if(save){pset('pcombo',+cEl.value);pset('popp',oEl.checked)}else{cEl.value=pget('pcombo',def);oEl.checked=pget('popp',true)}
+ const def=PLANDATA.chains.length?Math.round(PLANDATA.chains[0].steps[0].c*100):25;
+ if(save){pset('pcombo2',+cEl.value);pset('popp',oEl.checked)}else{cEl.value=pget('pcombo2',def);oEl.checked=pget('popp',true)}
  const c=(+cEl.value||0)/100,st=lvState(),safe={};PLANDATA.targets.forEach(t=>safe[t.r]=t.avg);
  const stock=pget('stock',{}),opp=s=>oEl.checked?Object.entries(s.res).reduce((a,[r,q])=>a+q*(safe[r]||0),0):0;
  const out=PLANDATA.chains.map(ch=>{const S=[];
