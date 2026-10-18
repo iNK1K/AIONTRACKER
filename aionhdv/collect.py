@@ -3,6 +3,7 @@ import json
 import re
 from datetime import datetime, timedelta, timezone
 
+from .net import fetch_all
 from .sources import a2tracker, aion2exchange
 
 BOUND_RE = re.compile(r"\s*\((li[ée]+s?)\)$")
@@ -161,8 +162,8 @@ def recent_activity(con, server, item_ids, hours=3):
     sur les dernieres heures (repli sur 24 h si trop peu de releves). L'activite 24 h est aussi enregistree."""
     ts, out = now_iso(), {}
     since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()[:19]
-    for iid in dict.fromkeys(item_ids):
-        h = a2tracker.history(iid, server, 1)
+    hist = fetch_all(lambda iid: a2tracker.history(iid, server, 1), dict.fromkeys(item_ids))
+    for iid, h in hist.items():
         a24 = activity_from_history(h)
         if not a24:
             continue
@@ -179,8 +180,9 @@ def recent_activity(con, server, item_ids, hours=3):
 def collect_activity(con, server, item_ids):
     ts = now_iso()
     n = 0
-    for iid in item_ids:
-        a = activity_from_history(a2tracker.history(iid, server, 1))
+    hist = fetch_all(lambda iid: a2tracker.history(iid, server, 1), item_ids)
+    for iid, h in hist.items():
+        a = activity_from_history(h)
         if a:
             con.execute("INSERT OR REPLACE INTO activity VALUES (?,?,?,?,?,?,?,?,?)",
                         (str(server), iid, ts, a["hours"], a["drops_h"], a["adds_h"], a["floor_up_drops_h"],
@@ -194,8 +196,8 @@ def collect_activity(con, server, item_ids):
 
 def collect_ref_volume(con, ax_server, item_ids):
     n = 0
-    for iid in item_ids:
-        v = aion2exchange.volume(iid, ax_server)
+    vols = fetch_all(lambda iid: aion2exchange.volume(iid, ax_server), item_ids, workers=2)   # source lente : menagee
+    for iid, v in vols.items():
         for d in (v or {}).get("days", []):
             con.execute("INSERT OR REPLACE INTO ref_volume VALUES (?,?,?,?,?,?,?,?,?,?)",
                         (ax_server, iid, d["registered"], num(d.get("units_sold")), num(d.get("units_delta")),
@@ -208,8 +210,8 @@ def collect_ref_volume(con, ax_server, item_ids):
 
 def collect_ax_prices(con, ax_server, item_ids, since_iso):
     n = 0
-    for iid in item_ids:
-        p = aion2exchange.prices(iid, ax_server, since_iso)
+    prices = fetch_all(lambda iid: aion2exchange.prices(iid, ax_server, since_iso), item_ids, workers=2)
+    for iid, p in prices.items():
         if not p:
             continue
         bucket = p.get("bucket")

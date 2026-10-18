@@ -262,14 +262,20 @@ class Market:
         since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
         tz = PARIS or timezone.utc
         sold = [0.0] * 24
-        prev = {}
+        # nombre d'annonces heure par heure : historique horaire d'aion2.exchange + nos releves horaires du marche
+        hourly = {}
         for r in self.con.execute("SELECT item_id, ts, listings FROM ax_prices WHERE ax_server=? AND bucket='1h' "
-                                  "AND ts>=? AND listings IS NOT NULL ORDER BY item_id, ts", (srv["ax_id"], since)):
-            t = _dt(r["ts"])
-            p = prev.get(r["item_id"])
-            if p and t - p[0] == timedelta(hours=1) and r["listings"] < p[1]:
-                sold[t.astimezone(tz).hour] += p[1] - r["listings"]
-            prev[r["item_id"]] = (t, r["listings"])
+                                  "AND ts>=? AND listings IS NOT NULL", (srv["ax_id"], since)):
+            hourly[(r["item_id"], _dt(r["ts"]).replace(minute=0, second=0))] = r["listings"]
+        for r in self.con.execute("SELECT item_id, ts, listings FROM quotes WHERE server=? AND ts>=?",
+                                  (self.server, since[:19])):
+            hourly[(r["item_id"], _dt(r["ts"] + ("Z" if len(r["ts"]) == 19 else "")).replace(minute=0, second=0))] = r["listings"]
+        prev = {}
+        for (iid, t), n in sorted(hourly.items()):
+            p = prev.get(iid)
+            if p and t - p[0] == timedelta(hours=1) and n < p[1]:
+                sold[t.astimezone(tz).hour] += p[1] - n
+            prev[iid] = (t, n)
         total = sum(sold)
         if total < 200:
             return None

@@ -1,22 +1,40 @@
 import json
+import threading
 import time
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 
 from .config import load_config
 
 _last_call = 0.0
+_lock = threading.Lock()
+_http = load_config()["http"]
+
+
+def _pace(delay):
+    """Au moins `delay` secondes entre deux departs de requete, meme avec plusieurs requetes en cours."""
+    global _last_call
+    with _lock:
+        wait = delay - (time.time() - _last_call)
+        if wait > 0:
+            time.sleep(wait)
+        _last_call = time.time()
+
+
+def fetch_all(fn, keys, workers=3):
+    """Telecharge fn(cle) pour chaque cle, `workers` requetes a la fois (les sites restent menages : _pace).
+    Renvoie {cle: resultat} ; les ecritures en base se font ensuite, en serie."""
+    keys = list(keys)
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        return dict(zip(keys, ex.map(fn, keys)))
 
 
 def get_json(url, retries=3):
     """GET poli : pause entre appels, quelques tentatives, None si introuvable."""
-    global _last_call
-    cfg = load_config()["http"]
+    cfg = _http
     for attempt in range(retries):
-        wait = cfg["delay_seconds"] - (time.time() - _last_call)
-        if wait > 0:
-            time.sleep(wait)
-        _last_call = time.time()
+        _pace(cfg["delay_seconds"])
         req = urllib.request.Request(url, headers={"User-Agent": cfg["user_agent"], "Accept": "application/json"})
         try:
             with urllib.request.urlopen(req, timeout=cfg["timeout_seconds"]) as resp:
@@ -34,7 +52,8 @@ def get_json(url, retries=3):
 
 
 def get_text(url):
-    cfg = load_config()["http"]
+    cfg = _http
+    _pace(cfg["delay_seconds"])
     req = urllib.request.Request(url, headers={"User-Agent": cfg["user_agent"]})
     with urllib.request.urlopen(req, timeout=cfg["timeout_seconds"]) as resp:
         return resp.read().decode("utf-8")

@@ -73,9 +73,9 @@ def cmd_refvolume(con, cfg):
     log(f"volumes de reference ({ax}) : {collect.collect_ref_volume(con, ax, collect.ref_item_ids(con))} lignes")
 
 
-def cmd_backfill(con, cfg, since="2026-10-05T00:00:00Z"):
+def cmd_backfill(con, cfg, since="2026-10-05T00:00:00Z", servers=None):
     items = collect.tracked_items(con)
-    for s in cfg["watch_servers"]:
+    for s in servers or cfg["watch_servers"]:
         ax = ax_of(con, s)
         if ax:
             log(f"historique {s} : {collect.collect_ax_prices(con, ax, items, since)} points")
@@ -131,6 +131,17 @@ def cmd_news(con, cfg):
     log(f"annonces : {len(msgs)} nouvelle(s)" + (f", sources en erreur : {'; '.join(errors)}" if errors else ""))
 
 
+def step(name, fn, errors):
+    """Etape isolee : une erreur (source injoignable, requete expiree...) est notee et n'empeche pas les suivantes."""
+    t = time.time()
+    try:
+        fn()
+        log(f"etape {name} : {time.time() - t:.0f}s")
+    except Exception:
+        errors.append(name)
+        log(f"ERREUR etape {name} (les etapes suivantes continuent)\n{traceback.format_exc()}")
+
+
 def main(argv):
     dry = "--dry-run" in argv
     argv = [a for a in argv if a != "--dry-run"]
@@ -167,21 +178,33 @@ def main(argv):
             cmd_analyze(con, cfg)
         elif cmd == "news":
             cmd_news(con, cfg)
-        elif cmd == "hourly":
-            if not con.execute("SELECT 1 FROM rate_curves LIMIT 1").fetchone():
-                log(f"recettes et taux de reussite (premiere fois) : {collect.sync_recipes(con, cfg['locale'])}")
-            cmd_snapshot(con, cfg)
-            cmd_analyze(con, cfg, send_alerts=True)
-            cmd_news(con, cfg)
-        elif cmd == "daily":
-            log(f"recettes et taux de reussite : {collect.sync_recipes(con, cfg['locale'])}")
-            cmd_refvolume(con, cfg)
-            cmd_activity(con, cfg)
-            since = (datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%dT00:00:00Z")
-            cmd_backfill(con, cfg, since)
-            cmd_servers(con, cfg)
-            catalog.download_icons(con)
-            cmd_analyze(con, cfg, send_alerts=True, send_digest=True)
+        elif cmd in ("hourly", "daily"):
+            # chaque etape est isolee : le rapport et le site sont produits meme si une source fait defaut
+            errors = []
+            if cmd == "hourly":
+                if not con.execute("SELECT 1 FROM rate_curves LIMIT 1").fetchone():
+                    step("recettes", lambda: log(f"recettes : {collect.sync_recipes(con, cfg['locale'])}"), errors)
+                step("marche", lambda: cmd_snapshot(con, cfg), errors)
+                step("analyse", lambda: cmd_analyze(con, cfg, send_alerts=True), errors)
+                step("annonces", lambda: cmd_news(con, cfg), errors)
+            else:
+                # aion2.exchange est lent (5-10 s par requete) : on s'en sert le moins possible. Les volumes de
+                # Kaisinel (taille des annonces vendues, qui evolue lentement) sont recharges s'ils ont plus de 3 jours ;
+                # l'historique horaire n'est plus telecharge (nos releves horaires du marche le remplacent).
+                last = con.execute("SELECT MAX(registered) AS r FROM ref_volume").fetchone()["r"]
+                stale = not last or last < (datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%dT%H:%M:%S")
+                step("recettes", lambda: log(f"recettes : {collect.sync_recipes(con, cfg['locale'])}"), errors)
+                if stale:
+                    step("volumes de reference", lambda: cmd_refvolume(con, cfg), errors)
+                step("activite", lambda: cmd_activity(con, cfg), errors)
+                step("serveurs", lambda: cmd_servers(con, cfg), errors)
+                step("images", lambda: catalog.download_icons(con), errors)
+                step("analyse", lambda: cmd_analyze(con, cfg, send_alerts=True, send_digest=True), errors)
+            if "analyse" in errors:
+                raise RuntimeError("analyse impossible : rapport non produit")
+            collect.log_run(con, cmd, "partiel" if errors else "ok",
+                            f"{time.time() - t0:.0f}s" + (f", erreurs : {', '.join(errors)}" if errors else ""))
+            return 0
         else:
             print(__doc__)
             return 2

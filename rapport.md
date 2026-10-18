@@ -371,3 +371,19 @@ Vérifié en jeu par toi : la transmutation donne des ressources **non liées**,
 - **Planning safe** : Od et Bois alimentent les mêmes crafts : la capacité des marchés est partagée (pas de double comptage).
 - Les chaînes du Planning gamble profitent aussi de l'Od à la place du minerai quand il est moins cher.
 - Limite : le niveau de maîtrise des transmutations (Débutant 1 pour le commun, 30 pour les raretés supérieures selon les données) n'est pas vérifié par le site : le métier « Jewelcrafting » des données ne correspond à aucun de tes 5 métiers.
+
+---
+
+# Passage daily : plus rapide et plus robuste — 18/10/2026 (nuit)
+
+**Constats** :
+- Le `daily` était passé à ~35 min. Cause : **aion2.exchange met 5 à 11 s par requête** (et répond « 503 surchargé » par moments), pour ~450 requêtes (historique horaire + volumes de Kaisinel). a2-tracker répond en 0,3 s.
+- Un `daily` (23h13) a **échoué** au bout de 20 min, très probablement sur une erreur réseau de cette source : une seule erreur faisait échouer tout le passage, et le site n'était pas republié.
+
+**Changements** :
+- **Étapes isolées** (hourly et daily) : une étape en erreur est notée dans le journal, les suivantes continuent, et le site est publié quand même (seule une erreur d'analyse bloque).
+- **Historique horaire d'aion2.exchange : plus téléchargé** — nos relevés horaires du marché le remplacent (graphique des heures de vente calculé dessus, résultat identique : meilleur moment 21h–0h).
+- **Volumes de Kaisinel** (taille des annonces vendues, évolue lentement) : rechargés seulement s'ils ont plus de 3 jours.
+- **Téléchargements en parallèle** : 3 à la fois (a2-tracker), 2 pour aion2.exchange (source fragile), toujours au moins 0,35 s entre deux départs de requête. Aucun effet sur la justesse des données (mêmes réponses, écritures en base faites une par une).
+
+**Résultat** : `daily` complet en **~6 min** (recettes 1 s, activité 5 min, serveurs 29 s, images 6 s, analyse 9 s), contre ~35 min.
