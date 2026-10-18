@@ -28,6 +28,7 @@ Tout est poussé sur `main` et repris automatiquement par le passage horaire Git
 - Case « Ne pas dépasser ce que le marché absorbe en un jour » (cochée par défaut).
 - Les quantités restent enregistrées dans le navigateur ; `harvest_per_day` de `config.json` sert de valeurs de départ.
 - Calcul fait dans le navigateur : instantané, rien à relancer.
+- **Mise à jour** : toutes les ressources récoltables de ta faction sont proposées (39 pour les Asmodiens, au lieu des 12 qui avaient un craft rentable). Option « Inclure les crafts douteux » (volume de vente inconnu, prix suspect), décochée par défaut ; ces crafts sont marqués ⚠ et passent après les fiables.
 
 ### 2. Noms copiables
 - Clic sur n'importe quel nom d'item (tableaux, cartes, ressources, calculateur) → copié dans le presse-papiers, avec un message « Copié : … ».

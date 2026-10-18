@@ -114,19 +114,19 @@ function escH(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;',
 function calc(){const box=document.getElementById('stock');if(!box||!window.CRAFTS)return;const st={};
  box.querySelectorAll('input[data-r]').forEach(i=>{const v=parseFloat(i.value);if(v>0)st[i.dataset.r]=v});
  try{localStorage.setItem('stock',JSON.stringify(st))}catch(e){}
- const cap=document.getElementById('cap').checked,left={...st},rows=[];let tot=0;
- for(const c of CRAFTS){const need=Object.entries(c.r);if(!need.length||need.some(([k])=>!(left[k]>0)))continue;
-  let n=Math.min(...need.map(([k,q])=>left[k]/q));if(cap)n=Math.min(n,c.c);n=Math.floor(n);if(n<=0)continue;
+ const cap=document.getElementById('cap').checked,risky=document.getElementById('risky').checked,left={...st},rows=[];let tot=0;
+ for(const c of CRAFTS){if(c.f&&!risky)continue;const need=Object.entries(c.r);if(!need.length||need.some(([k])=>!(left[k]>0)))continue;
+  let n=Math.min(...need.map(([k,q])=>left[k]/q));if(cap&&!c.f)n=Math.min(n,c.c);n=Math.floor(n);if(n<=0)continue;
   need.forEach(([k,q])=>left[k]-=n*q);tot+=n*c.n;rows.push([c,n])}
  document.getElementById('stot').textContent=rows.length?kf(tot):'–';
  document.querySelector('#splan tbody').innerHTML=rows.length?rows.map(([c,n])=>{const l=c.l?Math.min(c.l,n):0;
-  return `<tr><td><span class="nm" title="Cliquer pour copier">${escH(c.o)}</span></td><td class="n">${NF.format(n)}</td>`
+  return `<tr><td><span class="nm" title="Cliquer pour copier">${escH(c.o)}</span>${c.f?`<div><span class="badge b-warn">⚠ ${escH(c.f)}</span></div>`:''}</td><td class="n">${NF.format(n)}</td>`
   +`<td class="n">${NF.format(c.p)}</td><td class="n pos">${NF.format(c.n)}</td><td class="n big pos">${kf(n*c.n)}</td>`
   +`<td>${l?Math.max(1,Math.round(n/l))+' annonce(s) de '+NF.format(l):'–'}</td>`
   +`<td class="sub">${escH(Object.entries(c.r).map(([k,q])=>k+' ×'+NF.format(Math.ceil(n*q))).join(', '))}</td></tr>`}).join('')
   :'<tr><td colspan="7" class="mut">Entre tes quantités de ressources ci-dessus.</td></tr>';
  const rest=Object.entries(left).filter(([k,v])=>v>=1).map(([k,v])=>k+' ×'+NF.format(Math.floor(v)));
- document.getElementById('sleft').textContent=rest.length?'Ressources non utilisées : '+rest.join(', '):''}
+ document.getElementById('sleft').textContent=rest.length?'Ressources non utilisées (aucun craft rentable ou limite du marché atteinte) : '+rest.join(', '):''}
 function clearStock(){document.querySelectorAll('#stock input[data-r]').forEach(i=>i.value='');calc()}
 document.addEventListener('DOMContentLoaded',()=>{let t='home';try{t=localStorage.getItem('tab')||t;
  if(localStorage.getItem('detail')){document.body.classList.add('detail');document.querySelectorAll('input.dt').forEach(x=>x.checked=true)}}catch(e){}
@@ -353,13 +353,14 @@ def hours_html(h):
             f'<div class="hours">{bars}</div></div>')
 
 
-def stock_calc(ctx, cfg, harvest):
-    """Je saisis mes ressources, la page calcule quoi fabriquer et combien ca rapporte (calcul dans le navigateur)."""
-    crafts = [e for e in harvest if is_good(e) and e["ressources_u"]]
-    crafts.sort(key=lambda e: -(e["net_u"] / e["ressources_u"]))
+def stock_calc(ctx, cfg, harvest, names):
+    """Je saisis mes ressources, la page calcule quoi fabriquer et combien ca rapporte (calcul dans le navigateur).
+    Les crafts fiables passent d'abord ; les douteux (drapeaux) seulement si on coche l'option."""
+    crafts = [e for e in harvest if e["net_u"] > 0 and e["ressources_u"]]
+    crafts.sort(key=lambda e: (bool(e["flags"]), -(e["net_u"] / e["ressources_u"])))
     data = [dict(o=e["objet"], n=e["net_u"], p=e["prix_real"], c=e["ma_part_j"], l=e.get("lot_vente"),
-                 r={k: round(v, 4) for k, v in e["ressources"].items()}) for e in crafts]
-    names = sorted({k for e in crafts for k in e["ressources"]})
+                 f="; ".join(e["flags"]), r={k: round(v, 4) for k, v in e["ressources"].items()}) for e in crafts]
+    names = sorted(set(names) | {k for e in crafts for k in e["ressources"]})
     preset = cfg.get("harvest_per_day") or {}
     inputs = "".join(f'<label class="sk">{ctx.icon(name=n)}<span>{esc(n)}</span><input type="number" min="0" step="1" '
                      f'inputmode="numeric" data-r="{esc(n)}" value="{esc(preset.get(n, ""))}" oninput="calc()"></label>'
@@ -371,6 +372,8 @@ def stock_calc(ctx, cfg, harvest):
             'par ressource et calcule le gain. Tes quantités restent enregistrées dans ce navigateur.</p>'
             '<div class="toolbar"><label class="tg"><input type="checkbox" id="cap" checked onchange="calc()"> '
             'Ne pas dépasser ce que le marché absorbe en un jour</label>'
+            '<label class="tg"><input type="checkbox" id="risky" onchange="calc()"> '
+            'Inclure les crafts douteux (volume inconnu, prix suspect)</label>'
             '<button class="mapbtn" onclick="clearStock()">Tout effacer</button></div>'
             f'<div class="stock" id="stock">{inputs}</div>'
             '<div class="kpis"><div class="kpi"><div class="l">Total estimé</div><div class="v pos" id="stot">–</div>'
@@ -582,7 +585,7 @@ def build(con, cfg, results):
             f"<h2>Acheter les ingrédients → fabriquer → revendre</h2><p class='lead'>{hyp}</p>"
             + table_crafts(ctx, my["buy"], "tb", False))
         add("uniques", "💎 Uniques", "<h2>Équipements Unique : prix bradés</h2>" + table_uniques(ctx, my["uniques"], cfg))
-        add("plan", "🧮 Mon stock", "<h2>Mon stock → quoi fabriquer</h2>" + stock_calc(ctx, cfg, my["harvest"])
+        add("plan", "🧮 Mon stock", "<h2>Mon stock → quoi fabriquer</h2>" + stock_calc(ctx, cfg, my["harvest"], my["market"].gather_names())
             + ("<h3>Plan quotidien (config)</h3>" + table_plan(my["plan"]) if my["plan"] else ""))
         sep()
     others = [r for r in results if r is not my]

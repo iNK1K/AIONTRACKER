@@ -15,6 +15,9 @@ EQUIP_TYPES = {"Sword": "Épée", "Greatsword": "Espadon", "Dagger": "Dague", "B
 # equivalences Asmodiens -> Elyseens (Kaisinel, serveur de reference, est elyseen)
 ELYOS_EQ = [("Asvata", "Yggdrasil"), ("conide", "l'inina"), ("pujery", "cypri"), ("d'ohkra", "de kukuru"),
             ("dragon noir", "dragon blanc")]
+# mots propres aux ressources de chaque faction
+ASMO_ONLY = ("asvata", "conide", "pujery", "ohkra")
+ELYOS_ONLY = ("yggdrasil", "inina", "cypri", "kukuru")
 
 
 def _dt(s):
@@ -367,6 +370,12 @@ class Market:
                 out.append(best)
         out.sort(key=lambda e: -e["profit_j"])
         return out
+
+    def gather_names(self):
+        """Toutes les ressources de recolte de ma faction (les ressources propres a l'autre faction sont ecartees)."""
+        other = ELYOS_ONLY if self.faction == "asmodian" else ASMO_ONLY if self.faction == "elyos" else ()
+        names = {it["base_name"] for it in self.items.values() if it["is_gather"] and not it["bound"]}
+        return sorted(n for n in names if not any(w in n.lower() for w in other))
 
     def gather_targets(self, harvest_rows):
         """Pour chaque ressource : meilleur usage (net par ressource) et quantite que le marche absorbe."""
