@@ -185,7 +185,7 @@ Vérifié sur les sites HDV (Hadala) : le lingot vaut habituellement **1 500 à 
 - Recettes et tables rechargées à chaque passage daily (suivent les patchs).
 
 ## L'onglet
-- Un cadre par métier (Alchimie, Artisanat, Forge d'armures, Forge d'armes, Cuisine) : grade **Débutant / Spécialiste** et niveau 1–50 comme en jeu, bouton **+1** (Débutant 50 → Spécialiste 1) et −1, nombre de crafts rentables débloqués. Partout sur le site, les niveaux requis s'affichent ainsi (« 🔒 Alchimie Spécialiste 5 »).
+- Un cadre par métier (Alchimie, Artisanat, Forge d'armures, Forge d'armes, Cuisine) : grade **Débutant / Spécialiste** et niveau 1–50 comme en jeu, bouton **+1** (Débutant 50 → Spécialiste 1), nombre de crafts rentables débloqués. Partout sur le site, les niveaux requis s'affichent ainsi (« 🔒 Alchimie Spécialiste 5 »).
 - Niveaux enregistrés **dans le navigateur** (chaque joueur a les siens) ; bouton **🔗 Copier le lien de mes niveaux** pour les transférer sur un autre appareil.
 - Options : **En cas d'échec, les ingrédients sont perdus** (cochée par défaut, à confirmer en jeu) ; **Masquer les crafts que je ne peux pas faire** (sinon grisés).
 - **Bientôt débloqué** : crafts rentables accessibles dans les 10 prochains niveaux, triés par profit/jour.
