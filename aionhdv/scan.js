@@ -1,13 +1,14 @@
 // Lecture d'une capture de la reserve d'Aion 2 : grille d'icones -> ressources de recolte + quantites.
 // Tout se passe dans le navigateur, sans rien envoyer : les icones sont comparees aux icones officielles
 // (window.GATHER), les chiffres a des modeles appris sur des captures du jeu (DIGIT_MODELS).
-// Reglages mesures sur 2 captures reelles : 66 ressources sur 66 reconnues, 65 quantites sur 66 (l'erreur signalee).
+// Reglages mesures sur 3 captures reelles (2 tailles d'interface) : 95 ressources sur 97 reconnues, 0 objet pris a
+// tort ; quantites : 90 % justes sur une capture jamais vue, 95 % une fois apprise.
 (function () {
   const S = 24;                               // cote des vignettes comparees
   const ZONE = [0.06, 0.06, 0.88, 0.88];      // zone de l'icone comparee (x, y, l, h en fraction de la case)
   const INSET = 0.06;                         // marge ajoutee autour des icones de reference
-  const BAND = [0.765, 0.93], DIGX = [0.25, 0.97];   // bande du nombre (en bas a droite de la case)
-  const DIGIT_MODELS = {"0":[0.333,0.915,0.778,0.422,0.0,0.667,0.706,0.5,0.711,0.111,1.0,0.248,0.111,1.0,0.498,1.0,0.0,0.0,1.0,0.883,1.0,0.0,0.0,1.0,0.996,1.0,0.0,0.0,1.0,0.9,1.0,0.211,0.0,1.0,0.4,0.528,0.711,0.5,0.843,0.0,0.056,1.0,1.0,0.685,0.0,0.655],"1":[0.034,0.129,0.225,0.613,1.0,0.189,0.345,0.5,0.75,1.0,0.56,0.474,0.388,0.694,1.0,0.388,0.194,0.0,0.5,1.0,0.002,0.001,0.0,0.5,1.0,0.003,0.002,0.0,0.5,1.0,0.001,0.0,0.0,0.5,1.0,0.0,0.0,0.0,0.5,1.0,0.0,0.0,0.0,0.5,0.999,0.387],"2":[0.342,0.813,0.848,0.611,0.065,0.56,0.541,0.591,0.806,0.16,0.389,0.134,0.167,1.0,0.33,0.0,0.0,0.139,0.9,0.202,0.0,0.028,0.595,0.548,0.0,0.0,0.528,0.68,0.128,0.0,0.528,1.0,0.185,0.0,0.0,1.0,1.0,0.5,0.5,0.5,1.0,1.0,1.0,1.0,1.0,0.651],"3":[0.685,0.77,0.876,0.634,0.034,0.659,0.403,0.624,0.817,0.082,0.317,0.111,0.305,0.917,0.088,0.0,0.459,0.619,0.654,0.022,0.0,0.653,1.0,0.737,0.0,0.0,0.287,0.5,1.0,0.459,0.004,0.0,0.086,1.0,0.748,0.504,0.5,0.586,0.891,0.288,1.0,1.0,1.0,0.783,0.0,0.646],"4":[0.0,0.05,0.294,0.744,0.5,0.014,0.106,0.428,0.836,0.5,0.071,0.347,0.643,0.852,0.5,0.242,0.551,0.467,0.643,0.5,0.448,0.565,0.18,0.539,0.525,0.765,0.775,0.558,0.784,0.775,0.441,0.45,0.607,0.882,0.737,0.0,0.0,0.154,0.654,0.511,0.0,0.0,0.022,0.522,0.5,0.796],"5":[1.0,0.919,0.716,0.717,0.0,1.0,0.698,0.445,0.445,0.0,1.0,0.439,0.287,0.229,0.0,0.8,0.5,0.603,0.556,0.071,0.3,0.3,0.661,0.913,0.25,0.0,0.0,0.258,1.0,0.562,0.057,0.0,0.137,1.0,0.488,0.557,0.5,0.637,0.789,0.104,1.0,1.0,1.0,0.577,0.0,0.661],"6":[0.143,0.343,0.737,0.833,0.0,0.511,0.588,0.429,0.417,0.0,0.94,0.466,0.144,0.083,0.0,1.0,0.319,0.5,0.583,0.069,1.0,0.42,0.417,1.0,0.488,1.0,0.15,0.0,0.928,0.919,1.0,0.206,0.0,0.928,0.822,0.524,0.706,0.5,1.0,0.322,0.048,1.0,1.0,1.0,0.0,0.64],"7":[1.0,1.0,1.0,1.0,0.892,0.625,0.625,0.63,1.0,0.898,0.125,0.125,0.13,1.0,0.452,0.0,0.0,0.382,1.0,0.0,0.0,0.0,0.882,0.533,0.0,0.0,0.262,1.0,0.033,0.0,0.0,0.762,0.708,0.0,0.0,0.14,1.0,0.208,0.0,0.0,0.28,1.0,0.0,0.0,0.0,0.625],"8":[0.226,0.903,0.833,0.588,0.03,0.613,0.626,0.417,0.794,0.085,0.944,0.258,0.083,0.97,0.07,0.652,0.583,0.583,0.817,0.0,0.656,1.0,0.994,0.843,0.0,0.947,0.5,0.494,0.988,0.439,1.0,0.0,0.0,0.985,0.851,0.903,0.5,0.5,0.978,0.412,0.806,1.0,1.0,0.97,0.0,0.64],"9":[0.367,0.793,0.749,0.356,0.041,0.684,0.601,0.493,0.657,0.16,1.0,0.217,0.119,0.956,0.546,0.997,0.21,0.179,0.949,0.873,0.964,0.642,0.619,0.95,0.895,0.467,0.471,0.466,0.947,0.619,0.0,0.0,0.291,0.945,0.199,0.492,0.488,0.744,0.481,0.018,0.983,0.977,0.939,0.01,0.0,0.653]};
+  const BAND = [0.74, 0.96], DIGX = [0.25, 0.97];   // bande du nombre (en bas a droite de la case)
+  const DIGIT_MODELS = {"0":[0.0,0.753,0.945,0.068,0.0,0.5,0.654,0.543,0.502,0.071,1.0,0.314,0.07,0.933,0.333,1.0,0.071,0.0,0.851,0.649,1.0,0.071,0.0,0.748,0.801,1.0,0.071,0.0,0.826,0.73,1.0,0.165,0.007,0.929,0.39,0.5,0.594,0.507,0.714,0.104,0.0,0.929,1.0,0.499,0.066,0.607],"1":[0.004,0.029,0.043,0.425,0.809,0.025,0.262,0.495,0.695,0.893,0.493,0.49,0.489,0.742,0.987,0.486,0.254,0.024,0.504,0.989,0.022,0.018,0.011,0.494,0.987,0.015,0.013,0.006,0.491,0.986,0.014,0.01,0.0,0.491,0.986,0.012,0.006,0.0,0.491,0.986,0.006,0.002,0.0,0.491,0.984,0.386],"2":[0.046,0.692,0.949,0.332,0.015,0.487,0.418,0.581,0.649,0.043,0.464,0.072,0.107,0.963,0.198,0.013,0.008,0.018,0.942,0.19,0.019,0.016,0.491,0.502,0.028,0.007,0.482,0.572,0.048,0.001,0.482,0.897,0.123,0.013,0.0,0.964,0.912,0.524,0.505,0.5,0.964,0.977,1.0,1.0,1.0,0.637],"3":[0.437,0.86,0.909,0.367,0.045,0.49,0.435,0.57,0.668,0.057,0.272,0.029,0.164,0.937,0.053,0.0,0.285,0.533,0.543,0.035,0.0,0.43,0.916,0.531,0.047,0.0,0.169,0.431,0.923,0.389,0.0,0.0,0.0,0.966,0.556,0.5,0.5,0.5,0.77,0.217,1.0,1.0,1.0,0.575,0.038,0.625],"4":[0.0,0.0,0.077,0.506,0.429,0.0,0.021,0.3,0.744,0.465,0.015,0.265,0.627,0.87,0.5,0.114,0.446,0.469,0.629,0.5,0.347,0.45,0.103,0.5,0.5,0.683,0.742,0.493,0.747,0.746,0.435,0.494,0.581,0.834,0.744,0.0,0.0,0.088,0.583,0.495,0.0,0.0,0.0,0.492,0.492,0.759],"5":[0.852,0.831,0.805,0.806,0.0,0.926,0.688,0.435,0.435,0.0,1.0,0.297,0.057,0.045,0.0,0.975,0.5,0.507,0.27,0.003,0.475,0.475,0.629,0.757,0.07,0.0,0.0,0.147,1.0,0.339,0.0,0.0,0.025,1.0,0.272,0.49,0.5,0.525,0.677,0.0,0.979,1.0,1.0,0.353,0.0,0.629],"6":[0.119,0.193,0.498,0.801,0.062,0.412,0.497,0.264,0.401,0.031,0.852,0.451,0.109,0.094,0.0,1.0,0.218,0.49,0.594,0.089,1.0,0.222,0.398,0.984,0.407,1.0,0.07,0.001,0.791,0.782,1.0,0.124,0.003,0.791,0.693,0.5,0.592,0.503,0.879,0.254,0.0,0.969,1.0,0.788,0.049,0.634],"7":[0.844,0.844,0.844,0.844,0.704,0.435,0.435,0.44,0.874,0.725,0.013,0.013,0.018,0.902,0.473,0.0,0.0,0.243,0.926,0.2,0.0,0.0,0.693,0.526,0.1,0.0,0.135,0.914,0.1,0.0,0.0,0.585,0.601,0.059,0.0,0.029,0.903,0.187,0.009,0.0,0.057,0.906,0.1,0.0,0.0,0.6],"8":[0.0,0.838,0.99,0.349,0.045,0.5,0.554,0.503,0.633,0.106,1.0,0.176,0.008,0.917,0.167,0.551,0.504,0.5,0.692,0.115,0.389,0.944,0.919,0.701,0.104,0.837,0.523,0.419,0.871,0.423,0.996,0.081,0.0,0.853,0.686,0.794,0.517,0.494,0.869,0.394,0.594,0.953,0.988,0.842,0.117,0.604],"9":[0.043,0.772,0.775,0.075,0.0,0.499,0.578,0.465,0.49,0.027,0.975,0.209,0.082,0.936,0.296,0.995,0.049,0.024,0.954,0.695,0.99,0.503,0.493,0.908,0.777,0.514,0.493,0.493,0.876,0.455,0.022,0.022,0.196,0.93,0.117,0.47,0.469,0.542,0.505,0.013,0.962,0.96,0.744,0.025,0.0,0.618]};
   let refs = null;
 
   function canvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
@@ -65,13 +66,22 @@
   // les cases sont separees par de fines lignes sombres : on cherche, axe par axe, le pas (au 1/20 de pixel) et le
   // decalage qui font tomber le plus de lignes sur les zones sombres du profil de luminosite
   function period(prof, min, max) {
-    const n = prof.length, m = prof.reduce((a, b) => a + b, 0) / n, p = prof.map(v => v - m);
-    let best = min, bv = -Infinity;
-    for (let lag = min; lag <= Math.min(max, n - 1); lag++) {
+    // autocorrelation du profil ; un multiple du pas (2, 3 cases…) correle presque aussi bien quand la capture
+    // contient un titre ou des marges : on garde le plus petit pas qui correle au moins 80 % aussi bien
+    const n = prof.length, m = prof.reduce((a, b) => a + b, 0) / n, p = prof.map(v => v - m), ac = [];
+    for (let lag = 0; lag <= Math.min(max + 2, n - 1); lag++) {
       let s = 0;
       for (let i = 0; i + lag < n; i++) s += p[i] * p[i + lag];
-      s /= (n - lag);
-      if (s > bv) { bv = s; best = lag; }
+      ac[lag] = s / (n - lag);
+    }
+    let best = min;
+    for (let lag = min; lag <= Math.min(max, n - 1); lag++) if (ac[lag] > ac[best]) best = lag;
+    for (let k = 4; k >= 2; k--) {
+      const c = Math.round(best / k);
+      if (c < min) continue;
+      let loc = c;
+      for (let lag = Math.max(min, c - 2); lag <= c + 2; lag++) if (ac[lag] > ac[loc]) loc = lag;
+      if (ac[loc] >= 0.8 * ac[best]) return loc;
     }
     return best;
   }
@@ -97,8 +107,10 @@
       const i = (y * W + x) * 4, l = d[i] + d[i + 1] + d[i + 2];
       px[x] += l / H; py[y] += l / W;
     }
-    const lag = period(H >= W ? py : px, 24, Math.min(200, Math.floor(Math.max(W, H) / 2)));
-    const fy = fitLines(py, lag), fx = fitLines(px, lag);
+    // pas mesure sur chaque axe (les cases sont presque carrees : on garde le plus fiable des deux pour l'autre)
+    const lx = period(px, 24, Math.min(200, Math.floor(W / 2))), ly = period(py, 24, Math.min(200, Math.floor(H / 2)));
+    const lag = Math.abs(lx - ly) <= 0.15 * Math.min(lx, ly) ? null : Math.min(lx, ly);
+    const fy = fitLines(py, lag || ly), fx = fitLines(px, lag || lx);
     const xs = cellsOn(fx.o, fx.p, W), ys = cellsOn(fy.o, fy.p, H);
     return { xs, ys, px: fx.p, py: fy.p, cols: xs.length, rows: ys.length, W, H };
   }
@@ -108,7 +120,7 @@
   // puis on lit de droite a gauche tant que le morceau ressemble a un chiffre (seul ou fusionne avec son voisin).
   function inkAt(d, i) {
     const r = d[i], g = d[i + 1], b = d[i + 2], s = Math.max(r, g, b) - Math.min(r, g, b);
-    return s < 80 ? Math.max(0, Math.min(1, ((r + g + b) / 3 - 120) / 90)) : 0;
+    return s < 80 ? Math.max(0, Math.min(1, ((r + g + b) / 3 - 140) / 90)) : 0;
   }
   function vec(M, a, b) {                     // glyphe -> 5 x 9 valeurs (part d'encre) + rapport largeur/hauteur
     const sub = M.map(row => row.slice(a, b)), rows = [];
@@ -182,7 +194,7 @@
       const best = scored[0], other = best && scored.find(s => family(s.n) !== family(best.n));
       const famGap = best && other ? other.d - best.d : 99;
       // reconnue : case non vide, icone proche, nettement plus proche que toute ressource d'une autre famille
-      const sure = best && sd >= 12 && best.d <= 31 && famGap >= 5.5;
+      const sure = best && sd >= 16 && best.d <= 29 && famGap >= 6;
       const cell = { r, c, x, y, name: sure ? best.n : null, d: best ? best.d : null,
                      cutRight: x + G.px > G.W + 1, cutBottom: y + G.py > G.H + 1 };
       if (cell.name) Object.assign(cell, readNumber(P, x, y, G));
@@ -206,7 +218,7 @@ window.reserveToList = async function (img, progress) {
     lines.push('# --- à vérifier : quantité lue incertaine, corrige si besoin ---');
     check.forEach(c => lines.push(c.qty == null ? `# ${c.name} : quantité illisible, à saisir` : `${c.name} ${c.qty}`));
   }
-  const thumbs = check.map(c => {
+  const thumbs = res.cells.filter(c => c.name).map(c => {
     const cv = document.createElement('canvas');
     cv.width = cv.height = 44;
     cv.getContext('2d').drawImage(img, c.x, c.y, res.grid.px, res.grid.py, 0, 0, 44, 44);

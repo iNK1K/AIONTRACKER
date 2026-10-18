@@ -135,3 +135,12 @@ Dans l'onglet **🧮 Mon stock**, cadre **📷 Lire une capture de ta réserve**
 ## Corrigé au passage
 - **Ressources élyséennes** : Mon stock filtre maintenant les ressources d'après les zones de récolte de la carte (Targena, Coriolus, Méla, Aria… écartées pour un Asmodien). 33 ressources sur Hadala.
 - Mes lectures à l'œil de tes captures contenaient des erreurs que l'outil corrige : les « 9 » sont du **Bois d'Asvata pur**, les « 8 » de l'**Od pur**, les « 89 » de l'**Od d'une grande pureté**.
+
+## Mise à jour : version générale (3 captures, 2 tailles d'interface)
+Ta 3e capture (avec le titre « Matériaux de fabrication », une marge, et des cases 8 % plus petites) faisait échouer la détection : elle prenait des cases deux fois trop grandes. Corrigé de façon générale, sans réglage propre à une capture :
+- **Grille** : quand un multiple du pas (2 ou 3 cases) ressemble presque autant au vrai pas, on garde le plus petit ; pas mesuré sur chaque axe. Les zones hors grille (titre, onglets, marges) donnent des cases ignorées.
+- **Icônes** : seuils recalculés sur les 3 captures ensemble.
+- **Chiffres** : modèles réappris sur les 3 captures (216 chiffres, dont 2 tailles d'affichage). Validation croisée (apprendre sur 2 captures, tester sur la 3e jamais vue) : 90 % des quantités justes.
+- L'aperçu montre maintenant **toutes** les cases reconnues avec leur vignette et la quantité lue (⚠ sur les douteuses), pour vérifier d'un coup d'œil avant de remplir.
+
+Résultat sur les 3 captures : **85 ressources reconnues sur 88, aucune inventée ni confondue** (manquées : 2 Bois d'Asvata, 1 Morfa) ; **82 quantités justes sur 85** (2 erreurs signalées ⚠, 1 non signalée : 9 au lieu de 19).

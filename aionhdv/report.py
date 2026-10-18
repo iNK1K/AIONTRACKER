@@ -193,9 +193,9 @@ async function scanFile(file){if(!file||!(file.type||'').startsWith('image/'))re
   const r=await reserveToList(img,m=>msg.textContent=m);URL.revokeObjectURL(url);
   document.getElementById('paste').value=r.text;document.getElementById('pdet').open=true;
   msg.textContent=r.found+' ressource(s) reconnue(s), '+r.ignored+' case(s) ignorée(s) (autres objets ou cases vides). '
-   +'Vérifie la liste ci-dessous puis clique sur Remplir.'+(r.thumbs.length?' Quantités à vérifier :':'');
-  r.thumbs.forEach(t=>{const d=document.createElement('span');d.className='chip';d.appendChild(t.cv);
-   d.appendChild(document.createTextNode(t.c.name+' : '+(t.c.qty==null?'?':t.c.qty)));box.appendChild(d)})
+   +'Compare chaque case avec la quantité lue (⚠ = à vérifier en priorité), corrige la liste si besoin, puis clique sur Remplir.';
+  r.thumbs.forEach(t=>{const d=document.createElement('span');d.className='chip';if(t.c.checkQty)d.style.borderColor='var(--warn)';
+   d.appendChild(t.cv);d.appendChild(document.createTextNode((t.c.checkQty?'⚠ ':'')+t.c.name+' : '+(t.c.qty==null?'?':t.c.qty)));box.appendChild(d)})
  }catch(e){msg.textContent='Lecture impossible : '+e+' (la lecture fonctionne sur le site en ligne)'}}
 document.addEventListener('paste',e=>{const sec=document.getElementById('plan');if(!sec||!sec.classList.contains('on'))return;
  const it=[...((e.clipboardData||{}).items||[])].find(i=>(i.type||'').startsWith('image/'));if(it){e.preventDefault();scanFile(it.getAsFile())}});
