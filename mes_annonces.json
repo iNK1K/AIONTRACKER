@@ -1,0 +1,4 @@
+{
+  "_": "Ce que tu as en vente et à quel prix (nom exact du jeu : prix unitaire). Alerte Discord dès que quelqu'un vend moins cher. Exemple : \"Élixir du vent\": 5790",
+  "annonces": {}
+}

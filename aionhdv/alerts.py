@@ -148,6 +148,103 @@ def detect_uniques(con, cfg, result):
     return msgs
 
 
+def detect_undercuts(con, cfg, result):
+    """Quelqu'un vend moins cher qu'une de mes annonces : une alerte par nouveau prix plus bas."""
+    srv = con.execute("SELECT name FROM servers WHERE id = ?", (result["server"],)).fetchone()
+    sname = srv["name"] if srv else result["server"]
+    msgs = []
+    for l in result["listings"]:
+        if not l["battu"]:
+            continue
+        msg = (f"⚔️ **Tu es battu** [{sname}] {l['nom']} : quelqu'un vend à **{fmt(l['plancher'])}** "
+               f"(ton prix {fmt(l['mon_prix'])}, −{fmt(l['ecart'])}) — {l['annonces']} annonce(s). "
+               f"Baisse ton prix ou attends.")
+        if _once(con, f"undercut|{result['server']}|{l['item_id']}|{l['mon_prix']}|{l['plancher']}", msg):
+            msgs.append(msg)
+    return msgs
+
+
+def detect_patch_moves(con, cfg, result):
+    """Items cites dans une note de version depuis moins de 48 h dont le prix a bouge d'au moins 20 %."""
+    m = result["market"]
+    since = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()[:19]
+    msgs = []
+    for w in con.execute("SELECT * FROM patch_watch WHERE since >= ?", (since,)).fetchall():
+        price = m.price.get(w["item_id"])
+        if not price or not w["base_price"]:
+            continue
+        r = price / w["base_price"]
+        if 0.8 < r < 1.25:
+            continue
+        name = m.items.get(w["item_id"], {}).get("name", w["item_id"])
+        sens = "📈 en hausse" if r > 1 else "📉 en baisse"
+        msg = (f"🛠️ **Effet de la note de version** {name} {sens} : **{fmt(price)}** "
+               f"(avant la note {fmt(w['base_price'])}, ×{r:.2f}) — {w['title']}")
+        if _once(con, f"patch|{w['news_key']}|{w['item_id']}|{'up' if r > 1 else 'down'}", msg):
+            msgs.append(msg)
+    return msgs
+
+
+def detect_flips(con, cfg, result):
+    """Item a acheter maintenant : prix actuel sous le prix d'achat cible, et assez de kinah/j a la cle."""
+    a = cfg["alerts"]
+    srv = con.execute("SELECT name FROM servers WHERE id = ?", (result["server"],)).fetchone()
+    sname = srv["name"] if srv else result["server"]
+    day = datetime.now(timezone.utc).strftime("%Y%m%d")
+    msgs = []
+    for f in result["flips"]:
+        if not f["acheter"] or f["profit_j"] < a["flip_min_profit_day"]:
+            continue
+        lots = f" ({f['nb_lots_j']} annonce(s) de {fmt(f['lot_vente'])})" if f.get("nb_lots_j") else ""
+        msg = (f"🔁 **Flip** [{sname}] {f['objet']} à **{fmt(f['prix'])}** (achat cible {fmt(f['achat_cible'])}) → "
+               f"revendre ~{fmt(f['revente_cible'])}{lots}, net **{fmt(f['net_u'])}/u** (+{f['marge']:.0%}), "
+               f"~{fmt(f['ma_part_j'])}/j → {fmt(f['profit_j'])}/j — {f['annonces']} annonce(s)")
+        if _once(con, f"flip|{result['server']}|{f['item_id']}|{day}", msg):
+            msgs.append(msg)
+    return msgs
+
+
+def weekly(con, cfg, result, top=5):
+    """Resume du dimanche : plus fortes hausses et baisses de prix sur 7 j (items avec du volume), crafts entres et
+    sortis du top 10."""
+    m = result["market"]
+    srv = con.execute("SELECT name FROM servers WHERE id = ?", (result["server"],)).fetchone()
+    sname = srv["name"] if srv else result["server"]
+    now = datetime.now(timezone.utc)
+    cut1, cut6 = (now - timedelta(hours=24)).isoformat()[:19], (now - timedelta(days=6)).isoformat()[:19]
+    moves = []
+    for iid in m.price:
+        it = m.items.get(iid) or {}
+        if it.get("bound") or m.listings.get(iid, 0) < 2 or not m.ref(iid):    # 1 seule annonce : prix peu fiable
+            continue
+        rows = m.price_series(iid, 8)
+        new, old = [p for t, p in rows if t >= cut1], [p for t, p in rows if t < cut6]
+        if len(new) >= 3 and len(old) >= 3 and statistics.median(old) >= 1000:
+            a, b = statistics.median(old), statistics.median(new)
+            moves.append((b / a, it["name"], a, b))
+    moves.sort()
+    lines = [f"🗓️ **Tendances de la semaine : {sname}**"]
+    if moves:
+        lines += ["", "**Plus fortes hausses (7 j)**"]
+        lines += [f"📈 {n} : {fmt(a)} → **{fmt(b)}** (×{r:.2f})" for r, n, a, b in reversed(moves[-top:]) if r > 1]
+        lines += ["", "**Plus fortes baisses (7 j)**"]
+        lines += [f"📉 {n} : {fmt(a)} → **{fmt(b)}** (×{r:.2f})" for r, n, a, b in moves[:top] if r < 1]
+    else:
+        lines.append("Pas encore assez d'historique pour comparer les prix sur 7 jours.")
+    before = con.execute("SELECT MAX(run_ts) AS ts FROM analyses WHERE server=? AND kind='harvest' AND run_ts<=?",
+                         (result["server"], cut6)).fetchone()["ts"]
+    if before:
+        old_top = {r["item_id"]: json.loads(r["data"])["objet"] for r in con.execute(
+            "SELECT item_id, data FROM analyses WHERE server=? AND kind='harvest' AND run_ts=? ORDER BY score DESC LIMIT 10",
+            (result["server"], before))}
+        new_top = {e["item_id"]: e["objet"] for e in [e for e in result["harvest"] if not e["flags"]][:10]}
+        entered = [n for i, n in new_top.items() if i not in old_top]
+        left = [n for i, n in old_top.items() if i not in new_top]
+        lines += ["", "**Top 10 des crafts**",
+                  "Entrés : " + (", ".join(entered) or "aucun"), "Sortis : " + (", ".join(left) or "aucun")]
+    return "\n".join(lines)
+
+
 def digest(con, cfg, result, top=8):
     srv = con.execute("SELECT name FROM servers WHERE id = ?", (result["server"],)).fetchone()
     sname = srv["name"] if srv else result["server"]
@@ -169,8 +266,20 @@ def digest(con, cfg, result, top=8):
                          f"(pessimiste {fmt(e['net_pess_u'])}) → {fmt(e['profit_j'])}/j")
     else:
         lines.append("Rien de rentable en ce moment.")
+    flips = result.get("flips") or []
+    if flips:
+        lines += ["", "**Achat → revente (flip)**"]
+        for f in flips[:5]:
+            lines.append(f"• {f['objet']} : acheter ≤ {fmt(f['achat_cible'])}, revendre ~{fmt(f['revente_cible'])}, "
+                         f"net {fmt(f['net_u'])}/u → {fmt(f['profit_j'])}/j" + (" ✅ prix d'achat atteint" if f["acheter"] else ""))
     if result["plan"]:
         lines += ["", "**Plan de production pour ta récolte**"]
         for p in result["plan"]:
             lines.append(f"• {p['quantite_j']} × {p['objet']} à ~{fmt(p['prix_conseille'])} → {fmt(p['kinah_j'])}/j")
+    official = con.execute("SELECT title, url, posted FROM news WHERE key NOT LIKE 'reddit|%' "
+                           "ORDER BY posted DESC LIMIT 3").fetchall()
+    if official:
+        lines += ["", "**Dernières annonces officielles**"]
+        # <lien> : pas d'apercu Discord pour chaque lien du resume
+        lines += [f"• {paris(n['posted'], '%d/%m')} {n['title']} <{n['url']}>" for n in official]
     return "\n".join(lines)

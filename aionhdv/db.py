@@ -72,6 +72,13 @@ CREATE INDEX IF NOT EXISTS ix_analyses ON analyses(run_ts, server, kind);
 CREATE TABLE IF NOT EXISTS alerts_sent (
     key TEXT PRIMARY KEY, ts TEXT, message TEXT
 );
+CREATE TABLE IF NOT EXISTS news (            -- annonces officielles vues (site officiel, Reddit)
+    key TEXT PRIMARY KEY, label TEXT, title TEXT, url TEXT, posted TEXT
+);
+CREATE TABLE IF NOT EXISTS patch_watch (     -- items cites dans une note de version, surveilles 48 h
+    item_id INTEGER, news_key TEXT, title TEXT, url TEXT, since TEXT, base_price REAL,
+    PRIMARY KEY (item_id, news_key)
+);
 CREATE TABLE IF NOT EXISTS runs (
     ts TEXT, job TEXT, status TEXT, detail TEXT
 );

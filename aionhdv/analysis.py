@@ -77,17 +77,62 @@ class Market:
             self.price[r["item_id"]] = r["price"]
             self.listings[r["item_id"]] = r["listings"]
 
-    def price_stats(self, item_id, days=7):
-        """Mediane, plus bas et nombre de releves des prix plancher recents (quotes + historique aion2.exchange)."""
+    def price_series(self, item_id, days=7):
+        """Prix plancher recents [(ts, prix)] : releves horaires (quotes) + historique aion2.exchange."""
         since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()[:19]
-        vals = [r["price"] for r in self.con.execute(
-            "SELECT price FROM quotes WHERE server=? AND item_id=? AND ts>=?", (self.server, item_id, since))]
+        rows = [(r["ts"], r["price"]) for r in self.con.execute(
+            "SELECT ts, price FROM quotes WHERE server=? AND item_id=? AND ts>=?", (self.server, item_id, since))]
         srv = self.con.execute("SELECT ax_id FROM servers WHERE id=?", (self.server,)).fetchone()
         if srv and srv["ax_id"]:
-            vals += [r["avg"] for r in self.con.execute(
-                "SELECT avg FROM ax_prices WHERE ax_server=? AND item_id=? AND ts>=? AND avg IS NOT NULL",
+            rows += [(r["ts"][:19], r["avg"]) for r in self.con.execute(
+                "SELECT ts, avg FROM ax_prices WHERE ax_server=? AND item_id=? AND ts>=? AND avg IS NOT NULL",
                 (srv["ax_id"], item_id, since))]
+        return rows
+
+    def price_stats(self, item_id, days=7):
+        """Mediane, plus bas et nombre de releves des prix plancher recents."""
+        vals = [p for _, p in self.price_series(item_id, days)]
         return dict(median=statistics.median(vals), low=min(vals), n=len(vals)) if vals else None
+
+    def my_listings(self):
+        """Mes annonces (mes_annonces.json) face au prix le plus bas actuel : suis-je encore le moins cher ?"""
+        out = []
+        for name, mine in (self.cfg.get("my_listings") or {}).items():
+            iid = self.by_base.get(name.strip())
+            floor = self.price.get(iid) if iid else None
+            out.append(dict(nom=name, item_id=iid, mon_prix=mine, plancher=floor, annonces=self.listings.get(iid, 0),
+                            battu=floor is not None and floor < mine, ecart=(mine - floor) if floor is not None else None))
+        return out
+
+    def flips(self, days=3):
+        """Achat-revente sans craft : acheter au bas de la fourchette habituelle (1er quartile des prix plancher sur
+        3 j), revendre au prix median, apres frais. Ecarte le brut (invendable), les items sans volume de reference et
+        ceux dont le prix suit une tendance (mediane des dernieres 24 h a plus de 25-33 % de celle d'avant)."""
+        a, fees = self.cfg["alerts"], self.cfg["fees"]
+        cut = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()[:19]
+        out = []
+        for iid, price in self.price.items():
+            it = self.items.get(iid) or {}
+            if it.get("bound") or it.get("is_gather"):
+                continue
+            rows = self.price_series(iid, days)
+            if len(rows) < a["flip_min_samples"]:
+                continue
+            old, new = [p for t, p in rows if t < cut], [p for t, p in rows if t >= cut]
+            if old and new and not 0.75 <= statistics.median(new) / statistics.median(old) <= 1.33:
+                continue
+            q1, med, _ = statistics.quantiles([p for _, p in rows], n=4)
+            ref = self.ref(iid)
+            net_u = med * (1 - fees) - q1
+            if not ref or not ref["daily"] or q1 <= 0 or net_u / q1 < a["flip_min_margin"]:
+                continue
+            mine = ref["daily"] * self.ratio * self.cfg["market_share"]
+            out.append(dict(item_id=iid, objet=it["name"], prix=price, achat_cible=round(q1), revente_cible=round(med),
+                            net_u=round(net_u), marge=round(net_u / q1, 3), ma_part_j=round(mine),
+                            profit_j=round(mine * net_u), capital_j=round(mine * q1), annonces=self.listings.get(iid, 0),
+                            acheter=price <= q1, releves=len(rows), **self.sizing(iid, mine)))
+        out.sort(key=lambda f: -f["profit_j"])
+        return out
 
     def median_price(self, item_id, days=7):
         st = self.price_stats(item_id, days)
@@ -443,4 +488,5 @@ def run_all(con, cfg, server=None):
                 (run_ts, server, "plan", None, None, None, json.dumps(plan, ensure_ascii=False)))
     con.commit()
     return dict(run_ts=run_ts, server=server, as_of=m.as_of, ratio=m.ratio, harvest=harvest, buy=buy,
-                targets=targets, plan=plan, hours=m.hourly_profile(), uniques=m.uniques(), market=m)
+                targets=targets, plan=plan, hours=m.hourly_profile(), uniques=m.uniques(),
+                flips=m.flips(), listings=m.my_listings(), market=m)

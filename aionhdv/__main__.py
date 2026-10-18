@@ -11,8 +11,11 @@ Commandes :
   analyze     calculs + rapport HTML
   news        annonces officielles (site officiel, Reddit) -> Discord
   hourly      snapshot + analyze + alertes + annonces officielles
-  daily       refvolume + activity + historique + servers + resume du jour
+  daily       refvolume + activity + historique + servers + resume du jour (+ tendances le dimanche)
   report      regenere seulement le rapport HTML
+
+Option :
+  --dry-run   mode test : rien n'est envoye sur Discord (les alertes restent dans logs/alerts.log)
 """
 import sys
 import time
@@ -93,9 +96,15 @@ def cmd_analyze(con, cfg, send_alerts=False, send_digest=False):
             uniques = alerts.detect_uniques(con, cfg, res)
             for m in uniques:
                 alerts.send(cfg, m, "unique")
-            log(f"alertes : {len(msgs)}, uniques : {len(uniques)}")
+            flips = (alerts.detect_flips(con, cfg, res) + alerts.detect_undercuts(con, cfg, res)
+                     + alerts.detect_patch_moves(con, cfg, res))
+            for m in flips:
+                alerts.send(cfg, m)
+            log(f"alertes : {len(msgs)}, uniques : {len(uniques)}, flips et annonces battues : {len(flips)}")
         if send_digest and str(s) == str(cfg["my_server"]):
             alerts.send(cfg, alerts.digest(con, cfg, res))
+            if datetime.now(collect.PARIS or timezone.utc).weekday() == 6:      # dimanche
+                alerts.send(cfg, alerts.weekly(con, cfg, res))
     path = report.build(con, cfg, results)
     log(f"rapport : {path}")
     return results
@@ -114,10 +123,17 @@ def cmd_news(con, cfg):
 
 
 def main(argv):
+    dry = "--dry-run" in argv
+    argv = [a for a in argv if a != "--dry-run"]
     if len(argv) < 2 or argv[1] in ("-h", "--help", "help"):
         print(__doc__)
         return 0
     cfg = load_config()
+    if dry:
+        for k in cfg:
+            if k.startswith("discord_webhook"):
+                cfg[k] = ""
+        log("mode test : aucune alerte envoyée sur Discord (voir logs/alerts.log)")
     con = connect()
     cmd = argv[1]
     t0 = time.time()

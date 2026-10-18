@@ -2,13 +2,7 @@
 
 Une tâche par ligne. Claude les traite dans l'ordre et coche `[x]` quand c'est fait.
 
-- [ ] Achat-revente pur (flip) : prix d'achat cible et de revente cible par item (fourchette 7 j), marge après 12 % de frais, onglet « Flip » trié par kinah/j, alerte Discord quand un item passe sous son prix d'achat cible
-- [ ] Sauvegarde solide de la base : copie hebdomadaire dans une Release GitHub, restauration automatique si le cache d'Actions est vide
-- [ ] Surveillance de mes annonces : je liste ce que j'ai en vente et à quel prix, alerte Discord quand quelqu'un vend moins cher que moi
-- [ ] Mode test `--dry-run` : lancer hourly/daily en local sans envoyer d'alertes Discord
-- [ ] Notes de patch × prix : repérer les items cités dans une note de version et surveiller leur prix pendant 48 h
-- [ ] Courbe de prix par item : clic sur un item → prix plancher et nombre d'annonces sur 7 j
-- [ ] Tendances de la semaine : résumé Discord le dimanche (plus fortes hausses/baisses sur 7 j, crafts entrés/sortis du top)
+- [ ] 
 
 ## Fait
 - [x] Afficher l'heure de Paris sur le site et dans le résumé Discord
@@ -19,3 +13,11 @@ Une tâche par ligne. Claude les traite dans l'ordre et coche `[x]` quand c'est 
 - [x] Mon stock : toutes les ressources récoltables de la faction + option crafts douteux
 - [x] Onglet Uniques : seulement les équipements Unique (armes, armures, accessoires) utilisables pour l'harmonisation, avec leur type
 - [x] Setup les alertes discord pour rajouter une alerte quand un note de patch officielle est sortie + communique officiel de NCSOFT via le site officiel/twitter/reddit → site officiel + Reddit ; Twitter impossible (voir rapport.md)
+- [x] Achat-revente pur (flip) → onglet 🔁 Flip + alerte Discord « Flip » (fenêtre 3 j plutôt que 7, voir rapport.md)
+- [x] Sauvegarde solide de la base → release GitHub « db-backup » mise à jour chaque jour (plutôt que chaque semaine), restaurée automatiquement
+- [x] Surveillance de mes annonces → fichier `mes_annonces.json` + alerte « Tu es battu » + section sur l'accueil
+- [x] Mode test `--dry-run`
+- [x] Notes de patch × prix → items cités surveillés 48 h, alerte si le prix bouge de ±20 %
+- [x] Courbe de prix par item → bouton 📈 à côté du nom
+- [x] Tendances de la semaine → résumé Discord le dimanche, avec le passage daily
+- [x] Alertes Discord / communiqués NCSOFT : passages automatiques sautés par GitHub (2 créneaux par heure désormais) ; annonces officielles avec lien sur l'accueil et dans le résumé quotidien (voir rapport.md)

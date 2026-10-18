@@ -1,13 +1,15 @@
 # Releve des prix Aion 2 + publication du site (GitHub Pages, branche gh-pages)
-#   - toutes les heures a hh:07 UTC : hourly (prix de tout le marche, analyses, alertes)
+#   - deux fois par heure (hh:07 et hh:37 UTC) : hourly (prix, analyses, alertes, annonces). GitHub saute souvent
+#     des passages planifies : deux creneaux par heure assurent au moins un releve horaire.
 #   - chaque jour a 15:40 UTC       : daily (volumes de reference, activite, historique, resume Discord)
-# La base SQLite est conservee dans le cache d'Actions ; a defaut, elle repart de seed/aion.db.gz.
+# La base SQLite est conservee dans le cache d'Actions. Si le cache est vide, elle repart de la derniere sauvegarde
+# (release GitHub "db-backup", mise a jour a chaque passage daily), et a defaut de seed/aion.db.gz.
 # Secrets : SITE_PASSWORD (obligatoire), DISCORD_WEBHOOK_URL, DISCORD_WEBHOOK_UNIQUE_URL, DISCORD_WEBHOOK_NEWS_URL (facultatifs).
 name: HDV Aion 2
 
 on:
   schedule:
-    - cron: "7 * * * *"
+    - cron: "7,37 * * * *"
     - cron: "40 15 * * *"
   workflow_dispatch:
     inputs:
@@ -45,10 +47,17 @@ jobs:
           restore-keys: hdv-db-
 
       - name: Base de depart si le cache est vide
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [ ! -s data/aion.db ]; then
-            echo "cache vide : depart depuis seed/aion.db.gz"
-            gunzip -c seed/aion.db.gz > data/aion.db
+            if gh release download db-backup -p aion.db.gz -O backup.db.gz 2>/dev/null; then
+              echo "::warning::cache vide : base restauree depuis la derniere sauvegarde (release db-backup)"
+              gunzip -c backup.db.gz > data/aion.db
+            else
+              echo "::warning::cache vide et pas de sauvegarde : depart depuis seed/aion.db.gz"
+              gunzip -c seed/aion.db.gz > data/aion.db
+            fi
           fi
 
       - name: Choix de la commande
@@ -91,6 +100,15 @@ jobs:
           name: aion-db-${{ github.run_id }}
           path: aion.db.gz
           retention-days: 14
+
+      - name: Sauvegarde durable (release db-backup)
+        if: steps.job.outputs.name == 'daily'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view db-backup >/dev/null 2>&1 || gh release create db-backup --latest=false \
+            --title "Sauvegarde de la base" --notes "Base SQLite de l'outil HDV, remplacée à chaque passage daily. Restaurée automatiquement si le cache d'Actions est vide."
+          gh release upload db-backup aion.db.gz --clobber
 
       - name: Construire le site
         run: python -X utf8 scripts/build_site.py

@@ -8,13 +8,17 @@ Objectif : générer un maximum de kinah via l'hôtel des ventes d'Aion 2 (serve
 .\run.ps1 hourly      # prix de tout le marché + analyses + alertes + annonces officielles + rapport
 .\run.ps1 daily       # volumes de référence, activité, historique, comparaison serveurs, résumé
 ```
-Rapport : ouvrir `reports\index.html` dans le navigateur (onglets, filtres, tri, bouton **MAP** sur les ressources).
+Rapport : ouvrir `reports\index.html` dans le navigateur (onglets, filtres, tri, bouton **MAP** sur les ressources, bouton **📈** pour la courbe de prix, clic sur un nom pour le copier).
+
+Mode test : ajouter `--dry-run` (ex. `python -m aionhdv hourly --dry-run`) pour ne rien envoyer sur Discord.
 
 Python est **portable** (`.runtime\python`) : rien n'est installé sur le système. Supprimer le dossier suffit.
 
 ## Réglages : `config.json`
 - `my_server` / `watch_servers` : ids a2-tracker (2310 Hadala, 2315 Zemurru, 2318 Baba…)
 - `masteries` : ta maîtrise par métier (filtre les recettes)
+- `mes_annonces.json` : ce que tu as en vente (`"Nom exact": prix`) → alerte « Tu es battu » quand quelqu'un vend moins cher
+- `alerts.flip_min_margin`, `flip_min_samples`, `flip_min_profit_day` : seuils de l'onglet et de l'alerte Flip
 - `harvest_per_day` : ta récolte quotidienne, ex. `{"Bois d'Asvata": 300, "Azpha": 150}` → plan de production
 - `discord_webhook_url` : URL du webhook (sinon les alertes vont dans `logs\alerts.log`)
 - `discord_webhook_unique_url`, `discord_webhook_news_url` : salons dédiés (facultatifs) aux Unique bradés et aux annonces officielles
@@ -43,6 +47,8 @@ Python est **portable** (`.runtime\python`) : rien n'est installé sur le systè
 - Profit/j = profit/u × ta part du marché (20 %).
 - Taille des lots = unités vendues par jour ÷ annonces disparues par jour (Kaisinel). Heures de vente = annonces disparues d'une heure à l'autre, tous items confondus (heure de Paris).
 - Unique bradé = prix actuel ≤ 60 % de la médiane des 7 derniers jours (au moins 12 relevés).
+- Flip = acheter au 1er quartile des prix plancher sur 3 j, revendre au prix médian, marge ≥ 10 % après frais ; brut, items sans volume et prix en tendance écartés.
+- Notes de version : items cités surveillés 48 h, alerte si le prix bouge de ±20 %.
 
 ## Structure
 ```
@@ -55,10 +61,10 @@ logs/           run.log, alerts.log
 ## Serveur gratuit (GitHub Actions)
 
 Le workflow `.github/workflows/hdv.yml` tourne sur GitHub :
-- toutes les heures à hh:07 UTC : relevé des prix, analyses, alertes Discord, mise à jour du site ;
-- chaque jour à 15:40 UTC : volumes de référence, activité, résumé Discord.
+- deux fois par heure (hh:07 et hh:37 UTC, GitHub sautant souvent des passages) : relevé des prix, analyses, alertes Discord, annonces officielles, mise à jour du site ;
+- chaque jour à 15:40 UTC : volumes de référence, activité, résumé Discord (+ tendances de la semaine le dimanche), sauvegarde de la base.
 
-La base est conservée dans le cache d'Actions. Au premier passage, elle part de `seed/aion.db.gz` (à régénérer avec `scripts/seed_db.py`). Une copie de secours est faite chaque jour.
+La base est conservée dans le cache d'Actions. Chaque passage daily la sauvegarde aussi dans la release GitHub `db-backup` : si le cache est vidé, elle est restaurée depuis cette sauvegarde, et à défaut depuis `seed/aion.db.gz` (à régénérer avec `scripts/seed_db.py`).
 
 Le site est publié sur GitHub Pages (branche `gh-pages`). La page principale est chiffrée par mot de passe avec StatiCrypt.
 

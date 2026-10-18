@@ -2,7 +2,7 @@
 import html
 import json
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from .catalog import node_name
 from .collect import BOUND_RE, paris
@@ -76,6 +76,14 @@ code{background:var(--card2);padding:1px 6px;border-radius:5px}
 .hb{flex:1;min-width:0;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:3px}
 .hb i{display:block;width:100%;background:var(--line);border-radius:3px 3px 0 0;min-height:2px}
 .hb.on i{background:var(--acc)}
+#cmodal{position:fixed;inset:0;background:#000b;display:none;align-items:center;justify-content:center;z-index:55}
+#cmodal.on{display:flex}
+#cmodal .box{width:min(980px,96vw);max-height:92vh;overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+#cmodal .bar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px}
+.ch{position:relative}.ch svg{display:block;width:100%;overflow:visible}
+.ch .cap{color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.05em;margin:10px 0 2px}
+#ctip{position:absolute;pointer-events:none;background:var(--card2);border:1px solid var(--line);border-radius:8px;padding:6px 9px;
+ font-size:12.5px;white-space:nowrap;display:none;z-index:2}
 .nm{cursor:copy}.nm:hover{text-decoration:underline dotted}
 #toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--card2);border:1px solid var(--acc);color:var(--txt);
  padding:8px 14px;border-radius:8px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:60;max-width:90vw}
@@ -127,6 +135,41 @@ function calc(){const box=document.getElementById('stock');if(!box||!window.CRAF
   :'<tr><td colspan="7" class="mut">Entre tes quantités de ressources ci-dessus.</td></tr>';
  const rest=Object.entries(left).filter(([k,v])=>v>=1).map(([k,v])=>k+' ×'+NF.format(Math.floor(v)));
  document.getElementById('sleft').textContent=rest.length?'Ressources non utilisées (aucun craft rentable ou limite du marché atteinte) : '+rest.join(', '):''}
+function openChart(id,name){document.getElementById('ctitle').textContent=name;document.getElementById('cmodal').classList.add('on');
+ const go=()=>drawChart(String(id));if(window.PRICES)return go();const sc=document.createElement('script');sc.src='prices.js';sc.onload=go;
+ sc.onerror=()=>{document.getElementById('cbody').textContent='Historique indisponible.'};document.head.appendChild(sc)}
+function closeChart(){document.getElementById('cmodal').classList.remove('on')}
+function drawChart(id){const box=document.getElementById('cbody'),raw=(PRICES.s[id]||[]);
+ if(raw.length<2){box.innerHTML='<p class="mut">Pas encore assez de relevés pour cet item.</p>';return}
+ const pts=raw.map(r=>({t:(PRICES.t0+r[0]*3600)*1000,p:r[1],l:r[2]})),W=Math.max(320,box.clientWidth||900),L=64,R=12,pw=W-L-R;
+ const t0=pts[0].t,t1=pts[pts.length-1].t,x=t=>L+(t1>t0?(t-t0)/(t1-t0):0)*pw;
+ const ps=pts.map(d=>d.p),lo=Math.min(...ps),hi=Math.max(...ps),pad=(hi-lo)*.08||hi*.05||1,y0=lo-pad,y1=hi+pad,H=220;
+ const yp=v=>8+(1-(v-y0)/(y1-y0))*(H-30);let path='';pts.forEach((d,i)=>{const gap=i&&d.t-pts[i-1].t>3*3600e3;
+  path+=(i===0||gap?'M':'L')+x(d.t).toFixed(1)+' '+yp(d.p).toFixed(1)});
+ const grid=[lo,(lo+hi)/2,hi].map(v=>`<line x1="${L}" x2="${W-R}" y1="${yp(v)}" y2="${yp(v)}" stroke="var(--line2)"/>`
+  +`<text x="${L-8}" y="${yp(v)+4}" text-anchor="end" fill="var(--mut)" font-size="11">${kf(v)}</text>`).join('');
+ const days=[];const d0=new Date(t0);d0.setHours(24,0,0,0);for(let d=d0.getTime();d<=t1;d+=864e5)days.push(d);
+ const xl=(h)=>days.map(d=>`<line x1="${x(d)}" x2="${x(d)}" y1="4" y2="${h-22}" stroke="var(--line2)"/>`
+  +`<text x="${x(d)}" y="${h-6}" text-anchor="middle" fill="var(--mut)" font-size="11">${new Date(d).toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'})}</text>`).join('');
+ const ls=pts.map(d=>d.l||0),lm=Math.max(1,...ls),H2=110,bw=Math.max(1,pw/Math.max(1,(t1-t0)/3600e3)-2);
+ const yl=v=>4+(1-v/lm)*(H2-30),bars=pts.map(d=>`<rect x="${(x(d.t)-bw/2).toFixed(1)}" y="${yl(d.l||0).toFixed(1)}" width="${bw.toFixed(1)}" height="${(H2-26-yl(d.l||0)).toFixed(1)}" rx="${Math.min(2,bw/2)}" fill="var(--mut)" opacity=".55"/>`).join('');
+ box.innerHTML=`<div class="ch"><div class="cap">Prix le plus bas en vente (kinah)</div><svg id="cs1" viewBox="0 0 ${W} ${H}" height="${H}">${grid}${xl(H)}`
+  +`<path d="${path}" fill="none" stroke="var(--acc)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`
+  +`<line id="cx1" y1="4" y2="${H-22}" stroke="var(--txt)" opacity=".35" visibility="hidden"/><circle id="cd" r="4.5" fill="var(--acc)" stroke="var(--card)" stroke-width="2" visibility="hidden"/></svg>`
+  +`<div class="cap">Nombre d'annonces</div><svg id="cs2" viewBox="0 0 ${W} ${H2}" height="${H2}">`
+  +`<text x="${L-8}" y="${yl(lm)+4}" text-anchor="end" fill="var(--mut)" font-size="11">${NF.format(lm)}</text>${xl(H2)}${bars}`
+  +`<line id="cx2" y1="4" y2="${H2-22}" stroke="var(--txt)" opacity=".35" visibility="hidden"/></svg><div id="ctip"></div></div>`
+  +`<p class="mut" style="font-size:12.5px;margin:8px 0 0">${pts.length} relevés · prix ${kf(lo)} à ${kf(hi)} · heure de ton navigateur</p>`;
+ const ch=box.querySelector('.ch'),tip=document.getElementById('ctip');
+ const move=e=>{const r=ch.getBoundingClientRect(),sx=(e.clientX-r.left)*W/r.width,t=t0+(sx-L)/pw*(t1-t0);
+  let k=0;pts.forEach((d,i)=>{if(Math.abs(d.t-t)<Math.abs(pts[k].t-t))k=i});const d=pts[k],X=x(d.t);
+  ['cx1','cx2'].forEach(i=>{const el=document.getElementById(i);el.setAttribute('x1',X);el.setAttribute('x2',X);el.setAttribute('visibility','visible')});
+  const c=document.getElementById('cd');c.setAttribute('cx',X);c.setAttribute('cy',yp(d.p));c.setAttribute('visibility','visible');
+  tip.innerHTML=`<span class="mut">${new Date(d.t).toLocaleString('fr-FR',{weekday:'short',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</span><br><b>${NF.format(d.p)}</b> kinah · ${NF.format(d.l||0)} annonce(s)`;
+  tip.style.display='block';const px=X*r.width/W;tip.style.left=Math.min(Math.max(0,px+12),r.width-tip.offsetWidth)+'px';tip.style.top='30px'};
+ ch.onmousemove=move;ch.ontouchmove=e=>move(e.touches[0]);
+ ch.onmouseleave=()=>{tip.style.display='none';['cx1','cx2','cd'].forEach(i=>document.getElementById(i).setAttribute('visibility','hidden'))}}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeChart()});
 function clearStock(){document.querySelectorAll('#stock input[data-r]').forEach(i=>i.value='');calc()}
 document.addEventListener('DOMContentLoaded',()=>{let t='home';try{t=localStorage.getItem('tab')||t;
  if(localStorage.getItem('detail')){document.body.classList.add('detail');document.querySelectorAll('input.dt').forEach(x=>x.checked=true)}}catch(e){}
@@ -189,6 +232,7 @@ class Ctx:
             if r["world_id"] in set(world_ids):
                 self.gather_counts[r["name"]] = self.gather_counts.get(r["name"], 0) + r["c"]
         self.gather_names = set(self.gather_counts)
+        self.charted = set()       # items dont la courbe de prix est disponible (prices.js)
         self.by_base = {}
         for it in self.items.values():
             if not it["bound"]:
@@ -208,10 +252,18 @@ class Ctx:
             return f'<button class="mapbtn" data-r="{esc(base)}" onclick="openMap(this.dataset.r)">MAP</button>'
         return ""
 
+    def chartbtn(self, item_id, name):
+        iid = item_id or (self.by_base.get(name) or {}).get("id")
+        if iid not in self.charted:
+            return ""
+        return (f'<button class="mapbtn" title="Courbe de prix sur 7 jours" '
+                f'onclick="openChart({iid},this.dataset.n)" data-n="{esc(name)}">📈</button>')
+
     def label(self, item_id=None, name=None, sub=None):
         nm = name or (self.items.get(item_id) or {}).get("name") or item_id
         s = f'<div class="sub">{esc(sub)}</div>' if sub else ""
-        return f'<span class="it">{self.icon(item_id, name)}<span><span class="nm" title="Cliquer pour copier">{esc(nm)}</span>{self.mapbtn(nm)}{s}</span></span>'
+        return (f'<span class="it">{self.icon(item_id, name)}<span><span class="nm" title="Cliquer pour copier">{esc(nm)}</span>'
+                f'{self.chartbtn(item_id, nm)}{self.mapbtn(nm)}{s}</span></span>')
 
 
 def _cls(v):
@@ -383,6 +435,39 @@ def stock_calc(ctx, cfg, harvest, names):
             f'<script>window.CRAFTS={json.dumps(data, ensure_ascii=False).replace("</", "<\\/")};</script>')
 
 
+def table_flips(ctx, flips, cfg):
+    a = cfg["alerts"]
+    body = []
+    for f in flips:
+        st = ('<span class="badge b-ok">Acheter maintenant</span>' if f["acheter"]
+              else '<span class="badge b-mut">Attendre</span>')
+        body.append(f"<tr><td>{ctx.label(f['item_id'])}</td><td data-v='{0 if f['acheter'] else 1}'>{st}</td>"
+                    f"{_num_td(f['prix'], color=False)}{_num_td(f['achat_cible'], 'big', color=False)}"
+                    f"{_num_td(f['revente_cible'], color=False)}{_num_td(f['net_u'])}"
+                    f"<td class='n' data-v='{f['marge']}'>{f['marge']:.0%}</td>{_num_td(f['ma_part_j'], color=False)}"
+                    f"{_num_td(f['profit_j'], 'big', k=True)}<td>{lots_txt(f)}</td>"
+                    f"{_num_td(f['capital_j'], 'x', color=False, k=True)}{_num_td(f['annonces'], 'mut x', color=False)}"
+                    f"{_num_td(f['releves'], 'mut x', color=False)}</tr>")
+    head = ("<tr>" + _th("Item") + _th("Statut") + _th("Prix actuel", "Prix le plus bas en vente", True)
+            + _th("Acheter à ≤", "Prix d'achat cible : bas de la fourchette habituelle (1er quartile sur 3 j)", True)
+            + _th("Revendre à", "Prix plancher médian des 3 derniers jours", True)
+            + _th("Net/u", "Après 12 % de taxes et frais", True) + _th("Marge", None, True)
+            + _th("Ventes/j", "Ta part du marché (20 %)", True) + _th("Profit/j", None, True)
+            + _th("Mettre en vente", "Taille habituelle des lots vendus")
+            + _th("Capital/j", "Kinah à immobiliser par jour", True, True) + _th("Annonces", None, True, True)
+            + _th("Relevés", "Prix relevés sur 3 j", True, True) + "</tr>")
+    lead = ("<p class='lead'>Acheter un item quand il passe en bas de sa fourchette de prix habituelle, le revendre "
+            "au prix médian, sans rien fabriquer. Calcul sur les 3 derniers jours ; les items dont le prix monte ou "
+            "baisse durablement, le brut (invendable) et les items sans volume de vente connu sont écartés. "
+            f"Alerte Discord quand un item passe sous son prix d’achat cible (marge ≥ {a['flip_min_margin']:.0%}, "
+            f"profit ≥ {fmt(a['flip_min_profit_day'])}/j).</p>")
+    if not flips:
+        return lead + ('<div class="card"><span class="mut">Rien pour l’instant : il faut au moins '
+                       f'{a["flip_min_samples"]} prix relevés par item, l’historique se remplit à chaque passage.</span></div>')
+    return lead + toolbar("flips") + (f'<div class="wrap"><table id="flips"><thead>{head}</thead>'
+                                      f'<tbody>{"".join(body)}</tbody></table></div>')
+
+
 def table_uniques(ctx, uniques, cfg):
     a = cfg["alerts"]
     body = []
@@ -446,6 +531,32 @@ def table_market(con, ctx, cfg):
                     f"<td class='x'><span class='badge {'b-ok' if chk == 'ok' else 'b-warn'}'>{esc(chk)}</span></td></tr>")
     return (toolbar("market", f'<span class="mut">{len(latest)} items en vente sur les serveurs suivis</span>')
             + f'<div class="wrap"><table id="market"><thead>{head}</thead><tbody>{"".join(body)}</tbody></table></div>')
+
+
+def write_price_data(con, cfg, days=7):
+    """Historique horaire du serveur suivi (prix plancher, annonces) pour les courbes, charge a la demande (prices.js).
+    Releves horaires a2-tracker, completes par l'historique horaire aion2.exchange."""
+    server = str(cfg["my_server"])
+    now = datetime.now(timezone.utc)
+    t0 = int((now - timedelta(days=days)).timestamp()) // 3600 * 3600
+    since = datetime.fromtimestamp(t0, timezone.utc).isoformat()[:19]
+    series = {}
+
+    def put(iid, ts, price, listings):
+        h = int(datetime.fromisoformat(ts[:19]).replace(tzinfo=timezone.utc).timestamp() - t0) // 3600
+        if h >= 0 and price:
+            series.setdefault(iid, {})[h] = [h, round(price), int(listings or 0)]
+    srv = con.execute("SELECT ax_id FROM servers WHERE id=?", (server,)).fetchone()
+    if srv and srv["ax_id"]:
+        for r in con.execute("SELECT item_id, ts, close, listings FROM ax_prices WHERE ax_server=? AND bucket='1h' "
+                             "AND ts>=?", (srv["ax_id"], since)):
+            put(r["item_id"], r["ts"], r["close"], r["listings"])
+    for r in con.execute("SELECT item_id, ts, price, listings FROM quotes WHERE server=? AND ts>=?", (server, since)):
+        put(r["item_id"], r["ts"], r["price"], r["listings"])     # le releve horaire prime
+    data = {str(i): [v[h] for h in sorted(v)] for i, v in series.items() if len(v) >= 2}
+    (REPORT_DIR / "prices.js").write_text("window.PRICES=" + json.dumps({"t0": t0, "s": data}, separators=(",", ":"))
+                                          + ";", encoding="utf-8")
+    return {int(i) for i in data}
 
 
 def map_world_ids(con, cfg):
@@ -546,18 +657,43 @@ def home(con, cfg, ctx, my, sname):
         f'<div class="card" style="padding:10px 14px"><span><span class="mut">{esc(paris(a["ts"], "%H:%M"))}</span> · {_md(a["message"])}</span></div>'
         for a in al) + "</div>") if al else '<p class="mut">Aucune alerte aujourd’hui.</p>'
 
+    # 5. mes annonces
+    mine = my.get("listings") or []
+    if mine:
+        rows = "".join(
+            f"<tr><td>{ctx.label(l['item_id']) if l['item_id'] else esc(l['nom']) + ' <span class=\"badge b-warn\">nom introuvable</span>'}</td>"
+            f"{_num_td(l['mon_prix'], color=False)}{_num_td(l['plancher'], color=False)}"
+            f"<td>{'<span class=\"badge b-bad\">Battu de ' + fmt(l['ecart']) + '</span>' if l['battu'] else ('<span class=\"badge b-ok\">Le moins cher</span>' if l['plancher'] is not None else '<span class=\"badge b-mut\">Pas en vente</span>')}</td></tr>"
+            for l in mine)
+        mine_html = (f'<div class="wrap"><table><thead><tr>{_th("Mon annonce")}{_th("Mon prix", None, True)}'
+                     f'{_th("Prix le plus bas", None, True)}{_th("Statut")}</tr></thead><tbody>{rows}</tbody></table></div>')
+    else:
+        mine_html = ('<p class="mut">Liste tes annonces dans <code>mes_annonces.json</code> (nom exact : prix) pour être '
+                     'alerté quand quelqu’un vend moins cher que toi.</p>')
+
+    # 6. annonces officielles
+    news = con.execute("SELECT * FROM news WHERE key NOT LIKE 'reddit|%' ORDER BY posted DESC LIMIT 6").fetchall()
+    news_html = ('<div class="uses">' + "".join(
+        f'<div class="card" style="padding:10px 14px"><span><span class="mut">{esc(paris(n["posted"], "%d/%m %H:%M"))}</span> · '
+        f'{_md(n["label"])} : <a href="{esc(n["url"])}" target="_blank" rel="noopener" style="color:var(--acc)">'
+        f'{esc(n["title"])}</a></span></div>' for n in news) + "</div>") if news else \
+        '<p class="mut">Les annonces officielles apparaîtront ici après le prochain passage.</p>'
+
     return (f"<h2>Aujourd’hui sur {esc(sname)}</h2><p class='lead'>Ce qu’il faut faire aujourd’hui pour gagner un maximum de kinah. "
             "Les tableaux complets sont dans les autres onglets.</p>" + kpis
             + "<h3>① Fabriquer et vendre</h3>" + hours_html(my.get("hours")) + "<br>" + craft_html
             + "<h3>② Quoi récolter</h3>" + gather_html
             + "<h3>③ Acheter → fabriquer → revendre</h3>" + buy_html
-            + "<h3>④ Alertes du jour</h3>" + alert_html)
+            + "<h3>④ Mes annonces</h3>" + mine_html
+            + "<h3>⑤ Alertes du jour</h3>" + alert_html
+            + "<h3>⑥ Annonces officielles</h3>" + news_html)
 
 
 def build(con, cfg, results):
     REPORT_DIR.mkdir(exist_ok=True)
     ctx = Ctx(con, map_world_ids(con, cfg))
     write_map_data(con, cfg)
+    ctx.charted = write_price_data(con, cfg)
     names = {r["id"]: r["name"] for r in con.execute("SELECT id, name FROM servers")}
     my = next((r for r in results if r["server"] == str(cfg["my_server"])), results[0] if results else None)
     sname = names.get(my["server"], my["server"]) if my else "?"
@@ -584,6 +720,7 @@ def build(con, cfg, results):
         add("buy", "Achat → craft",
             f"<h2>Acheter les ingrédients → fabriquer → revendre</h2><p class='lead'>{hyp}</p>"
             + table_crafts(ctx, my["buy"], "tb", False))
+        add("flips", "🔁 Flip", "<h2>Achat → revente (sans craft)</h2>" + table_flips(ctx, my["flips"], cfg))
         add("uniques", "💎 Uniques", "<h2>Équipements Unique : prix bradés</h2>" + table_uniques(ctx, my["uniques"], cfg))
         add("plan", "🧮 Mon stock", "<h2>Mon stock → quoi fabriquer</h2>" + stock_calc(ctx, cfg, my["harvest"], my["market"].gather_names())
             + ("<h3>Plan quotidien (config)</h3>" + table_plan(my["plan"]) if my["plan"] else ""))
@@ -608,6 +745,8 @@ def build(con, cfg, results):
 <header><h1>HDV Aion 2 · <b>{esc(sname)}</b></h1>
 <div class="meta">Prix relevés le {esc(paris(as_of) if my and as_of else "?")} (heure de Paris)<br>Page générée le {esc(paris())}</div></header>
 <nav>{''.join(navs)}</nav><main>{''.join(sections)}</main>
+<div id="cmodal" onclick="if(event.target===this)closeChart()"><div class="box"><div class="bar"><b id="ctitle"></b>
+<button class="mapbtn" onclick="closeChart()">Fermer ✕</button></div><div id="cbody"></div></div></div>
 <div id="modal" onclick="if(event.target===this)closeMap()"><div class="box"><div class="bar"><b id="mtitle"></b>
 <button class="mapbtn" onclick="closeMap()">Fermer ✕</button></div><iframe id="mframe"></iframe></div></div>
 </body></html>"""
