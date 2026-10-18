@@ -1,16 +1,14 @@
 # Releve des prix Aion 2 + publication du site (GitHub Pages, branche gh-pages)
-#   - deux fois par heure (hh:07 et hh:37 UTC) : hourly (prix, analyses, alertes, annonces). GitHub saute souvent
-#     des passages planifies : deux creneaux par heure assurent au moins un releve horaire.
-#   - chaque jour a 15:40 UTC       : daily (volumes de reference, activite, historique, resume Discord)
+# Declenche de l'exterieur par cron-job.org (API workflow_dispatch), seul ordonnanceur ponctuel :
+#   - toutes les heures : hourly (prix, analyses, alertes, annonces officielles)
+#   - chaque jour a 17:40 (Paris) : daily (recettes, volumes de reference, activite, historique, resume Discord)
+# Les creneaux planifies de GitHub (schedule) ont ete retires : retards de plusieurs heures et doublons.
 # La base SQLite est conservee dans le cache d'Actions. Si le cache est vide, elle repart de la derniere sauvegarde
 # (release GitHub "db-backup", mise a jour a chaque passage daily), et a defaut de seed/aion.db.gz.
 # Secrets : SITE_PASSWORD (obligatoire), DISCORD_WEBHOOK_URL, DISCORD_WEBHOOK_UNIQUE_URL, DISCORD_WEBHOOK_NEWS_URL (facultatifs).
 name: HDV Aion 2
 
 on:
-  schedule:
-    - cron: "7,37 * * * *"
-    - cron: "40 15 * * *"
   workflow_dispatch:
     inputs:
       job:
@@ -64,9 +62,7 @@ jobs:
         id: job
         run: |
           job="${{ inputs.job }}"
-          if [ -z "$job" ]; then
-            if [ "${{ github.event.schedule }}" = "40 15 * * *" ]; then job=daily; else job=hourly; fi
-          fi
+          [ -n "$job" ] || job=hourly
           echo "name=$job" >> "$GITHUB_OUTPUT"
 
       - name: Passage ${{ steps.job.outputs.name }}

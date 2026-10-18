@@ -64,9 +64,11 @@ logs/           run.log, alerts.log
 
 ## Serveur gratuit (GitHub Actions)
 
-Le workflow `.github/workflows/hdv.yml` tourne sur GitHub :
-- deux fois par heure (hh:07 et hh:37 UTC, GitHub sautant souvent des passages) : relevé des prix, analyses, alertes Discord, annonces officielles, mise à jour du site ;
-- chaque jour à 15:40 UTC : volumes de référence, activité, résumé Discord (+ tendances de la semaine le dimanche), sauvegarde de la base.
+Le workflow `.github/workflows/hdv.yml` tourne sur GitHub. Il est déclenché par **cron-job.org** (les créneaux planifiés de GitHub prenaient des heures de retard) :
+- tâche « HDV hourly », toutes les heures : relevé des prix, analyses, alertes Discord, annonces officielles, mise à jour du site ;
+- tâche « HDV daily », chaque jour à 17h40 : recettes, volumes de référence, activité, résumé Discord (+ tendances le dimanche), sauvegarde de la base.
+
+Chaque tâche appelle `POST https://api.github.com/repos/<pseudo>/<depot>/actions/workflows/hdv.yml/dispatches` avec les en-têtes `Accept: application/vnd.github+json`, `Authorization: Bearer <token>` (token fine-grained, permission Actions : lecture et écriture) et `X-GitHub-Api-Version: 2022-11-28`, et le corps `{"ref":"main","inputs":{"job":"hourly"}}` (ou `daily`).
 
 La base est conservée dans le cache d'Actions. Chaque passage daily la sauvegarde aussi dans la release GitHub `db-backup` : si le cache est vidé, elle est restaurée depuis cette sauvegarde, et à défaut depuis `seed/aion.db.gz` (à régénérer avec `scripts/seed_db.py`).
 
@@ -77,7 +79,7 @@ Secrets à créer dans Settings > Secrets and variables > Actions :
 - `DISCORD_WEBHOOK_URL` ;
 - `DISCORD_WEBHOOK_UNIQUE_URL`, `DISCORD_WEBHOOK_NEWS_URL` (facultatifs : sinon tout va dans le salon principal).
 
-Pour lancer un passage à la main : onglet Actions > HDV Aion 2 > Run workflow.
+Pour lancer un passage à la main : onglet Actions > HDV Aion 2 > Run workflow (ou « Tester l'exécution » sur cron-job.org).
 
 En local, le webhook se range dans `config.local.json`, qui n'est jamais versionné.
 
@@ -92,6 +94,7 @@ Les secrets (mot de passe du site, webhook Discord) ne sont pas dans le dépôt 
 4. Dans `config.json`, choisir son serveur : `my_server` et `watch_servers` (ids a2-tracker : 2310 Hadala, 2315 Zemurru, 2318 Baba…).
 5. Remplacer le sel de `.staticrypt.json` par une valeur à soi (`openssl rand -hex 16`), puis commit.
 6. Actions > HDV Aion 2 > **Run workflow** une première fois, puis Settings > Pages : *Deploy from a branch*, `gh-pages`, `/ (root)`.
+7. Créer les deux tâches cron-job.org (voir « Serveur gratuit » ci-dessus) avec son propre token.
 
 Le site est publié sur `https://<pseudo>.github.io/<nom-du-depot>/` et se met à jour tout seul ensuite.
 
