@@ -3,6 +3,8 @@ import json
 import statistics
 from datetime import datetime, timedelta, timezone
 
+from .collect import PARIS
+
 # equivalences Asmodiens -> Elyseens (Kaisinel, serveur de reference, est elyseen)
 ELYOS_EQ = [("Asvata", "Yggdrasil"), ("conide", "l'inina"), ("pujery", "cypri"), ("d'ohkra", "de kukuru"),
             ("dragon noir", "dragon blanc")]
@@ -111,6 +113,53 @@ class Market:
             break
         self._ref[item_id] = res
         return res
+
+    def _drops_per_day(self, server, item_id, days=7):
+        since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()[:19]
+        r = self.con.execute("SELECT AVG(drops_h) AS d FROM activity WHERE server=? AND item_id=? AND ts>=?",
+                             (str(server), item_id, since)).fetchone()
+        return r["d"] * 24 if r and r["d"] else None
+
+    def lot_size(self, item_id):
+        """Taille moyenne d'un lot vendu = unites vendues par jour / annonces disparues par jour.
+        D'abord sur le serveur de reference (les deux chiffres y sont mesures), sinon sur mon serveur (volume estime)."""
+        ref = self.ref(item_id)
+        if not ref or not ref["daily"]:
+            return None
+        for server, iid, units in ((self.cfg["reference_server"], ref["ref_item"], ref["daily"]),
+                                   (self.server, item_id, ref["daily"] * self.ratio)):
+            drops = self._drops_per_day(server, iid)
+            if drops and drops >= 3:
+                return max(1, round(units / drops))
+        return None
+
+    def hourly_profile(self, days=7):
+        """Part des ventes par heure (heure de Paris) : annonces disparues d'une heure a l'autre, tous items confondus
+        (historique horaire aion2.exchange). None tant qu'il n'y a pas assez de donnees."""
+        srv = self.con.execute("SELECT ax_id FROM servers WHERE id=?", (self.server,)).fetchone()
+        if not srv or not srv["ax_id"]:
+            return None
+        since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        tz = PARIS or timezone.utc
+        sold = [0.0] * 24
+        prev = {}
+        for r in self.con.execute("SELECT item_id, ts, listings FROM ax_prices WHERE ax_server=? AND bucket='1h' "
+                                  "AND ts>=? AND listings IS NOT NULL ORDER BY item_id, ts", (srv["ax_id"], since)):
+            t = _dt(r["ts"])
+            p = prev.get(r["item_id"])
+            if p and t - p[0] == timedelta(hours=1) and r["listings"] < p[1]:
+                sold[t.astimezone(tz).hour] += p[1] - r["listings"]
+            prev[r["item_id"]] = (t, r["listings"])
+        total = sum(sold)
+        if total < 200:
+            return None
+        share = [s / total for s in sold]
+
+        def window(best):
+            sums = [(sum(share[(h + k) % 24] for k in range(3)), h) for h in range(24)]
+            return (max if best else min)(sums)[1]
+        return dict(share=share, best=window(True), low=window(False), sold=round(total), days=days,
+                    tz="Paris" if PARIS else "UTC")
 
     def _activity_ratio(self):
         ref_server = str(self.cfg["reference_server"])
@@ -263,7 +312,15 @@ class Market:
             ressources_u=res_u, net_par_ressource=round(net_u / res_u) if res_u else None,
             vol_serveur_j=round(vol), ma_part_j=round(mine),
             profit_j=round(mine * net_u), profit_pess_j=round(mine * net_pu),
-            capital_j=round(mine * cost_u), flags=flags)
+            capital_j=round(mine * cost_u), flags=flags, **self.sizing(oid, mine))
+
+    def sizing(self, item_id, per_day):
+        """Combien d'annonces poster et de quelle taille, pour ecouler ma part du jour."""
+        lot = self.lot_size(item_id)
+        if not lot or per_day < 1:
+            return dict(lot_vente=lot, nb_lots_j=None)
+        lot = min(lot, max(1, round(per_day)))
+        return dict(lot_vente=lot, nb_lots_j=max(1, round(per_day / lot)))
 
     def best_per_item(self, mode):
         out = []
@@ -326,7 +383,8 @@ class Market:
             for res, per in e["ressources"].items():
                 stock[res] -= n * per
             plan.append(dict(objet=e["objet"], quantite_j=n, prix_conseille=e["prix_real"], net_u=e["net_u"],
-                             kinah_j=n * e["net_u"], ressources={r: round(n * p) for r, p in e["ressources"].items()}))
+                             kinah_j=n * e["net_u"], ressources={r: round(n * p) for r, p in e["ressources"].items()},
+                             **self.sizing(e["item_id"], n)))
         return plan
 
 
@@ -348,4 +406,4 @@ def run_all(con, cfg, server=None):
                 (run_ts, server, "plan", None, None, None, json.dumps(plan, ensure_ascii=False)))
     con.commit()
     return dict(run_ts=run_ts, server=server, as_of=m.as_of, ratio=m.ratio, harvest=harvest, buy=buy,
-                targets=targets, plan=plan, market=m)
+                targets=targets, plan=plan, hours=m.hourly_profile(), market=m)

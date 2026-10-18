@@ -51,9 +51,12 @@ def cmd_snapshot(con, cfg):
 
 
 def cmd_activity(con, cfg):
-    items = collect.core_items(con, 60)
+    items = list(dict.fromkeys(collect.core_items(con, 60) + collect.top_products(con, cfg["my_server"], 40)))
+    # le serveur de reference est elyseen : on y suit les equivalents des produits asmodiens
+    ref_items = list(dict.fromkeys(items + [e for e in (analysis.elyos_equivalent(con, i) for i in items) if e]))
     for s in dict.fromkeys([cfg["my_server"], *cfg["watch_servers"], cfg["reference_server"]]):
-        log(f"activite {s} : {collect.collect_activity(con, s, items)} items")
+        ids = ref_items if str(s) == str(cfg["reference_server"]) else items
+        log(f"activite {s} : {collect.collect_activity(con, s, ids)} items")
 
 
 def cmd_refvolume(con, cfg):

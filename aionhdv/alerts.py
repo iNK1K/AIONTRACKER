@@ -132,9 +132,14 @@ def digest(con, cfg, result, top=8):
     sname = srv["name"] if srv else result["server"]
     lines = [f"📊 **Résumé du jour : {sname}** (prix de {paris(result['as_of'], '%H:%M')} heure de Paris, activité x{result['ratio']:.2f} par rapport à la référence)",
              "", "**Ma récolte → craft → vente** (profit par jour à 20 % du marché)"]
+    h = result.get("hours")
+    if h:
+        lines.insert(1, f"🕒 Meilleur moment pour poster : **{h['best']}h – {(h['best'] + 3) % 24}h** "
+                        f"(creux {h['low']}h – {(h['low'] + 3) % 24}h, heure de {h['tz']})")
     for i, e in enumerate([e for e in result["harvest"] if not e["flags"]][:top], 1):
         lines.append(f"{i}. {e['objet']} : vends à ~{fmt(e['prix_real'])}, net {fmt(e['net_u'])}/u, "
-                     f"~{fmt(e['ma_part_j'])}/j → **{fmt(e['profit_j'])}/j**")
+                     f"~{fmt(e['ma_part_j'])}/j → **{fmt(e['profit_j'])}/j**"
+                     + (f" ({e['nb_lots_j']} annonce(s) de {fmt(e['lot_vente'])})" if e.get("nb_lots_j") else ""))
     buys = [e for e in result["buy"] if not e["flags"] and e["net_u"] > 0]
     lines += ["", "**Achat → craft → revente**"]
     if buys:

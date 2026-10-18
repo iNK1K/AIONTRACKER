@@ -72,6 +72,10 @@ code{background:var(--card2);padding:1px 6px;border-radius:5px}
 #modal .box{width:min(1200px,96vw);height:min(850px,92vh);background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
 #modal .bar{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
 #modal iframe{flex:1;border:0;width:100%}
+.hours{display:flex;gap:3px;align-items:flex-end;height:96px;margin-top:4px}
+.hb{flex:1;min-width:0;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:3px}
+.hb i{display:block;width:100%;background:var(--line);border-radius:3px 3px 0 0;min-height:2px}
+.hb.on i{background:var(--acc)}.hb span{font-size:10px;color:var(--mut);height:12px;line-height:12px}
 """
 
 JS = """
@@ -288,19 +292,44 @@ def table_targets(ctx, targets):
             f'<tbody>{"".join(body)}</tbody></table></div>')
 
 
+def lots_txt(e):
+    """« 4 annonces de 100 » : comment decouper ce qu'on met en vente dans la journee."""
+    n, lot = e.get("nb_lots_j"), e.get("lot_vente")
+    if not n:
+        return "–"
+    return f"{n} annonce{'s' if n > 1 else ''} de {fmt(lot)}"
+
+
+def hours_html(h):
+    """Barres des ventes par heure, fenetre de 3 h la plus active en surbrillance."""
+    if not h:
+        return ('<p class="mut">Heures de vente : pas encore assez d’historique horaire, '
+                'il se remplit à chaque passage quotidien.</p>')
+    top = max(h["share"])
+    bars = "".join(
+        f'<div class="hb{" on" if (i - h["best"]) % 24 < 3 else ""}" title="{i}h : {v:.1%} des ventes">'
+        f'<i style="height:{v / top * 100:.0f}%"></i><span>{i if i % 3 == 0 else ""}</span></div>'
+        for i, v in enumerate(h["share"]))
+    return (f'<div class="card"><div class="row"><span>Meilleur moment pour poster : '
+            f'<b>{h["best"]}h – {(h["best"] + 3) % 24}h</b> · creux : {h["low"]}h – {(h["low"] + 3) % 24}h</span>'
+            f'<span>{fmt(h["sold"])} annonces vendues sur {h["days"]} j · heure de {h["tz"]}</span></div>'
+            f'<div class="hours">{bars}</div></div>')
+
+
 def table_plan(plan):
     if not plan:
         return ('<div class="card"><b>Pas encore de plan.</b><span class="mut">Renseigne <code>harvest_per_day</code> dans '
                 '<code>config.json</code>, par exemple <code>{"Bois d\'Asvata": 300, "Azpha": 150}</code>, '
                 'pour obtenir ton plan de production du jour.</span></div>')
     body = "".join(f"<tr><td>{esc(p['objet'])}</td>{_num_td(p['quantite_j'], color=False)}{_num_td(p['prix_conseille'], color=False)}"
-                   f"{_num_td(p['net_u'])}{_num_td(p['kinah_j'], 'big', k=True)}<td class='sub'>"
+                   f"{_num_td(p['net_u'])}{_num_td(p['kinah_j'], 'big', k=True)}<td>{lots_txt(p)}</td><td class='sub'>"
                    f"{esc(', '.join(f'{k} ×{v}' for k, v in p['ressources'].items()))}</td></tr>" for p in plan)
     total = sum(p["kinah_j"] for p in plan)
     return (f'<div class="kpis"><div class="kpi"><div class="l">Total estimé</div><div class="v pos">{kfmt(total)}</div>'
             f'<div class="s">kinah par jour</div></div></div><div class="wrap"><table><thead><tr>{_th("Craft")}'
             f'{_th("Quantité/j", None, True)}{_th("Vendre à", None, True)}{_th("Net/u", None, True)}'
-            f'{_th("Kinah/j", None, True)}{_th("Ressources utilisées")}</tr></thead><tbody>{body}</tbody></table></div>')
+            f'{_th("Kinah/j", None, True)}{_th("Mettre en vente", "Taille habituelle des lots vendus sur le marché")}'
+            f'{_th("Ressources utilisées")}</tr></thead><tbody>{body}</tbody></table></div>')
 
 
 def table_market(con, ctx, cfg):
@@ -393,6 +422,7 @@ def home(con, cfg, ctx, my, sname):
             f'<div class="row"><span>Vendre à</span><b>{fmt(e["prix_real"])}</b></div>'
             f'<div class="row"><span>Net par unité</span><b class="pos">{fmt(e["net_u"])}</b></div>'
             f'<div class="row"><span>À vendre par jour</span><b>~{fmt(e["ma_part_j"])}</b></div>'
+            f'<div class="row"><span>Mettre en vente</span><b>{lots_txt(e)}</b></div>'
             f'<div class="row"><span>Profit/j</span><span class="big">{kfmt(e["profit_j"])}</span></div>{tip}</div>')
     craft_html = f'<div class="cards">{"".join(cards)}</div>' if cards else '<p class="mut">Aucun craft rentable.</p>'
 
@@ -426,7 +456,7 @@ def home(con, cfg, ctx, my, sname):
 
     return (f"<h2>Aujourd’hui sur {esc(sname)}</h2><p class='lead'>Ce qu’il faut faire aujourd’hui pour gagner un maximum de kinah. "
             "Les tableaux complets sont dans les autres onglets.</p>" + kpis
-            + "<h3>① Fabriquer et vendre</h3>" + craft_html
+            + "<h3>① Fabriquer et vendre</h3>" + hours_html(my.get("hours")) + "<br>" + craft_html
             + "<h3>② Quoi récolter</h3>" + gather_html
             + "<h3>③ Acheter → fabriquer → revendre</h3>" + buy_html
             + "<h3>④ Alertes du jour</h3>" + alert_html)
