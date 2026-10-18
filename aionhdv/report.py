@@ -313,6 +313,9 @@ function planSafe(save){const box=document.getElementById('psafe');if(!box||!win
   (plan[s.r]=plan[s.r]||{h:0,res:0,k:0,c:[]});plan[s.r].h+=h;plan[s.r].res+=res;plan[s.r].k+=units*s.per*s.n;
   plan[s.r].c.push({o:s.o,units:units,lot:s.lot,k:units*s.per*s.n})}
  const rows=Object.entries(plan).sort((a,b)=>b[1].k-a[1].k);
+ window.SAFEPLAN={tot:tot,hours:(+hEl.value||0)-left,rows:rows};
+ const kp=document.getElementById('kpot');if(kp){kp.textContent=kf(tot);document.getElementById('kpots').textContent=
+  'en '+String(+hEl.value||0).replace('.',',')+' h de jeu (Planning safe, récolte '+(Object.keys(R).length?'saisie':'100/h par défaut')+')'}
  if(!rows.length){box.innerHTML='<p class="mut">Aucun craft rentable à planifier.</p>';return}
  const fmtH=h=>h<1?Math.round(h*60)+' min':h.toFixed(1).replace('.',',')+' h';
  box.innerHTML='<div class="kpis"><div class="kpi"><div class="l">Gain estimé</div><div class="v pos">'+kf(tot)+'</div><div class="s">kinah, une fois tout vendu</div></div>'
@@ -561,7 +564,7 @@ def planning_tab(cfg, my):
             "<p class='lead'>À chaque craft d’une chaîne, si la fabrication réussit, le <b>combo</b> donne la version "
             "<b>éclatante</b> (grade supérieur), seule à pouvoir servir à l’étape suivante ; sinon tu obtiens l’objet normal. "
             "Un échec fait perdre les matières <b>et</b> l’objet éclatant mis dedans. À chaque palier, le calcul compare "
-            "« vendre l’éclatant » et « le risquer plus haut ». Prix = prix habituel sur ton serveur, après 12 % de frais.</p>"
+            "« vendre l’éclatant » et « le risquer plus haut ». Prix = prix habituel sur ton serveur, après la taxe de 10 %.</p>"
             '<div class="toolbar"><label class="tg">Chance de combo : <input type="number" id="pcombo" min="1" max="100" '
             'step="1" style="width:64px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;background:var(--bg2);'
             'color:var(--txt);font:inherit" oninput="planGamble(true)"> %</label>'
@@ -645,7 +648,7 @@ def table_crafts(ctx, rows, tid, harvest, compare=None):
             ("" if harvest else _th("Coût/u", "Coût des ingrédients au prix réaliste", True)) +
             _th("Réussite", "Chance de réussite selon tes niveaux (onglet Mes métiers) ; 🔒 = niveau insuffisant", True) +
             _th("Vendre à", "Prix de vente conseillé (réaliste)", True) +
-            _th("Net/u", "Bénéfice par unité après 12 % de taxes et frais (et échecs, selon tes niveaux)", True) +
+            _th("Net/u", "Bénéfice par unité après la taxe de l’HDV (10 %) (et échecs, selon tes niveaux)", True) +
             (_th("Net/ressource", "Bénéfice par ressource récoltée utilisée", True) if harvest
              else _th("Marge", "Bénéfice / coût", True)) +
             _th("Ventes/j", "Ta part (20 %) des ventes mesurées sur ton serveur : annonces disparues sur 24 h × taille "
@@ -874,7 +877,7 @@ def table_flips(ctx, flips, cfg):
     head = ("<tr>" + _th("Item") + _th("Statut") + _th("Prix actuel", "Prix le plus bas en vente", True)
             + _th("Acheter à ≤", "Prix d'achat cible : bas de la fourchette habituelle (1er quartile sur 3 j)", True)
             + _th("Revendre à", "Prix plancher médian des 3 derniers jours", True)
-            + _th("Net/u", "Après 12 % de taxes et frais", True) + _th("Marge", None, True)
+            + _th("Net/u", "Après la taxe de l’HDV (10 %)", True) + _th("Marge", None, True)
             + _th("Ventes/j", "Ta part du marché (20 %)", True) + _th("Profit/j", None, True)
             + _th("Mettre en vente", "Taille habituelle des lots vendus")
             + _th("Capital/j", "Kinah à immobiliser par jour", True, True) + _th("Annonces", None, True, True)
@@ -1016,13 +1019,12 @@ def home(con, cfg, ctx, my, sname):
     m = my["market"]
     good = [e for e in my["harvest"] if is_good(e)]
     top = good[:12]
-    total = sum(e["profit_j"] for e in good[:5])
     buys = [e for e in my["buy"] if is_good(e) and e["net_pess_u"] > 0]
     targets = [t for t in my["targets"] if t["meilleur"]][:6]
 
     kpis = (f'<div class="kpis">'
-            f'<div class="kpi"><div class="l">Potentiel du jour</div><div class="v pos">{kfmt(total)}</div>'
-            f'<div class="s">kinah/j avec tes 5 meilleurs crafts</div></div>'
+            '<div class="kpi"><div class="l">Potentiel du jour</div><div class="v pos" id="kpot">–</div>'
+            '<div class="s" id="kpots">selon le Planning safe</div></div>'
             f'<div class="kpi"><div class="l">Meilleur craft</div><div class="v" style="font-size:19px">'
             f'{esc(top[0]["objet"]) if top else "–"}</div><div class="s">{kfmt(top[0]["profit_j"]) + " /j" if top else ""}</div></div>'
             f'<div class="kpi"><div class="l">Achat → craft</div><div class="v {"pos" if buys else "mut"}">{len(buys)}</div>'
@@ -1106,7 +1108,7 @@ def home(con, cfg, ctx, my, sname):
             for l in mine)
         mine_html = (f'<div class="wrap"><table><thead><tr>{_th("Mon annonce")}{_th("Mon prix", None, True)}'
                      f'{_th("Prix le plus bas", None, True)}{_th("Statut")}'
-                     f'{_th("Seuil de rentabilité", "Coût de revient + 12 % de frais : ne vends pas en dessous", True)}'
+                     f'{_th("Seuil de rentabilité", "Coût de revient + taxe de 10 % : ne vends pas en dessous", True)}'
                      f'{_th("Gain/u au plus bas", None, True)}{_th("Conseil")}</tr></thead><tbody>{rows}</tbody></table></div>')
     else:
         mine_html = ('<p class="mut">Liste tes annonces dans <code>mes_annonces.json</code> (nom exact : prix, ou prix + coût '

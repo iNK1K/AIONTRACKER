@@ -304,16 +304,51 @@ class Market:
         return 0.40
 
     # ------------------------------------------------------------ prix d'achat / de vente
+    def sale_prices(self, item_id, hours):
+        """Prix des ventes observees : quand le nombre d'annonces baisse d'une heure a l'autre, les annonces parties
+        l'ont ete au prix le plus bas de l'heure precedente (une valeur par annonce disparue)."""
+        since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()[:19]
+        hourly = {}
+        srv = self.con.execute("SELECT ax_id FROM servers WHERE id=?", (self.server,)).fetchone()
+        if srv and srv["ax_id"]:
+            for r in self.con.execute("SELECT ts, close, listings FROM ax_prices WHERE ax_server=? AND bucket='1h' "
+                                      "AND item_id=? AND ts>=?", (srv["ax_id"], item_id, since)):
+                hourly[r["ts"][:13]] = (r["close"], r["listings"])
+        for r in self.con.execute("SELECT ts, price, listings FROM quotes WHERE server=? AND item_id=? AND ts>=?",
+                                  (self.server, item_id, since)):
+            hourly[r["ts"][:13]] = (r["price"], r["listings"])
+        pts, out = sorted(hourly.items()), []
+        for (_, (p0, l0)), (_, (p1, l1)) in zip(pts, pts[1:]):
+            if p0 and l0 is not None and l1 is not None and l1 < l0:
+                out += [p0] * int(l0 - l1)
+        return out
+
     def usual_price(self, item_id):
-        """Prix habituel sur MON serveur : mediane des prix plancher des 3 derniers jours (au moins 12 releves).
-        A defaut, prix de vente moyen du serveur de reference (Kaisinel), qui peut avoir un tout autre niveau de prix."""
+        """Prix habituel sur MON serveur = prix auquel l'item se vend vraiment : mediane des prix des ventes observees
+        sur 48 h (au moins 5), sinon 7 jours. Un pic ou l'on n'achete pas compte peu ; un vrai changement de niveau est
+        suivi. A defaut : mediane des prix plancher sur 7 jours hors jours en pic, puis prix moyen de Kaisinel."""
         if item_id not in self._usual:
-            vals = [p for _, p in self.price_series(item_id, 3)]
-            if len(vals) >= 12:
-                self._usual[item_id] = dict(price=statistics.median(vals), source="serveur")
-            else:
-                ref = self.ref(item_id)
-                self._usual[item_id] = dict(price=ref["avg_price"], source="Kaisinel") if ref and ref["avg_price"] else None
+            res = None
+            for hours in (48, 168):
+                sold = self.sale_prices(item_id, hours)
+                if len(sold) >= 5:
+                    res = dict(price=statistics.median(sold), source="ventes", sales=len(sold), hours=hours)
+                    break
+            if not res:
+                rows = self.price_series(item_id, 7)
+                if len(rows) >= 12:
+                    days = {}
+                    for ts, p in rows:
+                        days.setdefault(ts[:10], []).append(p)
+                    dmed = {d: statistics.median(v) for d, v in days.items()}
+                    m = statistics.median(dmed.values())
+                    kept = [p for d, v in days.items() if dmed[d] <= 1.6 * m for p in v]
+                    res = dict(price=statistics.median(kept or [p for _, p in rows]), source="serveur")
+                else:
+                    ref = self.ref(item_id)
+                    if ref and ref["avg_price"]:
+                        res = dict(price=ref["avg_price"], source="Kaisinel")
+            self._usual[item_id] = res
         return self._usual[item_id]
 
     def spike_since(self, item_id, usual):
