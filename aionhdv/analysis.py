@@ -43,8 +43,9 @@ class Market:
         ref = con.execute("SELECT ax_id FROM servers WHERE id = ?", (cfg["reference_server"],)).fetchone()
         self.ref_ax = ref["ax_id"] if ref else 11304
         self.items = {r["id"]: dict(r) for r in con.execute("SELECT * FROM items")}
+        # nom -> item echangeable ; plusieurs objets peuvent porter le meme nom : on prefere celui vu en vente
         self.by_base = {}
-        for it in self.items.values():
+        for it in sorted(self.items.values(), key=lambda i: not i.get("on_market")):
             if not it["bound"]:
                 self.by_base.setdefault(it["base_name"], it["id"])
         self._load_prices()
