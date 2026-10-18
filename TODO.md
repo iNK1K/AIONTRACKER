@@ -2,7 +2,13 @@
 
 Une tâche par ligne. Claude les traite dans l'ordre et coche `[x]` quand c'est fait.
 
-- [ ] 
+- [ ] Achat-revente pur (flip) : prix d'achat cible et de revente cible par item (fourchette 7 j), marge après 12 % de frais, onglet « Flip » trié par kinah/j, alerte Discord quand un item passe sous son prix d'achat cible
+- [ ] Sauvegarde solide de la base : copie hebdomadaire dans une Release GitHub, restauration automatique si le cache d'Actions est vide
+- [ ] Surveillance de mes annonces : je liste ce que j'ai en vente et à quel prix, alerte Discord quand quelqu'un vend moins cher que moi
+- [ ] Mode test `--dry-run` : lancer hourly/daily en local sans envoyer d'alertes Discord
+- [ ] Notes de patch × prix : repérer les items cités dans une note de version et surveiller leur prix pendant 48 h
+- [ ] Courbe de prix par item : clic sur un item → prix plancher et nombre d'annonces sur 7 j
+- [ ] Tendances de la semaine : résumé Discord le dimanche (plus fortes hausses/baisses sur 7 j, crafts entrés/sortis du top)
 
 ## Fait
 - [x] Afficher l'heure de Paris sur le site et dans le résumé Discord
