@@ -40,7 +40,7 @@ def lot_state(lot):
     (site.js, jState). frais = taxe de 10 % perdue : payee a chaque mise en vente, deduite de la vente si l'annonce se
     vend, perdue si elle est retiree ou relistee (relister = retirer puis remettre en vente)."""
     ev = sorted((e for e in lot.get("ev") or [] if not e.get("x")), key=lambda e: e.get("t") or "")   # x = annule
-    prix, cout, sold, retired, frais, recu, relistes = lot.get("prix"), lot.get("cout"), 0, 0, 0, 0, 0
+    prix, cout, src, sold, retired, frais, recu, relistes = lot.get("prix"), lot.get("cout"), lot.get("src"), 0, 0, 0, 0, 0
     for e in ev:
         if e["type"] in ("poste", "reliste"):
             prix = e.get("prix", prix)
@@ -54,7 +54,9 @@ def lot_state(lot):
             frais += e.get("frais") or 0                    # taxe de l'annonce retiree, perdue
         elif e["type"] == "cout":
             cout = e["cout"]
-    return dict(prix=prix, cout=cout, vendus=sold, retires=retired, reste=max(0, lot["qte"] - sold - retired), frais=frais,
+        elif e["type"] == "src":                            # origine : recolte, achat (-> craft) ou flip
+            src = e["src"]
+    return dict(prix=prix, cout=cout, src=src, vendus=sold, retires=retired, reste=max(0, lot["qte"] - sold - retired), frais=frais,
                 recu=recu, relistes=relistes)
 
 
@@ -75,7 +77,7 @@ def from_journal(journal):
         for e in lot.get("ev") or []:
             if e["type"] == "vendu" and e.get("t") and not e.get("x"):
                 sales.append(dict(date=e["t"], objet=lot["objet"], quantite=e["qte"], prix=e["prix"] * e["qte"],
-                                  recu=e.get("recu"), cout=st["cout"]))
+                                  recu=e.get("recu"), cout=st["cout"], origine=st["src"]))
     for a in listings.values():
         if a["_q"]:
             a["cout"] = round(a["_c"] / a["_q"])

@@ -116,10 +116,10 @@ function jid(){return Date.now().toString(36)+Math.random().toString(36).slice(2
 function jState(l){const ev=(l.ev||[]).filter(e=>!e.x).sort((a,b)=>(a.t||'').localeCompare(b.t||''));
  // frais = taxe de 10 % perdue : payee a chaque mise en vente, elle n'est recuperee (deduite de la vente) que si l'annonce
  // se vend ; relister ou retirer fait perdre celle de l'annonce retiree
- let prix=l.prix,cout=l.cout,sold=0,ret=0,frais=0,recu=0,rel=0,poste=null;
+ let prix=l.prix,cout=l.cout,src=l.src||null,sold=0,ret=0,frais=0,recu=0,rel=0,poste=null;
  ev.forEach(e=>{if(e.type==='poste'||e.type==='reliste'){prix=e.prix;frais+=e.frais||0;if(e.type==='reliste')rel++;else poste=e.t}
-  else if(e.type==='vendu'){sold+=e.qte;recu+=e.recu||0}else if(e.type==='retire'){ret+=e.qte;frais+=e.frais||0}else if(e.type==='cout')cout=e.cout});
- return {prix,cout,vendus:sold,retires:ret,reste:Math.max(0,l.qte-sold-ret),frais,recu,relistes:rel,poste,ev}}
+  else if(e.type==='vendu'){sold+=e.qte;recu+=e.recu||0}else if(e.type==='retire'){ret+=e.qte;frais+=e.frais||0}else if(e.type==='cout')cout=e.cout;else if(e.type==='src')src=e.src});
+ return {prix,cout,src,vendus:sold,retires:ret,reste:Math.max(0,l.qte-sold-ret),frais,recu,relistes:rel,poste,ev}}
 // « debut » : date de remise a zero du journal ; une copie plus ancienne (navigateur, autre appareil) est ignoree
 function jMerge(a,b){const lots={},order=[],debut=[(a&&a.debut)||'',(b&&b.debut)||''].sort().pop();
  [a,b].filter(x=>x&&(x.debut||'')===debut).forEach(x=>(x.lots||[]).forEach(l=>{let o=lots[l.id];
@@ -141,7 +141,7 @@ async function jApi(method,body){const r=await fetch('https://api.github.com/rep
 async function jPull(){const d=await jApi('GET');if(!d){JSHA=null;return null}JSHA=d.sha;return JSON.parse(b64d(d.content))}
 // enregistrement : fusion avec la version du depot (un autre appareil a pu ecrire entre-temps), puis ecriture
 async function jSync(label){jKeep();
- if(!jToken()||!JC().repo){jStatus('💾 Enregistré dans ce navigateur seulement : ajoute ton jeton GitHub (ci-dessous) pour le garder sur le dépôt et l’utiliser dans les alertes.','neg');return}
+ if(!jToken()||!JC().repo){jStatus('💾 Enregistré dans ce navigateur seulement : ajoute ton jeton GitHub (ci-dessous) pour le garder sur le dépôt et l’utiliser dans les alertes.','neg');jRender();return}
  if(JBUSY)return;JBUSY=true;jStatus('⏳ Enregistrement sur GitHub…');
  try{for(let k=0;k<3;k++){const remote=await jPull();const merged=jMerge(remote,J);merged.maj=jNow();
    if(remote&&jText(remote)===jText({...merged,maj:remote.maj})){J=remote;break}
@@ -164,10 +164,15 @@ function jForget(){try{localStorage.removeItem('ghtoken')}catch(e){}document.get
 // ---------------------------------------------------------------- actions
 const lost=(p,q)=>Math.floor(JC().tax*p*q),net=(p,q)=>Math.floor(p*q*(1-JC().tax));
 function jLot(id){return J.lots.find(l=>l.id===id)}
+// origine d'une annonce : recolte -> craft (cout 0), achat -> craft (cout = ingredients achetes), flip (cout = prix d'achat)
+const JSRC={recolte:'🌲 Récolte → craft',achat:'🛒 Achat → craft',flip:'🔁 Flip'};
+const jSrcDefault=n=>(window.HARVEST_ITEMS||[]).includes(n)?'recolte':'achat';
+const jCostFor=(src,n)=>src==='recolte'?0:src==='achat'?(window.COSTS||{})[n]:undefined;
+const jSrcOpts=v=>Object.entries(JSRC).map(([k,t])=>'<option value="'+k+'"'+(k===v?' selected':'')+'>'+t+'</option>').join('');
 function jPost(){const g=id=>document.getElementById(id),objet=g('jo').value.trim(),q=+g('jq').value,p=+g('jp').value,n=Math.max(1,+g('jn').value||1);
- const c=g('jc').value===''?null:+g('jc').value;
+ const c=g('jc').value===''?null:+g('jc').value,src=g('js').value;
  if(!objet||!(q>0)||!(p>0)){toast('Indique l’objet, la quantité et le prix');return}
- for(let k=0;k<n;k++){const id=jid();J.lots.push({id,objet,qte:q,prix:p,...(c!=null?{cout:c}:{}),ev:[{id:jid(),t:jNow(),type:'poste',prix:p,qte:q}]})}
+ for(let k=0;k<n;k++){const id=jid();J.lots.push({id,objet,src,qte:q,prix:p,...(c!=null?{cout:c}:{}),ev:[{id:jid(),t:jNow(),type:'poste',prix:p,qte:q}]})}
  g('jq').value=g('jp').value='';jSync(n+' annonce(s) '+objet)}
 function jAct(id,kind){JOPEN=JOPEN&&JOPEN.id===id&&JOPEN.kind===kind?null:{id,kind};jRender()}
 function jDo(id,kind){const l=jLot(id),s=jState(l),g=k=>document.getElementById('ja'+k);
@@ -175,6 +180,7 @@ function jDo(id,kind){const l=jLot(id),s=jState(l),g=k=>document.getElementById(
   if(!(q>0)||!(p>0))return;l.ev.push({id:jid(),t,type:'vendu',prix:p,qte:q,recu:net(p,q)})}
  else if(kind==='reliste'){const p=+g('p').value;if(!(p>0))return;l.ev.push({id:jid(),t:jNow(),type:'reliste',prix:p,qte:s.reste,frais:lost(s.prix,s.reste)})}
  else if(kind==='retire')l.ev.push({id:jid(),t:jNow(),type:'retire',qte:s.reste,frais:lost(s.prix,s.reste)});
+ else if(kind==='src')l.ev.push({id:jid(),t:jNow(),type:'src',src:g('s').value});
  else if(kind==='cout'){const c=+g('c').value;if(!(c>=0))return;l.ev.push({id:jid(),t:jNow(),type:'cout',cout:c})}
  JOPEN=null;jSync(kind+' '+l.objet)}
 function jUndo(id){const l=jLot(id),ev=l.ev.filter(e=>!e.x&&e.t).sort((a,b)=>a.t.localeCompare(b.t));
@@ -201,8 +207,8 @@ async function jScan(file){if(!file||!(file.type||'').startsWith('image/'))retur
     const same=J.lots.filter(l=>!l.del&&l.objet===r.name).map(l=>jState(l)).filter(s=>s.reste===r.qty&&s.prix===r.unit).length;
     const seen=rows.filter(x=>x!==r&&x.name===r.name&&x.qty===r.qty&&x.unit===r.unit&&rows.indexOf(x)<rows.indexOf(r)).length;
     if(same>seen){known++;return}
-    const c=(window.COSTS||{})[r.name];
-    J.lots.push({id:jid(),objet:r.name,qte:r.qty,prix:r.unit,...(c!=null?{cout:c}:{}),ev:[{id:jid(),t:jNow(),type:'poste',prix:r.unit,qte:r.qty}]});added++});
+    const src=jSrcDefault(r.name),c=jCostFor(src,r.name);
+    J.lots.push({id:jid(),objet:r.name,src,qte:r.qty,prix:r.unit,...(c!=null?{cout:c}:{}),ev:[{id:jid(),t:jNow(),type:'poste',prix:r.unit,qte:r.qty}]});added++});
    msg.textContent=added+' annonce(s) ajoutée(s)'+(known?', '+known+' déjà dans le journal':'')+(bad.length?' ; à saisir à la main (lecture incertaine) : '+bad.join(', '):'')+'.'}
   URL.revokeObjectURL(url);if(added)jSync('capture : '+added+(hist?' vente(s)':' annonce(s)'));else jRender()}
  catch(e){msg.textContent='Lecture impossible : '+e+' (la lecture fonctionne sur le site en ligne)'}}
@@ -212,7 +218,8 @@ function jRender(){if(!J)return;const box=document.getElementById('jopen');if(!b
  const open=lots.filter(([l,s])=>s.reste>0).sort((a,b)=>a[0].objet.localeCompare(b[0].objet,'fr'));
  const nm=n=>'<span class="nm" title="Cliquer pour copier">'+jEsc(n)+'</span>';
  box.innerHTML=open.length?open.map(([l,s])=>{const f=F[l.objet],bat=f&&f[0]<s.prix;
-  const row='<tr><td>'+nm(l.objet)+(bat?' <span class="badge b-bad">battu : '+NF.format(f[0])+'</span>':f?' <span class="badge b-ok">le moins cher</span>':'')+'</td>'
+  const row='<tr><td>'+nm(l.objet)+' <span class="badge b-mut" style="cursor:pointer" title="Changer l’origine" onclick="jAct(\''+l.id+'\',\'src\')">'
+   +(JSRC[s.src]||'❔ origine ?')+'</span>'+(bat?' <span class="badge b-bad">battu : '+NF.format(f[0])+'</span>':f?' <span class="badge b-ok">le moins cher</span>':'')+'</td>'
    +'<td class="n">'+s.reste+(s.reste<l.qte?' / '+l.qte:'')+'</td><td class="n">'+NF.format(s.prix)+'</td>'
    +'<td class="n">'+(s.cout!=null?NF.format(s.cout):'–')+'</td><td class="n '+(s.cout!=null?(net(s.prix,1)-s.cout>0?'pos':'neg'):'')+'">'+(s.cout!=null?NF.format(net(s.prix,1)-s.cout):'–')+'</td>'
    +'<td>'+(s.poste?s.poste.slice(8,10)+'/'+s.poste.slice(5,7)+' '+s.poste.slice(11):'<span class="mut">avant le journal</span>')+'</td>'
@@ -229,15 +236,22 @@ function jRender(){if(!J)return;const box=document.getElementById('jopen');if(!b
    +' <span class="sub">reçu après taxe : '+NF.format(net(s.prix,s.reste))+'</span>'
    :k==='reliste'?'Nouveau prix '+inp('p',f?Math.max(1,f[0]-1):s.prix,110)+' /u '+go+' <span class="sub">tu perds la taxe payée sur l’annonce retirée : <b class="neg">'+NF.format(lost(s.prix,s.reste))+'</b> ('+Math.round(JC().tax*100)+' % de '+s.reste+' × '+NF.format(s.prix)+') ; la nouvelle annonce repaye '+Math.round(JC().tax*100)+' %, déduits de la vente</span>'
    :k==='retire'?'Retirer les '+s.reste+' restants : tu perds la taxe payée, <b class="neg">'+NF.format(lost(s.prix,s.reste))+'</b> '+go
+   :k==='src'?'Origine <select id="jas" class="search" style="width:auto;display:inline-block">'+jSrcOpts(s.src||jSrcDefault(l.objet))+'</select> '+go
+    +' <span class="sub">pense à ajuster le coût : 0 pour ta récolte, ce que tu as payé sinon</span>'
    :'Coût de revient '+inp('c',s.cout??'',110)+' /u '+go;
   return row+'<tr><td colspan="9" style="background:var(--card2)">'+f2+'</td></tr>'}).join('')
   :'<tr><td colspan="9" class="mut">Aucune annonce en cours : ajoute-les ci-dessous ou colle une capture de ta fenêtre des ventes.</td></tr>';
  jStats(lots);jLog(lots)}
 function jStats(lots){const per=+(document.getElementById('jper')||{}).value||0,since=per?new Date(Date.now()-per*864e5):null;
  const p=n=>String(n).padStart(2,'0'),lim=since?since.getFullYear()+'-'+p(since.getMonth()+1)+'-'+p(since.getDate())+' '+p(since.getHours())+':'+p(since.getMinutes()):'';
+ const want=(document.getElementById('jsrc')||{}).value||'',acts={};
  const by={},T={recu:0,frais:0,cout:0,vendus:0,ventes:0,relistes:0,retraits:0,sansCout:0};
- lots.forEach(([l,s])=>{const o=by[l.objet]||(by[l.objet]={recu:0,brut:0,frais:0,cout:0,vendus:0,ventes:0,relistes:0,retraits:0,sansCout:0});
+ const z=()=>({recu:0,brut:0,frais:0,cout:0,vendus:0,ventes:0,relistes:0,retraits:0,sansCout:0});
+ lots.forEach(([l,s])=>{const a=s.src||'?',act=acts[a]||(acts[a]=z()),mine=!want||a===want;
+  const o=mine?by[l.objet]||(by[l.objet]=z()):z();
   let cout=l.cout;(s.ev).forEach(e=>{if(e.type==='cout'){cout=e.cout;return}if(!e.t||e.t<lim)return;
+   if(e.type==='reliste'||e.type==='retire'){act.frais+=e.frais||0}
+   else if(e.type==='vendu'){act.recu+=e.recu||0;act.vendus+=e.qte;act.ventes++;if(cout!=null)act.cout+=cout*e.qte;else act.sansCout+=e.qte}
    if(e.type==='reliste'||e.type==='retire'||e.type==='poste'){o.frais+=e.frais||0;if(e.type==='reliste')o.relistes++;if(e.type==='retire')o.retraits++}
    else if(e.type==='vendu'){o.recu+=e.recu||0;o.brut+=e.prix*e.qte;o.vendus+=e.qte;o.ventes++;if(cout!=null)o.cout+=cout*e.qte;else o.sansCout+=e.qte}})});
  Object.values(by).forEach(o=>Object.keys(T).forEach(k=>T[k]+=o[k]));
@@ -251,12 +265,20 @@ function jStats(lots){const per=+(document.getElementById('jper')||{}).value||0,
   return '<tr><td><span class="nm">'+jEsc(n)+'</span></td><td class="n">'+NF.format(o.vendus)+'</td><td class="n">'+(o.vendus?NF.format(Math.round(o.brut/o.vendus)):'–')+'</td>'
    +'<td class="n">'+NF.format(o.recu)+'</td><td class="n">'+(o.cout?NF.format(o.cout):'–')+'</td><td class="n neg">'+(o.frais?NF.format(o.frais):'–')+'</td>'
    +'<td class="n">'+(o.relistes||o.retraits?o.relistes+' / '+o.retraits:'–')+'</td><td class="n '+(b>0?'pos':'neg')+'">'+NF.format(b)+(o.sansCout?' *':'')+'</td></tr>'}).join('')
+  :'<tr><td colspan="8" class="mut">Rien sur cette période.</td></tr>';
+ const ar=Object.entries(acts).filter(([k,o])=>o.ventes||o.frais).sort((a,b)=>(b[1].recu-b[1].cout-b[1].frais)-(a[1].recu-a[1].cout-a[1].frais));
+ document.getElementById('jact').innerHTML=ar.length?ar.map(([k,o])=>{const b=o.recu-o.cout-o.frais;
+  return '<tr><td>'+(JSRC[k]||'❔ origine non renseignée')+'</td><td class="n">'+o.ventes+'</td><td class="n">'+NF.format(o.vendus)+'</td><td class="n">'+NF.format(o.recu)+'</td>'
+   +'<td class="n">'+(o.cout?NF.format(o.cout):'–')+'</td><td class="n neg">'+(o.frais?NF.format(o.frais):'–')+'</td>'
+   +'<td class="n '+(b>0?'pos':'neg')+'">'+NF.format(b)+(o.sansCout?' *':'')+'</td><td class="n">'+(o.recu?Math.round(b/o.recu*100)+' %':'–')+'</td></tr>'}).join('')
   :'<tr><td colspan="8" class="mut">Rien sur cette période.</td></tr>'}
 function jLog(lots){const ev=[];lots.forEach(([l,s])=>s.ev.forEach(e=>e.t&&e.type!=='cout'&&ev.push([e,l,ev.length])));ev.sort((a,b)=>b[0].t.localeCompare(a[0].t)||b[2]-a[2]);
  const T={poste:'📦 posté',reliste:'🔁 relisté',vendu:'✅ vendu',retire:'↩ retiré'};
  document.getElementById('jlog').innerHTML=ev.slice(0,40).map(([e,l])=>'<tr><td>'+e.t.slice(8,10)+'/'+e.t.slice(5,7)+' '+e.t.slice(11)+'</td><td>'+T[e.type]+'</td><td>'+jEsc(l.objet)+'</td>'
   +'<td class="n">'+(e.qte||'')+'</td><td class="n">'+(e.prix?NF.format(e.prix):'')+'</td><td class="n '+(e.type==='vendu'?'pos':'neg')+'">'+(e.type==='vendu'?'+'+NF.format(e.recu||0):e.frais?'−'+NF.format(e.frais):'')+'</td></tr>').join('')}
-function jCostFill(){const n=document.getElementById('jo').value.trim(),c=(window.COSTS||{})[n],el=document.getElementById('jc');if(c!=null&&el.value==='')el.value=c}
+// formulaire : l'objet propose son origine (craft de ma recolte ou non), l'origine propose le cout
+function jCostFill(fromObj){const n=document.getElementById('jo').value.trim(),sel=document.getElementById('js');
+ if(fromObj&&n)sel.value=jSrcDefault(n);const c=jCostFor(sel.value,n);document.getElementById('jc').value=c==null?'':c}
 const PROF={Alchemy:'Alchimie',Handicrafting:'Artisanat',Armorsmithing:"Forge d'armures",Blacksmithing:"Forge d'armes",Cooking:'Cuisine'};
 function lvState(){let st={};try{st=JSON.parse(localStorage.getItem('metiers')||'{}')}catch(e){}st.lv=st.lv||{};if(st.lose===undefined)st.lose=true;return st}
 function lvSave(st){try{localStorage.setItem('metiers',JSON.stringify(st))}catch(e){}}

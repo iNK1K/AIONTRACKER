@@ -154,16 +154,18 @@ class VraisGains(unittest.TestCase):
 
 
 class Journal(unittest.TestCase):
-    LOT = dict(id="a", objet="Planche", qte=20, prix=1000, cout=600, ev=[
+    LOT = dict(id="a", objet="Planche", src="achat", qte=20, prix=1000, cout=600, ev=[
         dict(id="1", t="2026-10-19 10:00", type="poste", prix=1000, qte=20),
         dict(id="2", t="2026-10-19 12:00", type="vendu", prix=1000, qte=8, recu=7200),
         dict(id="3", t="2026-10-19 14:00", type="reliste", prix=900, qte=12, frais=1200),   # 10 % de 12 x 1000, perdus
         dict(id="4", t="2026-10-19 15:00", type="vendu", prix=900, qte=5, recu=4050),
         dict(id="5", t="2026-10-19 16:00", type="vendu", prix=900, qte=2, recu=1620, x=1),   # annule
-        dict(id="6", t="2026-10-19 17:00", type="cout", cout=650)])
+        dict(id="6", t="2026-10-19 17:00", type="cout", cout=650),
+        dict(id="7", t="2026-10-19 17:01", type="src", src="recolte")])
 
     def test_etat_d_une_annonce(self):
         s = lot_state(self.LOT)
+        self.assertEqual(s["src"], "recolte")                       # origine changee apres coup
         self.assertEqual((s["prix"], s["cout"], s["vendus"], s["reste"], s["frais"], s["recu"], s["relistes"]),
                          (900, 650, 13, 7, 1200, 11250, 1))
 
@@ -178,7 +180,7 @@ class Journal(unittest.TestCase):
         listings, sales = from_journal({"lots": [self.LOT, dict(self.LOT, id="b", del_=0), dict(self.LOT, id="c", **{"del": 1})]})
         self.assertEqual(listings, {"Planche": {"prix": 900, "quantite": 14, "cout": 650}})
         self.assertEqual(len(sales), 4)                                # 2 ventes par annonce, l'annulee ne compte pas
-        self.assertEqual(sales[0], dict(date="2026-10-19 15:00", objet="Planche", quantite=5, prix=4500, recu=4050, cout=650))
+        self.assertEqual(sales[0], dict(date="2026-10-19 15:00", objet="Planche", quantite=5, prix=4500, recu=4050, cout=650, origine="recolte"))
 
 
 @unittest.skipUnless(shutil.which("node"), "node absent")

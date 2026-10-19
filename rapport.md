@@ -489,3 +489,9 @@ Le bilan affiche la **taxe perdue** (relistes + retraits) et sa part dans tes ki
 
 ## Reprise de l'existant
 Tes 6 annonces en cours et tes 24 ventes ont été reprises dans le journal (marquées « avant le journal » : date de mise en vente et frais inconnus). `mes_annonces.json` et `mes_ventes.json` sont supprimés (ils restent dans l'historique git).
+
+## Origine de chaque annonce — 19/10/2026
+Chaque annonce a une origine : **🌲 Récolte → craft**, **🛒 Achat → craft** ou **🔁 Flip** (badge cliquable pour la changer).
+- Formulaire « J'ai posté » : l'origine est proposée selon l'objet (Récolte s'il se fabrique avec ta récolte, sinon Achat → craft), et le coût suit : **0** pour la récolte, l'estimation du site (ingrédients achetés) pour l'achat → craft, **ton prix d'achat** à saisir pour un flip. Même règle pour les annonces ajoutées par capture.
+- Bilan : tableau **par activité** (ventes, reçu, coût, taxe perdue, bénéfice, marge) et filtre par activité sur les chiffres et le détail par objet.
+- Correction au passage : sans jeton GitHub, le tableau ne se rafraîchissait pas après une action.

@@ -2,9 +2,10 @@
 
 Une tâche par ligne. Claude les traite dans l'ordre et coche `[x]` quand c'est fait.
 
-- [x] enleve les alertes en dessous du seuil, tu es perdant etc. pas d'alerte concernant mes ventes
+- [x] enleve les alertes en dessous du seuil, tu es perdant etc. pas d'alerte concernant mes ventes sur discord
 
 ## Fait
+- [x] Journal : origine de chaque annonce (récolte → craft, achat → craft, flip), coût proposé selon l’origine, bilan et filtre par activité
 - [x] Journal des ventes (onglet 💰 Mes ventes) : annonces postées / vendues / relistées / retirées en un clic ou par capture, enregistré sur GitHub depuis le site, bilan réel (taxe de 10 % repayée à chaque reliste, perdue au retrait, bénéfice) ; remplace mes_annonces.json et mes_ventes.json
 - [x] Accueil fiable : taxe 10 %, prix habituel = prix des ventes observées (48 h), potentiel du jour = Planning safe (compter seulement les « vrais achats » écarté : sous-compte 7 à 14 fois, voir rapport.md)
 - [x] Accueil orienté action : liste « ✅ À faire maintenant » (annonces à ajuster, achats sûrs, plan du jour, quand poster, notes de version)

@@ -943,12 +943,16 @@ def journal_html(ctx, cfg, my):
         f'{_th("Taxe perdue", "Taxe des annonces retirées pour relister", True)}{_th("Actions")}'
         '</tr></thead><tbody id="jopen"></tbody></table></div>'
         '<div class="card" style="margin-top:10px"><b>📦 J’ai posté</b><div class="toolbar" style="margin:0;flex-wrap:wrap;gap:6px">'
-        + inp("jo", "Objet (nom exact)", 260, "text", 'list="jnames" onchange="jCostFill()"') + f'<datalist id="jnames">{names}</datalist>'
+        + '<select id="js" class="search" style="width:auto;display:inline-block" onchange="jCostFill()">'
+        '<option value="recolte">🌲 Récolte → craft</option><option value="achat">🛒 Achat → craft</option>'
+        '<option value="flip">🔁 Flip</option></select>'
+        + inp("jo", "Objet (nom exact)", 260, "text", 'list="jnames" onchange="jCostFill(1)"') + f'<datalist id="jnames">{names}</datalist>'
         + inp("jq", "Quantité", 90) + inp("jp", "Prix /u", 110) + inp("jc", "Coût /u (facultatif)", 150)
         + inp("jn", "Nb d’annonces", 120, extra='value="1" min="1"')
         + '<button class="mapbtn" onclick="jPost()">Ajouter</button></div>'
-        '<span class="sub">Nb d’annonces : pour poster plusieurs lots identiques d’un coup (ex. 5 annonces de 30). '
-        'Le coût est prérempli avec l’estimation du site (achat des ingrédients) : mets 0 si c’est ta récolte.</span></div>'
+        '<span class="sub">Origine : proposée selon l’objet (craft de ta récolte ou non), à changer si besoin. Coût /u proposé : '
+        '0 pour ta récolte, l’estimation du site (ingrédients achetés) pour l’achat → craft, ton prix d’achat à saisir pour '
+        'un flip. Nb d’annonces : pour poster plusieurs lots identiques d’un coup (ex. 5 annonces de 30).</span></div>'
         '<div class="card" style="margin-top:10px" ondragover="event.preventDefault()" '
         'ondrop="event.preventDefault();jScan(event.dataTransfer.files[0])"><b>📷 Ou colle une capture (Ctrl + V sur cet onglet)</b>'
         '<span class="mut">Fenêtre de <b>tes annonces en vente</b> : les nouvelles annonces sont ajoutées (celles déjà notées sont '
@@ -958,7 +962,14 @@ def journal_html(ctx, cfg, my):
         '</label>.</span><span id="jmsg" class="mut"></span></div>'
         '<h3>Bilan</h3><div class="toolbar" style="margin:0 0 8px"><select id="jper" class="search" style="width:auto" '
         'onchange="jRender()"><option value="1">Dernières 24 h</option><option value="7" selected>7 derniers jours</option>'
-        '<option value="30">30 derniers jours</option><option value="0">Depuis le début</option></select></div>'
+        '<option value="30">30 derniers jours</option><option value="0">Depuis le début</option></select>'
+        '<select id="jsrc" class="search" style="width:auto" onchange="jRender()"><option value="">Toutes les activités</option>'
+        '<option value="recolte">🌲 Récolte → craft</option><option value="achat">🛒 Achat → craft</option>'
+        '<option value="flip">🔁 Flip</option></select></div>'
+        '<div class="wrap" style="margin-bottom:10px"><table><thead><tr>'
+        f'{_th("Activité")}{_th("Ventes", None, True)}{_th("Unités", None, True)}{_th("Reçu", "Après taxe", True)}'
+        f'{_th("Coût", None, True)}{_th("Taxe perdue", "Relistes et retraits", True)}{_th("Bénéfice", None, True)}'
+        f'{_th("Marge", "Bénéfice / reçu", True)}</tr></thead><tbody id="jact"></tbody></table></div>'
         '<div class="kpis" id="jkpi"></div><div class="wrap"><table><thead><tr>'
         f'{_th("Objet")}{_th("Unités vendues", None, True)}{_th("Prix moyen /u", None, True)}{_th("Reçu", "Après taxe", True)}'
         f'{_th("Coût", None, True)}{_th("Taxe perdue", "Relistes et retraits", True)}{_th("Relistes / retraits", None, True)}'
@@ -981,7 +992,8 @@ def journal_html(ctx, cfg, my):
         '<span class="sub">Sans jeton, le journal est gardé dans ce navigateur seulement.</span></details>'
         f'<script>window.JOURNAL={json.dumps(j, ensure_ascii=False)};'
         f'window.JCFG={json.dumps(dict(tax=cfg["fees"], repo=cfg.get("_github_repo")))};'
-        f'window.JFLOOR={json.dumps(floor, ensure_ascii=False)};</script>')
+        f'window.JFLOOR={json.dumps(floor, ensure_ascii=False)};'
+        f'window.HARVEST_ITEMS={json.dumps(sorted({e["objet"] for e in my["harvest"]}), ensure_ascii=False)};</script>')
 
 
 def gains_tab(ctx, cfg, my):
