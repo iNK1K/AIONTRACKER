@@ -323,7 +323,7 @@ function applyLevels(){const st=lvState();
   const net=Math.round(sell-(st.lose?cost/info.rate:cost)),cn=el.querySelector('.cnet'),cp=el.querySelector('.cprof');
   if(cn){cn.textContent=NF.format(net);cn.dataset.v=net;cn.classList.toggle('pos',net>0);cn.classList.toggle('neg',net<=0)}
   if(cp){const pr=net*day;cp.textContent=kf(pr);cp.dataset.v=pr;cp.classList.toggle('pos',pr>0);cp.classList.toggle('neg',pr<=0)}});
- calc();renderMetiers();todoBuys();if(window.PLANDATA){planSafe();planGamble()}}
+ calc();renderMetiers();todoBuys();if(window.PLANDATA){planSafe();planGamble()}if(window.SUPPLY)supplyRender()}
 // « A faire maintenant » : achats -> craft que mes niveaux permettent (metier non renseigne = garde), 2 au plus,
 // avec le taux de reussite quand le niveau est connu
 function todoBuys(){let n=0;
@@ -486,5 +486,65 @@ function supplyRender(){const box=document.getElementById('sbox');if(!box)return
    +x.parts.map(p=>part(p,0)).join('')
    +'<tr><td><b>Total du craft</b>'+(x.q>1?' <span class="sub">(pour '+x.q+' objets : '+n(x.c*x.q)+')</span>':'')+'</td><td></td><td></td><td class="n"><b>'+(x.c==null?'incomplet':n(x.c))+'</b></td>'
    +'<td class="sub">cible = total × '+(1+SUPPLY_CFG.margin).toFixed(2).replace('.',',')+' ÷ '+(1-SUPPLY_CFG.tax).toFixed(2).replace('.',',')+'</td></tr>'
-   +'</tbody></table></div></div>').join('')).join('')}
+   +'</tbody></table></div>'+supplyCalc(x,part)+'</div>').join('')).join('')}
 document.addEventListener('DOMContentLoaded',()=>supplyRender());
+// Craft avec combo : un ingredient « eclatant » se crafte par sa chaine (A, toute la chaine, objets normaux revendus)
+// ou s'achete a l'HDV (B) ; reussite selon mes niveaux (🛠️ Mes metiers) ; resultat = objet normal (prix modifiable)
+// ou, en combo, la version eclatante.
+const SNET=v=>v==null?null:v*(1-SUPPLY_CFG.tax);
+function supplySellGet(){try{return JSON.parse(localStorage.getItem('supplySell')||'{}')}catch(e){return{}}}
+function supplySell(id,v){const o=supplySellGet();if(v===''||!(+v>=0))delete o[id];else o[id]=+v;
+ try{localStorage.setItem('supplySell',JSON.stringify(o))}catch(e){}supplyRender()}
+// taux de reussite d'une recette selon mes niveaux : r = 1 si niveau non renseigne (u) ; lock = niveau trop bas
+function sRate(p,m,cv){const lv=lvState().lv[p];if(lv==null||lv==='')return{r:1,u:true};if(lv<m)return{r:1,lock:true};
+ const c=cv!=null&&window.CRAFTDATA&&CRAFTDATA.curves[cv];return{r:c?c[Math.min(lv-m,c.length-1)]/1e8:1}}
+// cout par craft reussi : echecs compris si les materiaux sont perdus (option de Mes metiers)
+const sPer=(K,rt)=>lvState().lose?K/rt.r:K;
+// cout d'un objet eclatant obtenu par sa chaine : K = ingredients (+ eclatants de l'etape d'avant, crafts eux aussi)
+function chainCost(ch){let K=ch.k;if(K==null)return null;
+ for(const x of ch.need){const e=chainCost(x.chain);if(e==null)return null;K+=x.q*e.e}
+ const rt=sRate(ch.prof,ch.m,ch.cv),S=sPer(K,rt),pn=SNET(supplySellGet()[ch.i]??ch.plain)||0;
+ return{K,S,rt,e:(S-(1-ch.c)*pn)/ch.c,pn}}
+function chainHtml(x,part,ind){const ch=x.chain,cc=chainCost(ch),n=v=>v==null?'–':NF.format(Math.round(v)),pad=10+ind*18;
+ const row=(t,v,b)=>'<tr><td colspan="3" style="padding-left:'+pad+'px">'+t+'</td><td class="n">'+(b?'<b>'+n(v)+'</b>':n(v))+'</td><td></td></tr>';
+ const rt=cc?cc.rt:sRate(ch.prof,ch.m,ch.cv);
+ return '<tr><td colspan="5" style="padding-left:'+pad+'px"><b>'+jEsc(ch.n)+'</b> <span class="sub">· '+(PROF[ch.prof]||ch.prof)+' '+lvTxt(Math.max(1,ch.m))
+  +(rt.lock?' · 🔒 niveau trop bas':rt.u?' · réussite ? (niveau non renseigné)':' · réussite '+(rt.r*100).toFixed(1).replace('.',',')+' %')
+  +' · combo '+Math.round(ch.c*100)+' % → '+jEsc(x.n)+'</span></td></tr>'
+  +ch.parts.map(p=>part(p,ind+1)).join('')
+  +ch.need.map(y=>'<tr><td colspan="5" style="padding-left:'+(pad+18)+'px" class="sub">'+NF.format(y.q)+' × '+jEsc(y.n)+' (crafté par sa chaîne) :</td></tr>'+chainHtml(y,part,ind+2)).join('')
+  +(cc?row('1 craft'+(cc.S!==cc.K?' <span class="sub">(échecs compris : '+n(cc.K)+' ÷ '+(cc.rt.r*100).toFixed(1).replace('.',',')+' %)</span>':''),cc.S)
+   +row('combo '+Math.round(ch.c*100)+' % → '+(1/ch.c).toFixed(1).replace('.',',').replace(',0','')+' crafts réussis en moyenne',cc.S/ch.c)
+   +row('− '+((1-ch.c)/ch.c).toFixed(1).replace('.',',').replace(',0','')+' '+jEsc(ch.n)+' revendu(s) ('+n(cc.pn)+' net)',-(1-ch.c)/ch.c*cc.pn)
+   +row('= coût d’un '+jEsc(x.n),cc.e,true)
+   :row('<span class="neg">chaîne incomplète (prix manquant)</span>',null))}
+function supplyCalc(x,part){const n=v=>v==null?'–':NF.format(Math.round(v)),cb=x.combo,c=cb?cb.c:0,V=cb?SNET(cb.v)||0:0;
+ const sv=supplySellGet()[x.i],sell=sv!=null?sv:x.sell,P=SNET(sell),rt=sRate(x.prof,x.m,x.cv);
+ const sum=f=>{let K=x.rest;for(const y of x.need){const v=f(y);if(v==null||K==null)return null;K+=y.q*v}return K};
+ const cols=x.need.length?[{t:'A. je crafte',K:sum(y=>{const e=chainCost(y.chain);return e&&e.e})},{t:'B. j’achète',K:sum(y=>y.buy)}]
+  :[{t:'Craft',K:x.c}];
+ cols.forEach(o=>{if(o.K==null)return;o.S=sPer(o.K,rt);o.res=P==null?null:(1-c)*P+c*V;o.gain=o.res==null?null:o.res-o.S;o.net=c<1?(o.S-c*V)/(1-c):null});
+ const tr=(t,f,cls)=>'<tr><td>'+t+'</td>'+cols.map(o=>{const v=o.K==null?null:f(o);return '<td class="n '+(cls?cls(v):'')+'">'+n(v)+'</td>'}).join('')+'</tr>';
+ const pn=v=>v==null?'':v>0?'pos':'neg';
+ let h='<div class="wrap" style="margin-top:10px"><table>';
+ if(x.need.length){
+  h+='<thead><tr><th>Ingrédient à crafter ou acheter</th><th class="n">Qté</th><th class="n">Prix /u</th><th class="n">Sous-total</th><th>Origine</th></tr></thead><tbody>';
+  x.need.forEach(y=>{const e=chainCost(y.chain);
+   h+='<tr><td colspan="5"><b>'+NF.format(y.q)+' × '+jEsc(y.n)+'</b></td></tr>'
+    +'<tr><td colspan="5" class="sub" style="padding-left:10px">A. Je le crafte (toute la chaîne) :</td></tr>'+chainHtml(y,part,1)
+    +'<tr><td colspan="5" class="sub" style="padding-left:10px">B. Je l’achète à l’HDV : <b>'+n(y.buy)+'</b> (prix le plus bas relevé) · médiane 3 j '+n(y.med)+' · '+y.l+' annonce(s)'
+    +(e&&y.buy!=null?' → '+(e.e<y.buy?'<span class="pos">le craft revient moins cher de '+n(y.buy-e.e)+'</span>':'<span class="neg">l’achat revient moins cher de '+n(e.e-y.buy)+'</span>'):'')+'</td></tr>'});
+  h+='<tr><td><b>Autres ingrédients</b> <span class="sub">(communs aux deux options, détail ci-dessus)</span></td><td></td><td></td><td class="n">'+n(x.rest)+'</td><td></td></tr></tbody></table><table style="margin-top:8px">'}
+ h+='<thead><tr><th>'+jEsc(x.n)+' <span class="sub">· '+(rt.lock?'🔒 niveau trop bas':rt.u?'réussite ? (niveau non renseigné)':'réussite '+(rt.r*100).toFixed(1).replace('.',',')+' %')
+  +(cb?' · combo '+Math.round(c*100)+' % → '+jEsc(cb.n):'')+'</span></th>'+cols.map(o=>'<th class="n">'+o.t+'</th>').join('')+'</tr></thead><tbody>'
+  +tr('Total d’un craft'+(lvState().lose&&rt.r<1?' <span class="sub">(échecs compris)</span>':''),o=>o.S)
+  +'<tr><td>Prix de vente de l’objet normal <input type="number" min="0" class="search" style="width:120px;display:inline-block;padding:4px 7px" value="'+(sell??'')+'" onchange="supplySell('+x.i+',this.value)">'
+  +' <span class="sub">'+(sv!=null?'saisi · médiane 3 j '+n(x.sell):'médiane 3 j, modifiable')+' · '+n(P)+' net</span></td>'+cols.map(()=>'<td></td>').join('')+'</tr>'
+  +(cb?tr('Résultat moyen d’un craft <span class="sub">('+Math.round((1-c)*100)+' % objet normal, '+Math.round(c*100)+' % '+jEsc(cb.n)+' à '+n(cb.v)+' → '+n(V)+' net)</span>',o=>o.res)
+   :tr('Résultat d’un craft',o=>o.res))
+  +tr('<b>Gain moyen par craft</b>',o=>o.gain,pn)
+  +(cb?tr('Coût net d’un objet normal <span class="sub">(les combos revendus le paient en partie)</span>',o=>o.net):'')
+  +'</tbody></table></div>';
+ const ok=cols.filter(o=>o.S!=null);
+ if(ok.length===2){const [a,b]=ok,best=a.S<=b.S?a:b,oth=best===a?b:a;h+='<p class="sub">★ Moins cher : <b>'+best.t+'</b>, de '+n(oth.S-best.S)+' par craft.</p>'}
+ return h}

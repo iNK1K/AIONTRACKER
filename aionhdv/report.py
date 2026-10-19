@@ -1003,6 +1003,54 @@ def supply_tab(ctx, cfg, my):
     le prix de chaque ingredient au dernier releve et le total du craft, les annonces en vente, la mediane sur 3 jours
     et un prix de vente cible (marge sur le cout des ingredients, taxe comprise). Lecture et affichage dans le navigateur."""
     m, fees, margin, items = my["market"], cfg["fees"], cfg.get("supply_margin", 0.20), []
+    rnd = lambda v: round(v) if v is not None else None
+    combo_cfg = cfg.get("combo_rate")
+    # objet eclatant -> recette qui le donne en combo : un ingredient eclatant peut se crafter (option A) ou s'acheter (B)
+    combo_of = {}
+    for rs in m.recipes_by_item.values():
+        for r in rs:
+            if r["combo_item_id"] and not r["unresolved"]:
+                combo_of.setdefault(r["combo_item_id"], r)
+
+    def value(iid):
+        """Prix de revente d'un objet : mediane 3 j du prix plancher, sinon prix habituel (avant taxe)."""
+        st = m.price_stats(iid, 3)
+        u = m.usual_price(iid)
+        return rnd(st["median"] if st else u["price"] if u else None)
+
+    def combo(r):
+        """Chance de combo d'une recette et objet obtenu (nom, valeur)."""
+        if not r["combo_item_id"] or r["combo_item_id"] not in m.items:
+            return None
+        return dict(c=combo_cfg if combo_cfg is not None else (r["combo_prob_raw"] or 0) / 10000,
+                    n=m.items[r["combo_item_id"]]["name"], v=value(r["combo_item_id"]))
+
+    def needs(r, seen):
+        """Ingredients eclatants d'une recette, avec la chaine pour les crafter (toute la chaine) et le prix HDV."""
+        out = []
+        for opts in m.ingredients.get(r["id"], {}).values():
+            o = next((o for o in opts if o["item_id"] in combo_of), None)
+            if o and o["item_id"] not in seen and len(seen) < 6:
+                bp = m.buy_price(o["item_id"])
+                out.append(dict(i=o["item_id"], n=m.items[o["item_id"]]["name"], q=o["qty"],
+                                buy=rnd(bp and bp["ask"]), med=value(o["item_id"]), l=bp["listings"] if bp else 0,
+                                chain=step(combo_of[o["item_id"]], seen | {o["item_id"]})))
+        return out
+
+    def step(r, seen):
+        """Une etape de chaine : la recette de l'objet de base, dont le combo donne l'ingredient eclatant voulu."""
+        sub = needs(r, seen)
+        c = m.recipe_cost(r, "buy", skip={x["i"] for x in sub}, price="ask")
+        return dict(i=r["item_id"], n=m.items[r["item_id"]]["name"], prof=r["profession"], m=r["mastery"] or 0, cv=r.get("rate_curve"),
+                    c=combo(r)["c"], k=rnd(c["cost_r"]) if c["ok"] else None, plain=value(r["item_id"]),
+                    parts=[dict(p, p=rnd(p["p"]), sub=[dict(x, p=rnd(x["p"])) for x in p.get("sub") or []]) for p in c["parts"]],
+                    need=sub)
+
+    def rest_cost(r, need):
+        """Cout des autres ingredients (hors eclatants), communs aux deux options."""
+        c = m.recipe_cost(r, "buy", skip={x["i"] for x in need}, price="ask")
+        return rnd(c["cost_r"]) if c["ok"] else None
+
     for iid, recs in m.recipes_by_item.items():
         it = m.items.get(iid) or {}
         if it.get("category") != "Equip" or it.get("bound") or not it.get("icon_file") \
@@ -1016,8 +1064,11 @@ def supply_tab(ctx, cfg, my):
             if best is None or (cu is not None and (best[0] is None or cu < best[0])):
                 best = (cu, c, q, r)
         st = m.price_stats(iid, 3)
-        rnd = lambda v: round(v) if v is not None else None
+        r = best[3]
+        need = needs(r, {iid})
         items.append(dict(i=iid, n=it["name"], s=f"../data/{it['icon_file']}", c=rnd(best[0]), q=best[2],
+                          cv=r.get("rate_curve"), combo=combo(r), sell=value(iid), need=need,
+                          rest=rest_cost(r, need) if need else None,
                           parts=[dict(p, p=rnd(p["p"]), sub=[dict(x, p=rnd(x["p"])) for x in p.get("sub") or []])
                                  for p in best[1]["parts"]],
                           l=m.listings.get(iid, 0), med=rnd(st and st["median"]),
@@ -1027,7 +1078,9 @@ def supply_tab(ctx, cfg, my):
             "onglet) : pour chaque objet demandé, le prix de chaque ingrédient au dernier relevé "
             f"({esc(paris(m.as_of, '%d/%m %H:%M')) if m.as_of else '?'}, prix le plus bas en vente) et le total du craft, "
             "le nombre d’annonces de l’objet, son prix médian sur 3 jours, et un <b>prix de vente cible</b> = total du craft "
-            f"+ {margin:.0%} de marge, taxe de {fees:.0%} comprise.</p>"
+            f"+ {margin:.0%} de marge, taxe de {fees:.0%} comprise. Quand un ingrédient est la version éclatante d’un "
+            "autre craft : coût en le craftant (toute la chaîne, objets normaux revendus) face à l’achat à l’HDV, réussite "
+            "selon tes niveaux (🛠️ Mes métiers), et gain moyen avec le combo.</p>"
             '<div class="card" ondragover="event.preventDefault()" ondrop="event.preventDefault();supplyScan(event.dataTransfer.files[0])">'
             '<b>📷 Capture de la fenêtre de ravitaillement</b><span class="mut">Ctrl + V sur cet onglet, glisse le fichier, ou '
             '<label style="color:var(--acc);cursor:pointer;text-decoration:underline">choisis un fichier<input type="file" '
