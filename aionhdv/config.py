@@ -36,16 +36,19 @@ def load_config():
 
 
 def lot_state(lot):
-    """Etat d'une annonce du journal d'apres ses evenements (poste, reliste, vendu, retire) : meme calcul que le site
+    """Etat d'une annonce du journal d'apres ses evenements (poste, reliste, corrige, vendu, retire) : meme calcul que le site
     (site.js, jState). frais = taxe de 10 % perdue : payee a chaque mise en vente, deduite de la vente si l'annonce se
     vend, perdue si elle est retiree ou relistee (relister = retirer puis remettre en vente)."""
     ev = sorted((e for e in lot.get("ev") or [] if not e.get("x")), key=lambda e: e.get("t") or "")   # x = annule
     prix, cout, src, sold, retired, frais, recu, relistes = lot.get("prix"), lot.get("cout"), lot.get("src"), 0, 0, 0, 0, 0
+    qte = lot["qte"]
     for e in ev:
         if e["type"] in ("poste", "reliste"):
             prix = e.get("prix", prix)
             frais += e.get("frais") or 0
             relistes += e["type"] == "reliste"
+        elif e["type"] == "corrige":                        # erreur de saisie du prix ou de la quantite : sans frais
+            prix, qte = e["prix"], e.get("qte") or qte
         elif e["type"] == "vendu":
             sold += e["qte"]
             recu += e.get("recu") or 0
@@ -56,7 +59,7 @@ def lot_state(lot):
             cout = e["cout"]
         elif e["type"] == "src":                            # origine : recolte, achat (-> craft) ou flip
             src = e["src"]
-    return dict(prix=prix, cout=cout, src=src, vendus=sold, retires=retired, reste=max(0, lot["qte"] - sold - retired), frais=frais,
+    return dict(prix=prix, cout=cout, src=src, vendus=sold, retires=retired, reste=max(0, qte - sold - retired), frais=frais,
                 recu=recu, relistes=relistes)
 
 

@@ -117,10 +117,11 @@ function jid(){return Date.now().toString(36)+Math.random().toString(36).slice(2
 function jState(l){const ev=(l.ev||[]).filter(e=>!e.x).sort((a,b)=>(a.t||'').localeCompare(b.t||''));
  // frais = taxe de 10 % perdue : payee a chaque mise en vente, elle n'est recuperee (deduite de la vente) que si l'annonce
  // se vend ; relister ou retirer fait perdre celle de l'annonce retiree
- let prix=l.prix,cout=l.cout,src=l.src||null,sold=0,ret=0,frais=0,recu=0,rel=0,poste=null;
+ let prix=l.prix,qte=l.qte,cout=l.cout,src=l.src||null,sold=0,ret=0,frais=0,recu=0,rel=0,poste=null;
  ev.forEach(e=>{if(e.type==='poste'||e.type==='reliste'){prix=e.prix;frais+=e.frais||0;if(e.type==='reliste')rel++;else poste=e.t}
+  else if(e.type==='corrige'){prix=e.prix;qte=e.qte||qte}   // erreur de saisie du prix ou de la quantite : sans frais
   else if(e.type==='vendu'){sold+=e.qte;recu+=e.recu||0}else if(e.type==='retire'){ret+=e.qte;frais+=e.frais||0}else if(e.type==='cout')cout=e.cout;else if(e.type==='src')src=e.src});
- return {prix,cout,src,vendus:sold,retires:ret,reste:Math.max(0,l.qte-sold-ret),frais,recu,relistes:rel,poste,ev}}
+ return {prix,qte,cout,src,vendus:sold,retires:ret,reste:Math.max(0,qte-sold-ret),frais,recu,relistes:rel,poste,ev}}
 // « debut » : date de remise a zero du journal ; une copie plus ancienne (navigateur, autre appareil) est ignoree
 function jMerge(a,b){const lots={},order=[],debut=[(a&&a.debut)||'',(b&&b.debut)||''].sort().pop();
  [a,b].filter(x=>x&&(x.debut||'')===debut).forEach(x=>(x.lots||[]).forEach(l=>{let o=lots[l.id];
@@ -188,6 +189,8 @@ function jDo(id,kind){const l=jLot(id),s=jState(l),g=k=>document.getElementById(
  else if(kind==='retire')l.ev.push({id:jid(),t:jNow(),type:'retire',qte:s.reste,frais:lost(s.prix,s.reste)});
  else if(kind==='src'){const src=g('s').value,c=g('c').value;l.ev.push({id:jid(),t:jNow(),type:'src',src});
   if(c!==''&&+c!==s.cout)l.ev.push({id:jid(),t:jNow(),type:'cout',cout:+c})}
+ else if(kind==='corrige'){const p=+g('p').value,q=+g('q').value;if(!(p>0)||!(q>=s.vendus+s.retires)||!(q>0))return;
+  l.ev.push({id:jid(),t:jNow(),type:'corrige',prix:p,qte:q})}
  else if(kind==='cout'){const c=+g('c').value;if(!(c>=0))return;l.ev.push({id:jid(),t:jNow(),type:'cout',cout:c})}
  JOPEN=null;jSync(kind+' '+l.objet)}
 function jUndo(id){const l=jLot(id),ev=l.ev.filter(e=>!e.x&&e.t).sort((a,b)=>a.t.localeCompare(b.t));
@@ -227,13 +230,14 @@ function jRender(){if(!J)return;const box=document.getElementById('jopen');if(!b
  box.innerHTML=open.length?open.map(([l,s])=>{const f=F[l.objet],bat=f&&f[0]<s.prix;
   const row='<tr><td>'+nm(l.objet)+' <span class="badge b-mut" style="cursor:pointer" title="Changer l’origine" onclick="jAct(\''+l.id+'\',\'src\')">'
    +(JSRC[s.src]||'❔ origine ?')+'</span>'+(bat?' <span class="badge b-bad">battu : '+NF.format(f[0])+'</span>':f?' <span class="badge b-ok">le moins cher</span>':'')+'</td>'
-   +'<td class="n">'+s.reste+(s.reste<l.qte?' / '+l.qte:'')+'</td><td class="n">'+NF.format(s.prix)+'</td>'
+   +'<td class="n">'+s.reste+(s.reste<s.qte?' / '+s.qte:'')+'</td><td class="n">'+NF.format(s.prix)+'</td>'
    +'<td class="n">'+(s.cout!=null?NF.format(s.cout):'–')+'</td><td class="n '+(s.cout!=null?(net(s.prix,1)-s.cout>0?'pos':'neg'):'')+'">'+(s.cout!=null?NF.format(net(s.prix,1)-s.cout):'–')+'</td>'
    +'<td>'+(s.poste?s.poste.slice(8,10)+'/'+s.poste.slice(5,7)+' '+s.poste.slice(11):'<span class="mut">avant le journal</span>')+'</td>'
    +'<td class="n">'+(s.relistes||'–')+'</td><td class="n">'+(s.frais?NF.format(s.frais):'–')+'</td>'
    +'<td style="white-space:nowrap"><button class="mapbtn" onclick="jAct(\''+l.id+'\',\'vendu\')">✅ Vendu</button> '
    +'<button class="mapbtn" onclick="jAct(\''+l.id+'\',\'reliste\')">🔁 Relister</button> '
    +'<button class="mapbtn" onclick="jAct(\''+l.id+'\',\'retire\')">↩ Retirer</button> '
+   +'<button class="mapbtn" title="Erreur de saisie du prix ou de la quantité (sans frais)" onclick="jAct(\''+l.id+'\',\'corrige\')">✏ Corriger</button> '
    +'<button class="mapbtn" onclick="jAct(\''+l.id+'\',\'cout\')">Coût</button> '
    +'<button class="mapbtn" title="Annuler la dernière action" onclick="jUndo(\''+l.id+'\')">↶</button></td></tr>';
   if(!JOPEN||JOPEN.id!==l.id)return row;
@@ -243,6 +247,8 @@ function jRender(){if(!J)return;const box=document.getElementById('jopen');if(!b
    +' <span class="sub">reçu après taxe : '+NF.format(net(s.prix,s.reste))+'</span>'
    :k==='reliste'?'Nouveau prix '+inp('p',f?Math.max(1,f[0]-1):s.prix,110)+' /u '+go+' <span class="sub">tu perds la taxe payée sur l’annonce retirée : <b class="neg">'+NF.format(lost(s.prix,s.reste))+'</b> ('+Math.round(JC().tax*100)+' % de '+s.reste+' × '+NF.format(s.prix)+') ; la nouvelle annonce repaye '+Math.round(JC().tax*100)+' %, déduits de la vente</span>'
    :k==='retire'?'Retirer les '+s.reste+' restants : tu perds la taxe payée, <b class="neg">'+NF.format(lost(s.prix,s.reste))+'</b> '+go
+   :k==='corrige'?'Prix '+inp('p',s.prix,110)+' /u, quantité mise en vente '+inp('q',s.qte,80)+' '+go
+    +' <span class="sub">corrige une erreur de saisie, sans frais (pour un vrai changement de prix en jeu, utilise 🔁 Relister)</span>'
    :k==='src'?'Origine <select id="jas" class="search" style="width:auto;display:inline-block" onchange="jSrcCost(\''+l.id+'\')">'+jSrcOpts(s.src||jSrcDefault(l.objet))+'</select> '
     +'coût '+inp('c',(()=>{const src=s.src||jSrcDefault(l.objet),c=jCostFor(src,l.objet);   // 0 hors recolte = cout oublie
       return (s.cout==null||(s.cout===0&&src!=='recolte'))&&c!=null?c:(s.cout??'')})(),110)+' /u '+go
@@ -282,7 +288,7 @@ function jStats(lots){const per=+(document.getElementById('jper')||{}).value||0,
    +'<td class="n '+(b>0?'pos':'neg')+'">'+NF.format(b)+(o.sansCout?' *':'')+'</td><td class="n">'+(o.recu?Math.round(b/o.recu*100)+' %':'–')+'</td></tr>'}).join('')
   :'<tr><td colspan="8" class="mut">Rien sur cette période.</td></tr>'}
 function jLog(lots){const ev=[];lots.forEach(([l,s])=>s.ev.forEach(e=>e.t&&e.type!=='cout'&&ev.push([e,l,ev.length])));ev.sort((a,b)=>b[0].t.localeCompare(a[0].t)||b[2]-a[2]);
- const T={poste:'📦 posté',reliste:'🔁 relisté',vendu:'✅ vendu',retire:'↩ retiré',src:'🏷 origine'};
+ const T={poste:'📦 posté',reliste:'🔁 relisté',vendu:'✅ vendu',retire:'↩ retiré',src:'🏷 origine',corrige:'✏ corrigé'};
  document.getElementById('jlog').innerHTML=ev.slice(0,40).map(([e,l])=>'<tr><td>'+e.t.slice(8,10)+'/'+e.t.slice(5,7)+' '+e.t.slice(11)+'</td><td>'+T[e.type]+'</td><td>'+jEsc(l.objet)+'</td>'
   +'<td class="n">'+(e.qte||'')+'</td><td class="n">'+(e.prix?NF.format(e.prix):'')+'</td><td class="n '+(e.type==='vendu'?'pos':'neg')+'">'+(e.type==='vendu'?'+'+NF.format(e.recu||0):e.frais?'−'+NF.format(e.frais):'')+'</td>'
   +'<td><button class="mapbtn" title="Annuler ce mouvement (erreur de clic)" onclick="jUndoEv(\''+l.id+'\',\''+e.id+'\')">↶</button></td></tr>').join('')}

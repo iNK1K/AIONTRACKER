@@ -169,6 +169,13 @@ class Journal(unittest.TestCase):
         self.assertEqual((s["prix"], s["cout"], s["vendus"], s["reste"], s["frais"], s["recu"], s["relistes"]),
                          (900, 650, 13, 7, 1200, 11250, 1))
 
+    def test_correction_sans_frais(self):
+        lot = dict(id="c", objet="Planche", qte=10, prix=50, ev=[
+            dict(id="1", t="2026-10-19 10:00", type="poste", prix=50, qte=10),     # 50 au lieu de 500 : erreur de clic
+            dict(id="2", t="2026-10-19 10:05", type="corrige", prix=500, qte=12)])
+        s = lot_state(lot)
+        self.assertEqual((s["prix"], s["reste"], s["frais"], s["relistes"]), (500, 12, 0, 0))
+
     def test_retrait_perd_la_taxe(self):
         lot = dict(id="r", objet="Planche", qte=10, prix=500, ev=[
             dict(id="1", t="2026-10-19 10:00", type="poste", prix=500, qte=10),
