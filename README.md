@@ -16,7 +16,7 @@ Onglet **Mes métiers** : niveaux de métier enregistrés dans le navigateur ; l
 
 Onglet **Mes ventes** : journal des annonces (`journal.json`) — un clic quand tu postes, vends (tout ou partie), relistes ou retires, ou une capture (fenêtre des annonces ou historique des ventes). Bilan réel : kinah reçus, taxe perdue en relistes et retraits, bénéfice ; comparaison avec les estimations de l’outil. Le site enregistre le journal sur GitHub avec un jeton à droits limités (gardé dans le navigateur).
 
-Onglet **Ravitaillement** : coller une capture de la fenêtre de ravitaillement → objets reconnus ; pour chacun, prix de chaque ingrédient et total du craft, annonces en vente, médiane 3 j, prix de vente cible (`supply_margin`).
+Onglet **Ravitaillement** : coller une capture de la fenêtre de ravitaillement → objets reconnus ; un tableau des objets demandés du jour trié par gain à les crafter pour les revendre (prix de vente modifiable, prérempli avec la moins chère des annonces − 1 ; échecs et combo comptés ; ingrédient éclatant crafté par sa chaîne ou acheté), détail repliable, bouton 📦 Poster vers Mes ventes.
 
 Tests des calculs : `python -m unittest discover tests`.
 

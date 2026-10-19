@@ -999,10 +999,10 @@ def journal_html(ctx, cfg, my):
 
 
 def supply_tab(ctx, cfg, my):
-    """📦 Ravitaillement : capture de la fenetre des ravitaillements (objets demandes chaque jour) -> pour chaque objet,
-    le prix de chaque ingredient au dernier releve et le total du craft, les annonces en vente, la mediane sur 3 jours
-    et un prix de vente cible (marge sur le cout des ingredients, taxe comprise). Lecture et affichage dans le navigateur."""
-    m, fees, margin, items = my["market"], cfg["fees"], cfg.get("supply_margin", 0.20), []
+    """📦 Ravitaillement : capture de la fenetre des ravitaillements (objets demandes chaque jour, donc recherches a
+    l'HDV) -> pour chaque objet, de quoi calculer dans le navigateur le gain a le crafter pour le revendre : ingredients
+    au dernier releve, ingredient eclatant crafte par sa chaine ou achete, combo, plus bas prix en vente et mediane 3 j."""
+    m, fees, items = my["market"], cfg["fees"], []
     rnd = lambda v: round(v) if v is not None else None
     combo_cfg = cfg.get("combo_rate")
     # objet eclatant -> recette qui le donne en combo : un ingredient eclatant peut se crafter (option A) ou s'acheter (B)
@@ -1071,16 +1071,13 @@ def supply_tab(ctx, cfg, my):
                           rest=rest_cost(r, need) if need else None,
                           parts=[dict(p, p=rnd(p["p"]), sub=[dict(x, p=rnd(x["p"])) for x in p.get("sub") or []])
                                  for p in best[1]["parts"]],
-                          l=m.listings.get(iid, 0), med=rnd(st and st["median"]),
-                          cible=rnd(best[0] * (1 + margin) / (1 - fees)) if best[0] else None,
+                          l=m.listings.get(iid, 0), med=rnd(st and st["median"]), ask=rnd(m.price.get(iid)),
                           prof=best[3]["profession"], m=best[3]["mastery"] or 0))
-    return ("<h2>Ravitaillement</h2><p class='lead'>Colle une capture de ta fenêtre de ravitaillement (<b>Ctrl + V</b> sur cet "
-            "onglet) : pour chaque objet demandé, le prix de chaque ingrédient au dernier relevé "
-            f"({esc(paris(m.as_of, '%d/%m %H:%M')) if m.as_of else '?'}, prix le plus bas en vente) et le total du craft, "
-            "le nombre d’annonces de l’objet, son prix médian sur 3 jours, et un <b>prix de vente cible</b> = total du craft "
-            f"+ {margin:.0%} de marge, taxe de {fees:.0%} comprise. Quand un ingrédient est la version éclatante d’un "
-            "autre craft : coût en le craftant (toute la chaîne, objets normaux revendus) face à l’achat à l’HDV, réussite "
-            "selon tes niveaux (🛠️ Mes métiers), et gain moyen avec le combo.</p>"
+    return ("<h2>Ravitaillement</h2><p class='lead'>Les objets demandés du jour sont recherchés à l’HDV : colle une capture "
+            "de ta fenêtre de ravitaillement (<b>Ctrl + V</b> sur cet onglet) pour voir lesquels rapportent à crafter puis "
+            f"revendre. Gain par craft = vente après taxe ({fees:.0%}) − coût des ingrédients (dernier relevé, "
+            f"{esc(paris(m.as_of, '%d/%m %H:%M')) if m.as_of else '?'}), échecs compris selon tes niveaux (🛠️ Mes métiers) "
+            "et combo compté. Un ingrédient éclatant est crafté par sa chaîne <b>(A)</b> ou acheté <b>(B)</b>, au moins cher.</p>"
             '<div class="card" ondragover="event.preventDefault()" ondrop="event.preventDefault();supplyScan(event.dataTransfer.files[0])">'
             '<b>📷 Capture de la fenêtre de ravitaillement</b><span class="mut">Ctrl + V sur cet onglet, glisse le fichier, ou '
             '<label style="color:var(--acc);cursor:pointer;text-decoration:underline">choisis un fichier<input type="file" '
@@ -1088,7 +1085,7 @@ def supply_tab(ctx, cfg, my):
             'navigateur et recalculée avec les prix de chaque passage.</span><span id="smsg" class="mut"></span></div>'
             '<div id="sbox"></div>'
             f'<script>window.SUPPLY={json.dumps(items, ensure_ascii=False, separators=(",", ":"))};'
-            f'window.SUPPLY_CFG={json.dumps(dict(margin=margin, tax=fees))};</script>')
+            f'window.SUPPLY_CFG={json.dumps(dict(tax=fees))};</script>')
 
 
 def gains_tab(ctx, cfg, my):

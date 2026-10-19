@@ -33,9 +33,6 @@
   "_github_repo": "dépôt où le site enregistre journal.json (rempli automatiquement dans GitHub Actions)",
   "github_repo": "",
 
-  "_supply_margin": "Ravitaillement : prix de vente cible = coût des ingrédients × (1 + marge) ÷ (1 − taxe)",
-  "supply_margin": 0.20,
-
   "alerts": {
     "_discord": "le salon Discord est partagé : jamais d'alerte sur mes annonces. hourly = rapport léger des bonnes opportunités (feu vert), envoyé seulement s'il y en a de nouvelles ; daily = résumé détaillé + annonces NCSOFT pas encore postées",
     "hourly": true,
