@@ -1,9 +1,9 @@
 {
  "_": "Journal de mes annonces, rempli depuis l'onglet 💰 Mes ventes du site (ne pas modifier à la main). Une annonce = un lot posté ; ses événements : poste, reliste (nouveau prix, nouveaux frais), vendu (quantité, prix, reçu après taxe), retire. « avant » = annonce antérieure au journal (date de mise en vente et frais inconnus).",
- "maj": "2026-10-19 02:32",
+ "maj": "2026-10-19 02:33",
  "lots": [
   {"id":"m1","objet":"Ailes des vagues bleues scellées","qte":1,"prix":679994,"avant":1,"ev":[{"id":"m2","t":null,"type":"poste","prix":679994,"qte":1,"frais":null}]},
-  {"id":"m3","objet":"Masse éclatante d'orichalque","qte":2,"prix":159993,"avant":1,"ev":[{"id":"m4","t":null,"type":"poste","prix":159993,"qte":2,"frais":null}]},
+  {"id":"m3","objet":"Masse éclatante d'orichalque","qte":2,"prix":159993,"avant":1,"ev":[{"id":"m4","t":null,"type":"poste","prix":159993,"qte":2,"frais":null},{"id":"mveitcxj7maqg","t":"2026-10-19 02:33","type":"retire","qte":2,"frais":31998}]},
   {"id":"m5","objet":"Mijoté de pujery de maître","qte":20,"prix":22500,"avant":1,"ev":[{"id":"m6","t":null,"type":"poste","prix":22500,"qte":20,"frais":null}],"cout":26200},
   {"id":"m7","objet":"Corne dure de Balaur raffinée","qte":33,"prix":65000,"avant":1,"ev":[{"id":"m8","t":null,"type":"poste","prix":65000,"qte":33,"frais":null}],"cout":79400},
   {"id":"m9","objet":"Lingot d'orichalque","qte":64,"prix":14990,"avant":1,"ev":[{"id":"m10","t":null,"type":"poste","prix":14990,"qte":64,"frais":null}],"cout":10686},
