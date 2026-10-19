@@ -109,15 +109,17 @@ document.addEventListener('paste',e=>{const it=[...((e.clipboardData||{}).items|
 // retiree. Enregistre dans journal.json du depot GitHub (jeton garde dans ce navigateur), sinon dans ce navigateur.
 // Meme calcul d'etat que config.lot_state (Python).
 let J=null,JSHA=null,JBUSY=false,JOPEN=null;
-const JC=()=>window.JCFG||{tax:0.1,fee:0.02,repo:null};
+const JC=()=>window.JCFG||{tax:0.1,repo:null};
 const jEsc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function jNow(){const d=new Date(),p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes())}
 function jid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
 function jState(l){const ev=(l.ev||[]).filter(e=>!e.x).sort((a,b)=>(a.t||'').localeCompare(b.t||''));
- let prix=l.prix,cout=l.cout,sold=0,ret=0,frais=0,recu=0,rel=0,fraisRel=0,poste=null;
- ev.forEach(e=>{if(e.type==='poste'||e.type==='reliste'){prix=e.prix;frais+=e.frais||0;if(e.type==='reliste'){rel++;fraisRel+=e.frais||0}else poste=e.t}
-  else if(e.type==='vendu'){sold+=e.qte;recu+=e.recu||0}else if(e.type==='retire')ret+=e.qte;else if(e.type==='cout')cout=e.cout});
- return {prix,cout,vendus:sold,retires:ret,reste:Math.max(0,l.qte-sold-ret),frais,fraisRel,recu,relistes:rel,poste,ev}}
+ // frais = taxe de 10 % perdue : payee a chaque mise en vente, elle n'est recuperee (deduite de la vente) que si l'annonce
+ // se vend ; relister ou retirer fait perdre celle de l'annonce retiree
+ let prix=l.prix,cout=l.cout,sold=0,ret=0,frais=0,recu=0,rel=0,poste=null;
+ ev.forEach(e=>{if(e.type==='poste'||e.type==='reliste'){prix=e.prix;frais+=e.frais||0;if(e.type==='reliste')rel++;else poste=e.t}
+  else if(e.type==='vendu'){sold+=e.qte;recu+=e.recu||0}else if(e.type==='retire'){ret+=e.qte;frais+=e.frais||0}else if(e.type==='cout')cout=e.cout});
+ return {prix,cout,vendus:sold,retires:ret,reste:Math.max(0,l.qte-sold-ret),frais,recu,relistes:rel,poste,ev}}
 function jMerge(a,b){const lots={},order=[];
  [a,b].forEach(x=>((x&&x.lots)||[]).forEach(l=>{let o=lots[l.id];
   if(!o){o=lots[l.id]=JSON.parse(JSON.stringify(l));order.push(l.id);return}
@@ -159,19 +161,19 @@ function jSetToken(){const v=document.getElementById('jtoken').value.trim();if(!
  try{localStorage.setItem('ghtoken',v)}catch(e){}document.getElementById('jtoken').value='••••••••';jInit()}
 function jForget(){try{localStorage.removeItem('ghtoken')}catch(e){}document.getElementById('jtoken').value='';jStatus('Jeton oublié dans ce navigateur.')}
 // ---------------------------------------------------------------- actions
-const fee=(p,q)=>Math.floor(JC().fee*p*q),net=(p,q)=>Math.floor(p*q*(1-JC().tax));
+const lost=(p,q)=>Math.floor(JC().tax*p*q),net=(p,q)=>Math.floor(p*q*(1-JC().tax));
 function jLot(id){return J.lots.find(l=>l.id===id)}
 function jPost(){const g=id=>document.getElementById(id),objet=g('jo').value.trim(),q=+g('jq').value,p=+g('jp').value,n=Math.max(1,+g('jn').value||1);
  const c=g('jc').value===''?null:+g('jc').value;
  if(!objet||!(q>0)||!(p>0)){toast('Indique l’objet, la quantité et le prix');return}
- for(let k=0;k<n;k++){const id=jid();J.lots.push({id,objet,qte:q,prix:p,...(c!=null?{cout:c}:{}),ev:[{id:jid(),t:jNow(),type:'poste',prix:p,qte:q,frais:fee(p,q)}]})}
+ for(let k=0;k<n;k++){const id=jid();J.lots.push({id,objet,qte:q,prix:p,...(c!=null?{cout:c}:{}),ev:[{id:jid(),t:jNow(),type:'poste',prix:p,qte:q}]})}
  g('jq').value=g('jp').value='';jSync(n+' annonce(s) '+objet)}
 function jAct(id,kind){JOPEN=JOPEN&&JOPEN.id===id&&JOPEN.kind===kind?null:{id,kind};jRender()}
 function jDo(id,kind){const l=jLot(id),s=jState(l),g=k=>document.getElementById('ja'+k);
  if(kind==='vendu'){const q=Math.min(s.reste,+g('q').value||0),p=+g('p').value,t=(g('t').value||jNow()).replace('T',' ');
   if(!(q>0)||!(p>0))return;l.ev.push({id:jid(),t,type:'vendu',prix:p,qte:q,recu:net(p,q)})}
- else if(kind==='reliste'){const p=+g('p').value;if(!(p>0))return;l.ev.push({id:jid(),t:jNow(),type:'reliste',prix:p,qte:s.reste,frais:fee(p,s.reste)})}
- else if(kind==='retire')l.ev.push({id:jid(),t:jNow(),type:'retire',qte:s.reste});
+ else if(kind==='reliste'){const p=+g('p').value;if(!(p>0))return;l.ev.push({id:jid(),t:jNow(),type:'reliste',prix:p,qte:s.reste,frais:lost(s.prix,s.reste)})}
+ else if(kind==='retire')l.ev.push({id:jid(),t:jNow(),type:'retire',qte:s.reste,frais:lost(s.prix,s.reste)});
  else if(kind==='cout'){const c=+g('c').value;if(!(c>=0))return;l.ev.push({id:jid(),t:jNow(),type:'cout',cout:c})}
  JOPEN=null;jSync(kind+' '+l.objet)}
 function jUndo(id){const l=jLot(id),ev=l.ev.filter(e=>!e.x&&e.t).sort((a,b)=>a.t.localeCompare(b.t));
@@ -199,7 +201,7 @@ async function jScan(file){if(!file||!(file.type||'').startsWith('image/'))retur
     const seen=rows.filter(x=>x!==r&&x.name===r.name&&x.qty===r.qty&&x.unit===r.unit&&rows.indexOf(x)<rows.indexOf(r)).length;
     if(same>seen){known++;return}
     const c=(window.COSTS||{})[r.name];
-    J.lots.push({id:jid(),objet:r.name,qte:r.qty,prix:r.unit,...(c!=null?{cout:c}:{}),ev:[{id:jid(),t:jNow(),type:'poste',prix:r.unit,qte:r.qty,frais:fee(r.unit,r.qty)}]});added++});
+    J.lots.push({id:jid(),objet:r.name,qte:r.qty,prix:r.unit,...(c!=null?{cout:c}:{}),ev:[{id:jid(),t:jNow(),type:'poste',prix:r.unit,qte:r.qty}]});added++});
    msg.textContent=added+' annonce(s) ajoutée(s)'+(known?', '+known+' déjà dans le journal':'')+(bad.length?' ; à saisir à la main (lecture incertaine) : '+bad.join(', '):'')+'.'}
   URL.revokeObjectURL(url);if(added)jSync('capture : '+added+(hist?' vente(s)':' annonce(s)'));else jRender()}
  catch(e){msg.textContent='Lecture impossible : '+e+' (la lecture fonctionne sur le site en ligne)'}}
@@ -224,35 +226,35 @@ function jRender(){if(!J)return;const box=document.getElementById('jopen');if(!b
   const go='<button class="mapbtn" onclick="jDo(\''+l.id+'\',\''+k+'\')">OK</button>';
   const f2=k==='vendu'?'Vendu '+inp('q',s.reste,80)+' à '+inp('p',s.prix,110)+' /u, le '+inp('t',jNow().replace(' ','T'),190,'datetime-local')+' '+go
    +' <span class="sub">reçu après taxe : '+NF.format(net(s.prix,s.reste))+'</span>'
-   :k==='reliste'?'Nouveau prix '+inp('p',f?Math.max(1,f[0]-1):s.prix,110)+' /u '+go+' <span class="sub">nouveaux frais de mise en vente : ~'+NF.format(fee(f?f[0]-1:s.prix,s.reste))+' ('+Math.round(JC().fee*100)+' % du prix des '+s.reste+' restants, non remboursés)</span>'
-   :k==='retire'?'Retirer les '+s.reste+' restants (les frais payés ne sont pas remboursés) '+go
+   :k==='reliste'?'Nouveau prix '+inp('p',f?Math.max(1,f[0]-1):s.prix,110)+' /u '+go+' <span class="sub">tu perds la taxe payée sur l’annonce retirée : <b class="neg">'+NF.format(lost(s.prix,s.reste))+'</b> ('+Math.round(JC().tax*100)+' % de '+s.reste+' × '+NF.format(s.prix)+') ; la nouvelle annonce repaye '+Math.round(JC().tax*100)+' %, déduits de la vente</span>'
+   :k==='retire'?'Retirer les '+s.reste+' restants : tu perds la taxe payée, <b class="neg">'+NF.format(lost(s.prix,s.reste))+'</b> '+go
    :'Coût de revient '+inp('c',s.cout??'',110)+' /u '+go;
   return row+'<tr><td colspan="9" style="background:var(--card2)">'+f2+'</td></tr>'}).join('')
   :'<tr><td colspan="9" class="mut">Aucune annonce en cours : ajoute-les ci-dessous ou colle une capture de ta fenêtre des ventes.</td></tr>';
  jStats(lots);jLog(lots)}
 function jStats(lots){const per=+(document.getElementById('jper')||{}).value||0,since=per?new Date(Date.now()-per*864e5):null;
  const p=n=>String(n).padStart(2,'0'),lim=since?since.getFullYear()+'-'+p(since.getMonth()+1)+'-'+p(since.getDate())+' '+p(since.getHours())+':'+p(since.getMinutes()):'';
- const by={},T={recu:0,frais:0,fraisRel:0,cout:0,vendus:0,ventes:0,relistes:0,sansCout:0};
- lots.forEach(([l,s])=>{const o=by[l.objet]||(by[l.objet]={recu:0,brut:0,frais:0,fraisRel:0,cout:0,vendus:0,ventes:0,relistes:0,sansCout:0});
+ const by={},T={recu:0,frais:0,cout:0,vendus:0,ventes:0,relistes:0,retraits:0,sansCout:0};
+ lots.forEach(([l,s])=>{const o=by[l.objet]||(by[l.objet]={recu:0,brut:0,frais:0,cout:0,vendus:0,ventes:0,relistes:0,retraits:0,sansCout:0});
   let cout=l.cout;(s.ev).forEach(e=>{if(e.type==='cout'){cout=e.cout;return}if(!e.t||e.t<lim)return;
-   if(e.type==='poste'||e.type==='reliste'){o.frais+=e.frais||0;if(e.type==='reliste'){o.fraisRel+=e.frais||0;o.relistes++}}
+   if(e.type==='reliste'||e.type==='retire'||e.type==='poste'){o.frais+=e.frais||0;if(e.type==='reliste')o.relistes++;if(e.type==='retire')o.retraits++}
    else if(e.type==='vendu'){o.recu+=e.recu||0;o.brut+=e.prix*e.qte;o.vendus+=e.qte;o.ventes++;if(cout!=null)o.cout+=cout*e.qte;else o.sansCout+=e.qte}})});
  Object.values(by).forEach(o=>Object.keys(T).forEach(k=>T[k]+=o[k]));
  const ben=T.recu-T.cout-T.frais,kpi=(l,v,s,c)=>'<div class="kpi"><div class="l">'+l+'</div><div class="v '+(c||'')+'">'+v+'</div><div class="s">'+s+'</div></div>';
  document.getElementById('jkpi').innerHTML=kpi('Kinah reçus',kf(T.recu),T.ventes+' vente(s), '+NF.format(T.vendus)+' unités, après taxe','pos')
-  +kpi('Frais de mise en vente',kf(T.frais),'dont relistes '+kf(T.fraisRel)+' ('+T.relistes+' reliste(s))',T.frais?'neg':'')
+  +kpi('Taxe perdue',kf(T.frais),T.relistes+' reliste(s), '+T.retraits+' retrait(s) : 10 % de l’annonce retirée',T.frais?'neg':'')
   +kpi('Bénéfice',kf(ben),T.sansCout?NF.format(T.sansCout)+' unités vendues sans coût connu (comptées gratuites)':'reçu − coût − frais',ben>0?'pos':'neg')
-  +kpi('Perte due aux relistes',T.recu?(T.fraisRel/T.recu*100).toFixed(1).replace('.',',')+' %':'–','frais de relistes / kinah reçus');
+  +kpi('Perte due aux relistes',T.recu?(T.frais/T.recu*100).toFixed(1).replace('.',',')+' %':'–','taxe perdue / kinah reçus');
  const rows=Object.entries(by).filter(([n,o])=>o.ventes||o.frais).sort((a,b)=>b[1].recu-a[1].recu);
  document.getElementById('jitems').innerHTML=rows.length?rows.map(([n,o])=>{const b=o.recu-o.cout-o.frais;
   return '<tr><td><span class="nm">'+jEsc(n)+'</span></td><td class="n">'+NF.format(o.vendus)+'</td><td class="n">'+(o.vendus?NF.format(Math.round(o.brut/o.vendus)):'–')+'</td>'
-   +'<td class="n">'+NF.format(o.recu)+'</td><td class="n">'+(o.cout?NF.format(o.cout):'–')+'</td><td class="n">'+(o.frais?NF.format(o.frais):'–')+'</td>'
-   +'<td class="n">'+(o.relistes?o.relistes+' ('+NF.format(o.fraisRel)+')':'–')+'</td><td class="n '+(b>0?'pos':'neg')+'">'+NF.format(b)+(o.sansCout?' *':'')+'</td></tr>'}).join('')
+   +'<td class="n">'+NF.format(o.recu)+'</td><td class="n">'+(o.cout?NF.format(o.cout):'–')+'</td><td class="n neg">'+(o.frais?NF.format(o.frais):'–')+'</td>'
+   +'<td class="n">'+(o.relistes||o.retraits?o.relistes+' / '+o.retraits:'–')+'</td><td class="n '+(b>0?'pos':'neg')+'">'+NF.format(b)+(o.sansCout?' *':'')+'</td></tr>'}).join('')
   :'<tr><td colspan="8" class="mut">Rien sur cette période.</td></tr>'}
 function jLog(lots){const ev=[];lots.forEach(([l,s])=>s.ev.forEach(e=>e.t&&e.type!=='cout'&&ev.push([e,l,ev.length])));ev.sort((a,b)=>b[0].t.localeCompare(a[0].t)||b[2]-a[2]);
  const T={poste:'📦 posté',reliste:'🔁 relisté',vendu:'✅ vendu',retire:'↩ retiré'};
  document.getElementById('jlog').innerHTML=ev.slice(0,40).map(([e,l])=>'<tr><td>'+e.t.slice(8,10)+'/'+e.t.slice(5,7)+' '+e.t.slice(11)+'</td><td>'+T[e.type]+'</td><td>'+jEsc(l.objet)+'</td>'
-  +'<td class="n">'+(e.qte||'')+'</td><td class="n">'+(e.prix?NF.format(e.prix):'')+'</td><td class="n">'+(e.type==='vendu'?'+'+NF.format(e.recu||0):e.frais?'−'+NF.format(e.frais):'')+'</td></tr>').join('')}
+  +'<td class="n">'+(e.qte||'')+'</td><td class="n">'+(e.prix?NF.format(e.prix):'')+'</td><td class="n '+(e.type==='vendu'?'pos':'neg')+'">'+(e.type==='vendu'?'+'+NF.format(e.recu||0):e.frais?'−'+NF.format(e.frais):'')+'</td></tr>').join('')}
 function jCostFill(){const n=document.getElementById('jo').value.trim(),c=(window.COSTS||{})[n],el=document.getElementById('jc');if(c!=null&&el.value==='')el.value=c}
 const PROF={Alchemy:'Alchimie',Handicrafting:'Artisanat',Armorsmithing:"Forge d'armures",Blacksmithing:"Forge d'armes",Cooking:'Cuisine'};
 function lvState(){let st={};try{st=JSON.parse(localStorage.getItem('metiers')||'{}')}catch(e){}st.lv=st.lv||{};if(st.lose===undefined)st.lose=true;return st}

@@ -479,8 +479,13 @@ Un seul fichier, **`journal.json`**, où chaque annonce garde ses événements d
 
 **Enregistrement** : le site écrit directement `journal.json` dans ton dépôt GitHub, avec un jeton « fine-grained » limité à ce dépôt (droit *Contents* seulement), gardé dans ton navigateur et jamais publié. Plus de copier-coller. Si deux appareils écrivent, les événements sont fusionnés (aucun n'est perdu). Sans jeton, le journal reste dans le navigateur. Le passage horaire lit le journal : alertes « Tu es battu », sous le seuil, etc., et comparaison avec les estimations de l'outil.
 
-## Frais de mise en vente : à vérifier
-Un guide (tiers, pas NCSOFT) indique **~2 % du prix affiché**, payés à chaque mise en vente, **non remboursés** en cas de retrait ou de reliste (exemple : 1 435 de frais pour une annonce de 71 775). C'est la valeur utilisée (`listing_fee: 0.02` dans `config.json`). **Vérifie-la en jeu** sur une annonce (frais affichés ÷ prix total) ; si c'est différent, dis-le-moi ou change la valeur.
+## Taxe et relistes (corrigé d'après tes indications)
+La taxe de **10 %** est payée à chaque mise en vente : c'est celle que l'historique montre déduite d'une vente (810 000 → 729 000). **Relister = retirer puis remettre en vente, donc repayer 10 %.** Dans le journal :
+- annonce vendue : tu reçois 90 % (rien d'autre) ;
+- **reliste** : tu perds les 10 % payés sur l'annonce retirée (ancien prix × quantité restante) ; la nouvelle annonce repaye 10 %, déduits de sa vente ;
+- **retrait** : tu perds les 10 % de l'annonce.
+Exemple vérifié : 30 Pièces de bois à 13 500, 12 vendues (145 800 reçus), reliste des 18 à 12 000 (**−24 300** perdus), 18 vendues (194 400 reçus).
+Le bilan affiche la **taxe perdue** (relistes + retraits) et sa part dans tes kinah reçus. L'hypothèse précédente (frais de ~2 % d'un guide) est abandonnée.
 
 ## Reprise de l'existant
 Tes 6 annonces en cours et tes 24 ventes ont été reprises dans le journal (marquées « avant le journal » : date de mise en vente et frais inconnus). `mes_annonces.json` et `mes_ventes.json` sont supprimés (ils restent dans l'historique git).

@@ -37,7 +37,8 @@ def load_config():
 
 def lot_state(lot):
     """Etat d'une annonce du journal d'apres ses evenements (poste, reliste, vendu, retire) : meme calcul que le site
-    (site.js, jState)."""
+    (site.js, jState). frais = taxe de 10 % perdue : payee a chaque mise en vente, deduite de la vente si l'annonce se
+    vend, perdue si elle est retiree ou relistee (relister = retirer puis remettre en vente)."""
     ev = sorted((e for e in lot.get("ev") or [] if not e.get("x")), key=lambda e: e.get("t") or "")   # x = annule
     prix, cout, sold, retired, frais, recu, relistes = lot.get("prix"), lot.get("cout"), 0, 0, 0, 0, 0
     for e in ev:
@@ -50,6 +51,7 @@ def lot_state(lot):
             recu += e.get("recu") or 0
         elif e["type"] == "retire":
             retired += e["qte"]
+            frais += e.get("frais") or 0                    # taxe de l'annonce retiree, perdue
         elif e["type"] == "cout":
             cout = e["cout"]
     return dict(prix=prix, cout=cout, vendus=sold, retires=retired, reste=max(0, lot["qte"] - sold - retired), frais=frais,

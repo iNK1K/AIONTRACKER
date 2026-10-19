@@ -155,9 +155,9 @@ class VraisGains(unittest.TestCase):
 
 class Journal(unittest.TestCase):
     LOT = dict(id="a", objet="Planche", qte=20, prix=1000, cout=600, ev=[
-        dict(id="1", t="2026-10-19 10:00", type="poste", prix=1000, qte=20, frais=400),
+        dict(id="1", t="2026-10-19 10:00", type="poste", prix=1000, qte=20),
         dict(id="2", t="2026-10-19 12:00", type="vendu", prix=1000, qte=8, recu=7200),
-        dict(id="3", t="2026-10-19 14:00", type="reliste", prix=900, qte=12, frais=216),
+        dict(id="3", t="2026-10-19 14:00", type="reliste", prix=900, qte=12, frais=1200),   # 10 % de 12 x 1000, perdus
         dict(id="4", t="2026-10-19 15:00", type="vendu", prix=900, qte=5, recu=4050),
         dict(id="5", t="2026-10-19 16:00", type="vendu", prix=900, qte=2, recu=1620, x=1),   # annule
         dict(id="6", t="2026-10-19 17:00", type="cout", cout=650)])
@@ -165,7 +165,14 @@ class Journal(unittest.TestCase):
     def test_etat_d_une_annonce(self):
         s = lot_state(self.LOT)
         self.assertEqual((s["prix"], s["cout"], s["vendus"], s["reste"], s["frais"], s["recu"], s["relistes"]),
-                         (900, 650, 13, 7, 616, 11250, 1))
+                         (900, 650, 13, 7, 1200, 11250, 1))
+
+    def test_retrait_perd_la_taxe(self):
+        lot = dict(id="r", objet="Planche", qte=10, prix=500, ev=[
+            dict(id="1", t="2026-10-19 10:00", type="poste", prix=500, qte=10),
+            dict(id="2", t="2026-10-19 11:00", type="retire", qte=10, frais=500)])
+        s = lot_state(lot)
+        self.assertEqual((s["reste"], s["frais"]), (0, 500))
 
     def test_annonces_et_ventes_pour_l_analyse(self):
         listings, sales = from_journal({"lots": [self.LOT, dict(self.LOT, id="b", del_=0), dict(self.LOT, id="c", **{"del": 1})]})

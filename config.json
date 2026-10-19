@@ -30,8 +30,6 @@
   "_map_worlds": "zones accessibles sur ta version : 1110 Altgard, 1111 Morheim, 1100 Ishalgen, 20 Reshanta inférieure",
   "map_worlds": ["1110"],
 
-  "_listing_fee": "frais de mise en vente, payés à chaque mise en vente et à chaque reliste, jamais remboursés (≈ 2 % du prix affiché d’après un guide : à vérifier en jeu sur une annonce)",
-  "listing_fee": 0.02,
   "_github_repo": "dépôt où le site enregistre journal.json (rempli automatiquement dans GitHub Actions)",
   "github_repo": "iNK1K/AIONTRACKER",
 

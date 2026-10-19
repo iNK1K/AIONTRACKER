@@ -928,19 +928,19 @@ def journal_html(ctx, cfg, my):
         iid = m.by_base.get(lot["objet"])
         if iid in m.price:
             floor[lot["objet"]] = [m.price[iid], m.listings.get(iid, 0)]
-    fee = cfg.get("listing_fee", 0.02)
     names = "".join(f'<option value="{esc(n["n"])}">' for n in sorted(ctx.market_icons(), key=lambda x: x["n"]))
     inp = lambda i, ph, w, t="number", extra="": (f'<input id="{i}" class="search" type="{t}" placeholder="{ph}" '
                                                  f'style="width:{w}px;display:inline-block" {extra}>')
     return (
         '<p class="lead">Note ici ce que deviennent tes annonces : un clic quand tu postes, vends, relistes ou retires. '
-        f'Le site calcule ce que tu gagnes vraiment : taxe de {cfg["fees"]:.0%} sur les ventes et frais de mise en vente '
-        f'(~{fee:.0%} du prix affiché, payés à chaque mise en vente et à chaque reliste, jamais remboursés).</p>'
+        f'Le site calcule ce que tu gagnes vraiment. La taxe de {cfg["fees"]:.0%} est payée à chaque mise en vente : elle est '
+        'déduite de la vente si l’annonce part, et <b>perdue si tu la relistes ou la retires</b> (relister = retirer puis '
+        'remettre en vente, donc repayer).</p>'
         '<span id="jsync" class="sub"></span>'
         '<h3>Mes annonces en cours</h3><div class="wrap"><table><thead><tr>'
         f'{_th("Objet")}{_th("Reste", None, True)}{_th("Prix /u", None, True)}{_th("Coût /u", "Coût de revient (clique « Coût » pour le changer)", True)}'
         f'{_th("Gain /u", "Prix − taxe − coût", True)}{_th("Posté le")}{_th("Relistes", None, True)}'
-        f'{_th("Frais payés", "Frais de mise en vente de cette annonce, relistes compris", True)}{_th("Actions")}'
+        f'{_th("Taxe perdue", "Taxe des annonces retirées pour relister", True)}{_th("Actions")}'
         '</tr></thead><tbody id="jopen"></tbody></table></div>'
         '<div class="card" style="margin-top:10px"><b>📦 J’ai posté</b><div class="toolbar" style="margin:0;flex-wrap:wrap;gap:6px">'
         + inp("jo", "Objet (nom exact)", 260, "text", 'list="jnames" onchange="jCostFill()"') + f'<datalist id="jnames">{names}</datalist>'
@@ -961,8 +961,8 @@ def journal_html(ctx, cfg, my):
         '<option value="30">30 derniers jours</option><option value="0">Depuis le début</option></select></div>'
         '<div class="kpis" id="jkpi"></div><div class="wrap"><table><thead><tr>'
         f'{_th("Objet")}{_th("Unités vendues", None, True)}{_th("Prix moyen /u", None, True)}{_th("Reçu", "Après taxe", True)}'
-        f'{_th("Coût", None, True)}{_th("Frais de mise en vente", None, True)}{_th("Relistes (frais)", None, True)}'
-        f'{_th("Bénéfice", "Reçu − coût − frais (* : une partie sans coût connu)", True)}'
+        f'{_th("Coût", None, True)}{_th("Taxe perdue", "Relistes et retraits", True)}{_th("Relistes / retraits", None, True)}'
+        f'{_th("Bénéfice", "Reçu − coût − taxe perdue (* : une partie sans coût connu)", True)}'
         '</tr></thead><tbody id="jitems"></tbody></table></div>'
         '<h3>Derniers mouvements</h3><div class="wrap"><table><thead><tr>'
         f'{_th("Date")}{_th("Action")}{_th("Objet")}{_th("Qté", None, True)}{_th("Prix /u", None, True)}{_th("Kinah", None, True)}'
@@ -980,7 +980,7 @@ def journal_html(ctx, cfg, my):
         '<button class="mapbtn" onclick="jForget()">Oublier le jeton</button></div>'
         '<span class="sub">Sans jeton, le journal est gardé dans ce navigateur seulement.</span></details>'
         f'<script>window.JOURNAL={json.dumps(j, ensure_ascii=False)};'
-        f'window.JCFG={json.dumps(dict(tax=cfg["fees"], fee=fee, repo=cfg.get("_github_repo")))};'
+        f'window.JCFG={json.dumps(dict(tax=cfg["fees"], repo=cfg.get("_github_repo")))};'
         f'window.JFLOOR={json.dumps(floor, ensure_ascii=False)};</script>')
 
 
