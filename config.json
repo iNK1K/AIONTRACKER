@@ -34,10 +34,9 @@
   "github_repo": "iNK1K/AIONTRACKER",
 
   "alerts": {
-    "_types": "alertes envoyées en cours de journée. Possibles : annonces (mes annonces battues, sous le seuil, chute), achat_craft (achat → craft au feu vert), notes (notes de version), restriction (levée de la restriction sur le brut), bonne_affaire, prix (hausse/baisse de mes crafts), flip, uniques",
-    "types": ["annonces", "achat_craft", "notes", "restriction"],
-    "_resume_seul": "true = aucune alerte en cours de journée : tout est repris dans le résumé quotidien (17 h 40)",
-    "resume_seul": false,
+    "_discord": "le salon Discord est partagé : jamais d'alerte sur mes annonces. hourly = rapport léger des bonnes opportunités (feu vert), envoyé seulement s'il y en a de nouvelles ; daily = résumé détaillé + annonces NCSOFT pas encore postées",
+    "hourly": true,
+    "daily": true,
     "bargain_ratio": 0.40,
     "bargain_min_median": 1000,
     "spike_ratio": 1.50,

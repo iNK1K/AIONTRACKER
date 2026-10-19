@@ -495,3 +495,13 @@ Chaque annonce a une origine : **🌲 Récolte → craft**, **🛒 Achat → cra
 - Formulaire « J'ai posté » : l'origine est proposée selon l'objet (Récolte s'il se fabrique avec ta récolte, sinon Achat → craft), et le coût suit : **0** pour la récolte, l'estimation du site (ingrédients achetés) pour l'achat → craft, **ton prix d'achat** à saisir pour un flip. Même règle pour les annonces ajoutées par capture.
 - Bilan : tableau **par activité** (ventes, reçu, coût, taxe perdue, bénéfice, marge) et filtre par activité sur les chiffres et le détail par objet.
 - Correction au passage : sans jeton GitHub, le tableau ne se rafraîchissait pas après une action.
+
+---
+
+# Discord : salon partagé — 19/10/2026
+
+Le salon est utilisé par d'autres personnes : **plus aucune alerte sur tes annonces** (« tu es battu », « sous ton seuil », chute, stock long) ; tout ça reste sur le site (accueil « À faire maintenant », onglet Mes ventes).
+- **Chaque heure** : un message court « ⏰ Opportunités » avec les opportunités au **feu vert** de l'indice de sûreté : achat → craft, pics de prix, flips, Unique bradés (6 au plus), et le signal de levée de la restriction sur le brut. **Rien n'est envoyé** s'il n'y a rien, ou si ce sont les mêmes qu'au message précédent.
+- **Chaque jour (17 h 40)** : le résumé détaillé (meilleur moment pour poster, récolte → craft, achat → craft, flips, plan de production, opportunités sûres) + les **annonces officielles NCSOFT pas encore postées** (les annonces déjà envoyées par l'ancien système ne sont pas reprises). Le dimanche, le résumé de la semaine en plus.
+- Plus d'envoi d'annonces officielles heure par heure, ni d'alertes individuelles (bonne affaire, flip, Unique, effet d'une note de version).
+- Réglages : `alerts.hourly` et `alerts.daily` (true / false) dans `config.json`.

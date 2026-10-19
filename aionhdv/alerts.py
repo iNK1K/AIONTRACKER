@@ -8,33 +8,6 @@ from .collect import paris
 from .config import LOG_DIR
 
 
-# types d'alertes envoyees en cours de journee (config alerts.types) ; les autres restent visibles sur le site
-TYPES = {
-    "annonces": "mes annonces : battu, sous le seuil, chute, stock long a ecouler",
-    "achat_craft": "achat -> craft au feu vert (dont les pics de prix)",
-    "notes": "notes de version et annonces officielles, effet d'une note sur les prix",
-    "restriction": "levee probable de la restriction sur le brut",
-    "bonne_affaire": "annonce bradee (tout item)",
-    "prix": "hausse / baisse du prix de mes crafts",
-    "flip": "achat -> revente sans craft",
-    "uniques": "equipement Unique brade",
-}
-DEFAULT_TYPES = ("annonces", "achat_craft", "notes", "restriction")
-# debut de la cle d'une alerte deja envoyee (alerts_sent) -> type
-KEY_TYPES = {"bargain": "bonne_affaire", "spike": "prix", "dump": "prix", "buy": "achat_craft", "spike_craft": "achat_craft",
-             "unlock": "restriction", "unique": "uniques", "flip": "flip", "undercut": "annonces", "pos_seuil": "annonces",
-             "pos_chute": "annonces", "pos_lent": "annonces", "patch": "notes"}
-
-
-def enabled(cfg, kind):
-    return kind in (cfg["alerts"].get("types") or DEFAULT_TYPES)
-
-
-def digest_only(cfg):
-    """Option « resume quotidien uniquement » : rien n'est envoye en cours de journee, le resume reprend les alertes."""
-    return bool(cfg["alerts"].get("resume_seul"))
-
-
 def fmt(n):
     return f"{n:,.0f}".replace(",", " ") if n is not None else "?"
 
@@ -67,14 +40,6 @@ def safe(e):
     return (e.get("surete") or {}).get("feu") == "vert"
 
 
-def surete_txt(e):
-    s = e.get("surete")
-    if not s:
-        return ""
-    plancher = f" · ne vends pas sous {fmt(s['prix_plancher'])}" if s.get("prix_plancher") else ""
-    return f"\n🛡️ Sûreté {s['score']}/100 · quantité max ~{fmt(s['qte_max'])}{plancher}"
-
-
 def _once(con, key, message):
     if con.execute("SELECT 1 FROM alerts_sent WHERE key = ?", (key,)).fetchone():
         return False
@@ -84,68 +49,10 @@ def _once(con, key, message):
     return True
 
 
-def detect(con, cfg, result):
-    """Retourne la liste des messages d'alerte nouveaux pour ce passage."""
+def unlock_signal(con, result):
+    """Levee probable de la restriction sur le brut : le brut revient en masse et son prix chute (texte, ou None)."""
     m = result["market"]
-    a = cfg["alerts"]
-    srv = con.execute("SELECT name FROM servers WHERE id = ?", (result["server"],)).fetchone()
-    sname = srv["name"] if srv else result["server"]
-    hour = datetime.now(timezone.utc).strftime("%Y%m%d%H")
-    day = datetime.now(timezone.utc).strftime("%Y%m%d")
-    msgs = []
-
-    # 1. annonces bradees (tout item suivi ; les Unique ont leur propre suivi, detect_uniques)
-    for iid, price in (m.price.items() if enabled(cfg, "bonne_affaire") else ()):
-        if m.items.get(iid, {}).get("grade") == "Unique":
-            continue
-        med = m.median_price(iid, 7)
-        if not med or med < a["bargain_min_median"]:
-            continue
-        if price <= a["bargain_ratio"] * med:
-            ref = m.ref(iid)
-            if ref:
-                # il faut un marche reel pour revendre : volume de reference et prix de vente reel nettement plus haut
-                if ref["daily"] < 3 or not ref["avg_price"] or price > 0.6 * ref["avg_price"]:
-                    continue
-            name = m.items.get(iid, {}).get("name", iid)
-            resale = f", se vend ~{fmt(ref['avg_price'])} en moyenne sur la référence" if ref else ""
-            msg = (f"💸 **Bonne affaire** [{sname}] {name} à **{fmt(price)}** "
-                   f"(médiane 7 j : {fmt(med)}, soit {price / med:.0%}{resale}) — {m.listings.get(iid, '?')} annonce(s)")
-            if _once(con, f"bargain|{result['server']}|{iid}|{day}", msg):
-                msgs.append(msg)
-
-    # 2. envolee / chute du prix de mes produits (top recolte -> craft)
-    for e in (result["harvest"][:15] if enabled(cfg, "prix") else ()):
-        med = m.median_price(e["item_id"], 3)
-        if not med:
-            continue
-        r = e["prix_affiche"] / med
-        if r >= a["spike_ratio"]:
-            msg = (f"📈 **Prix en hausse, c'est le moment de vendre** [{sname}] {e['objet']} : {fmt(e['prix_affiche'])} "
-                   f"(médiane 3 j {fmt(med)}, x{r:.1f})")
-            if _once(con, f"spike|{result['server']}|{e['item_id']}|{day}", msg):
-                msgs.append(msg)
-        elif r <= a["dump_ratio"]:
-            msg = (f"📉 **Prix en baisse** [{sname}] {e['objet']} : {fmt(e['prix_affiche'])} "
-                   f"(médiane 3 j {fmt(med)}, {r:.0%}). Mieux vaut le mettre de côté.")
-            if _once(con, f"dump|{result['server']}|{e['item_id']}|{day}", msg):
-                msgs.append(msg)
-
-    # 3. achat -> craft -> revente rentable
-    for e in (result["buy"] if enabled(cfg, "achat_craft") else ()):
-        if e["flags"] or e["marge"] is None:
-            continue
-        if (e["marge"] >= a["buy_craft_min_margin"] and e["profit_j"] >= a["buy_craft_min_profit_day"] and e["net_pess_u"] > 0
-                and safe(e)):
-            msg = (f"🟢 **Achat → craft rentable** [{sname}] {e['objet']} : coût {fmt(e['achats_u'])} → "
-                   f"vente {fmt(e['prix_real'])}, net **{fmt(e['net_u'])}/u** (+{e['marge']:.0%}), "
-                   f"~{fmt(e['profit_j'])}/j. Ingrédients : {'; '.join(e['ingredients'])}{surete_txt(e)}")
-            if _once(con, f"buy|{result['server']}|{e['item_id']}|{day}", msg):
-                msgs.append(msg)
-
-    # 4. signal de levee de la restriction anti-bot : le brut revient en masse et son prix chute
-    gather_ids = [i for i, it in m.items.items() if it["is_gather"] and not it["bound"] and i in m.price] \
-        if enabled(cfg, "restriction") else []
+    gather_ids = [i for i, it in m.items.items() if it["is_gather"] and not it["bound"] and i in m.price]
     now = datetime.now(timezone.utc)
     drops = []
     for iid in gather_ids:
@@ -164,141 +71,73 @@ def detect(con, cfg, result):
     if len(drops) >= 10:
         share = sum(1 for p, l in drops if p <= 0.6 and l >= 1.5) / len(drops)
         if share >= 0.4:
-            msg = (f"🔓 **La restriction sur le brut semble levée** [{sname}] : {share:.0%} des ressources ont un prix "
-                   f"en baisse de plus de 40 % et 50 % d'annonces en plus sur 24 h. Vérifie si tu peux vendre ton brut, "
-                   f"et vends tes crafts avant que leurs prix ne baissent.")
-            if _once(con, f"unlock|{result['server']}|{day}", msg):
-                msgs.append(msg)
-    return msgs
+            return (f"🔓 **La restriction sur le brut semble levée** : {share:.0%} des ressources ont un prix en baisse "
+                    f"de plus de 40 % et 50 % d'annonces en plus sur 24 h.")
+    return None
 
 
-def detect_uniques(con, cfg, result):
-    """Objets Unique vendus bien en dessous de leur mediane des 7 derniers jours."""
-    a = cfg["alerts"]
-    srv = con.execute("SELECT name FROM servers WHERE id = ?", (result["server"],)).fetchone()
-    sname = srv["name"] if srv else result["server"]
-    day = datetime.now(timezone.utc).strftime("%Y%m%d")
-    msgs = []
-    for u in result["uniques"]:
-        if u["ratio"] > a["unique_ratio"] or u["releves"] < a["unique_min_samples"] or u["mediane"] < a["unique_min_median"]:
-            continue
-        msg = (f"💎 **Unique bradé** [{sname}] {u['objet']} ({u['categorie']}) à **{fmt(u['prix'])}** "
-               f"(médiane 7 j : {fmt(u['mediane'])}, soit {u['ratio']:.0%} ; plus bas vu : {fmt(u['plus_bas'])}) "
-               f"— {u['annonces']} annonce(s)")
-        if _once(con, f"unique|{result['server']}|{u['item_id']}|{day}", msg):
-            msgs.append(msg)
-    return msgs
-
-
-def detect_undercuts(con, cfg, result):
-    """Quelqu'un vend moins cher qu'une de mes annonces : une alerte par nouveau prix plus bas."""
-    srv = con.execute("SELECT name FROM servers WHERE id = ?", (result["server"],)).fetchone()
-    sname = srv["name"] if srv else result["server"]
-    msgs = []
-    for l in result["listings"]:
-        if not l["battu"]:
-            continue
-        if l["conseil"]:
-            gain = f" (il te reste +{fmt(round(l['conseil'] * (1 - cfg['fees']) - l['cout']))}/u)" if l.get("cout") else ""
-            advice = f"Repasse devant à **{fmt(l['conseil'])}**{gain}."
-        elif l.get("seuil"):
-            advice = f"Le plus bas est sous ton seuil de rentabilité ({fmt(l['seuil'])}) : baisser = vendre à perte."
-        else:
-            advice = "Baisse ton prix ou attends."
-        msg = (f"⚔️ **Tu es battu** [{sname}] {l['nom']} : quelqu'un vend à **{fmt(l['plancher'])}** "
-               f"(ton prix {fmt(l['mon_prix'])}, −{fmt(l['ecart'])}) — {l['annonces']} annonce(s). {advice}")
-        if _once(con, f"undercut|{result['server']}|{l['item_id']}|{l['mon_prix']}|{l['plancher']}", msg):
-            msgs.append(msg)
-    return msgs
-
-
-def detect_patch_moves(con, cfg, result):
-    """Items cites dans une note de version depuis moins de 48 h dont le prix a bouge d'au moins 20 %."""
-    m = result["market"]
-    since = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()[:19]
-    msgs = []
-    for w in con.execute("SELECT * FROM patch_watch WHERE since >= ?", (since,)).fetchall():
-        price = m.price.get(w["item_id"])
-        if not price or not w["base_price"]:
-            continue
-        r = price / w["base_price"]
-        if 0.8 < r < 1.25:
-            continue
-        name = m.items.get(w["item_id"], {}).get("name", w["item_id"])
-        sens = "📈 en hausse" if r > 1 else "📉 en baisse"
-        msg = (f"🛠️ **Effet de la note de version** {name} {sens} : **{fmt(price)}** "
-               f"(avant la note {fmt(w['base_price'])}, ×{r:.2f}) — {w['title']}")
-        if _once(con, f"patch|{w['news_key']}|{w['item_id']}|{'up' if r > 1 else 'down'}", msg):
-            msgs.append(msg)
-    return msgs
-
-
-def detect_spikes(con, cfg, result):
-    """Achat -> craft rentable seulement grace a un pic de prix en cours : une alerte par item et par jour."""
-    srv = con.execute("SELECT name FROM servers WHERE id = ?", (result["server"],)).fetchone()
-    sname = srv["name"] if srv else result["server"]
-    day = datetime.now(timezone.utc).strftime("%Y%m%d")
-    msgs = []
+def opportunities(cfg, result):
+    """Bonnes opportunites du moment, seulement au feu vert de l'indice de surete (aucune donnee personnelle) :
+    liste de (cle, ligne)."""
+    a, out = cfg["alerts"], []
+    for e in result.get("buy") or []:
+        if (not e["flags"] and e["marge"] is not None and e["marge"] >= a["buy_craft_min_margin"]
+                and e["profit_j"] >= a["buy_craft_min_profit_day"] and e["net_pess_u"] > 0 and safe(e)):
+            s = e["surete"]
+            out.append((f"buy{e['item_id']}", f"🟢 **{e['objet']}** (achat → craft) : ingrédients {fmt(e['achats_u'])} → vente "
+                        f"~{fmt(e['prix_real'])}, **+{fmt(e['net_u'])}/u** (+{e['marge']:.0%}), max ~{fmt(s['qte_max'])} u"))
     for e in result.get("spikes") or []:
-        if not safe(e):
-            continue                                  # marche deja encombre ou trop risque : pas d'alerte
-        depuis = f", depuis {paris(e['depuis'], '%d/%m %H:%M')}" if e["depuis"] else ""
-        msg = (f"⚡ **Pic de prix** [{sname}] {e['objet']} affiché **{fmt(e['prix_affiche'])}** "
-               f"(habituellement {fmt(e['prix_ref'])}, ×{e['ratio']}{depuis}) — {e['annonces']} annonce(s). "
-               f"Acheter les ingrédients ({fmt(e['achats_u'])}/u) et fabriquer rapporte **+{fmt(e['net_affiche_u'])}/u** "
-               f"si tu vends au prix affiché, mais **{fmt(e['net_habituel_u'])}/u** si le prix revient à la normale : "
-               f"petite quantité, à vendre vite. Ingrédients : {'; '.join(e['ingredients'])}{surete_txt(e)}")
-        if _once(con, f"spike_craft|{result['server']}|{e['item_id']}|{day}", msg):
-            msgs.append(msg)
-    return msgs
+        if safe(e):
+            out.append((f"spike{e['item_id']}", f"⚡ **{e['objet']}** en pic : affiché {fmt(e['prix_affiche'])} (habituellement "
+                        f"{fmt(e['prix_ref'])}), +{fmt(e['net_affiche_u'])}/u en achat → craft, à vendre vite"))
+    for f in result.get("flips") or []:
+        if f["acheter"] and f["profit_j"] >= a["flip_min_profit_day"] and safe(f):
+            out.append((f"flip{f['item_id']}", f"🔁 **{f['objet']}** (flip) : acheter ≤ {fmt(f['achat_cible'])}, revendre "
+                        f"~{fmt(f['revente_cible'])}, **+{fmt(f['net_u'])}/u**"))
+    for u in result.get("uniques") or []:
+        if u["ratio"] <= a["unique_ratio"] and u["releves"] >= a["unique_min_samples"] and u["mediane"] >= a["unique_min_median"]:
+            out.append((f"uniq{u['item_id']}", f"💎 **{u['objet']}** ({u['categorie']}) à {fmt(u['prix'])} "
+                        f"(médiane 7 j {fmt(u['mediane'])}, {u['ratio']:.0%})"))
+    return out
 
 
-def detect_positions(con, cfg, result):
-    """Mes positions : prix sous mon seuil de rentabilite, chute en cours, stock trop long a ecouler."""
+def hourly(con, cfg, result, top=6):
+    """Rapport horaire leger : les bonnes opportunites du moment. Rien si aucune, ou si ce sont les memes qu'au
+    rapport precedent (pas de repetition d'heure en heure)."""
+    ops = opportunities(cfg, result)
+    unlock = unlock_signal(con, result)
+    if not ops and not unlock:
+        return None
+    sig = "|".join(sorted(k for k, _ in ops[:top])) + ("|unlock" if unlock else "")
+    last = con.execute("SELECT message FROM alerts_sent WHERE key = 'hourly_last'").fetchone()
+    if last and last["message"] == sig:
+        return None
+    con.execute("INSERT OR REPLACE INTO alerts_sent VALUES ('hourly_last', ?, ?)",
+                (datetime.now(timezone.utc).isoformat(timespec="seconds"), sig))
+    con.commit()
     srv = con.execute("SELECT name FROM servers WHERE id = ?", (result["server"],)).fetchone()
-    sname = srv["name"] if srv else result["server"]
-    day = datetime.now(timezone.utc).strftime("%Y%m%d")
-    msgs = []
-    for l in result["listings"]:
-        if not l["item_id"]:
-            continue
-        if l["sous_seuil"]:
-            msg = (f"⛔ **Sous ton seuil de rentabilité** [{sname}] {l['nom']} : le plus bas est à **{fmt(l['plancher'])}**, "
-                   f"ton seuil est {fmt(l['seuil'])} (coût {fmt(l['cout'])} + frais). Vendre maintenant = "
-                   f"{fmt(l['marge_u'])}/u. Garde ton stock, ou coupe la perte si le prix continue de baisser.")
-            if _once(con, f"pos_seuil|{result['server']}|{l['item_id']}|{day}", msg):
-                msgs.append(msg)
-        if l["chute"]:
-            msg = (f"📉 **Le prix chute** [{sname}] {l['nom']} : {fmt(l['plancher'])}, soit {l['chute']:.0%} du plus haut "
-                   f"des 3 dernières heures. Si tu veux vendre, c'est maintenant"
-                   + (f" (seuil de rentabilité {fmt(l['seuil'])})." if l.get("seuil") else "."))
-            if _once(con, f"pos_chute|{result['server']}|{l['item_id']}|{day}", msg):
-                msgs.append(msg)
-        if (l.get("ecoulement_h") or 0) > 24:
-            msg = (f"🐢 **Stock long à écouler** [{sname}] {l['nom']} : ~{l['ecoulement_h']:.0f} h au rythme actuel des ventes "
-                   f"({l['annonces']} annonces devant toi). Mets moins d'annonces à la fois, ou garde le reste en stock.")
-            if _once(con, f"pos_lent|{result['server']}|{l['item_id']}|{day}", msg):
-                msgs.append(msg)
-    return msgs
+    lines = [f"⏰ **Opportunités {paris(None, '%Hh%M')}** · {srv['name'] if srv else result['server']}"]
+    if unlock:
+        lines.append(unlock)
+    lines += [l for _, l in ops[:top]]
+    if len(ops) > top:
+        lines.append(f"… et {len(ops) - top} autre(s) sur le site.")
+    return "\n".join(lines)
 
 
-def detect_flips(con, cfg, result):
-    """Item a acheter maintenant : prix actuel sous le prix d'achat cible, et assez de kinah/j a la cle."""
-    a = cfg["alerts"]
-    srv = con.execute("SELECT name FROM servers WHERE id = ?", (result["server"],)).fetchone()
-    sname = srv["name"] if srv else result["server"]
-    day = datetime.now(timezone.utc).strftime("%Y%m%d")
-    msgs = []
-    for f in result["flips"]:
-        if not f["acheter"] or f["profit_j"] < a["flip_min_profit_day"] or not safe(f):
-            continue
-        lots = f" ({f['nb_lots_j']} annonce(s) de {fmt(f['lot_vente'])})" if f.get("nb_lots_j") else ""
-        msg = (f"🔁 **Flip** [{sname}] {f['objet']} à **{fmt(f['prix'])}** (achat cible {fmt(f['achat_cible'])}) → "
-               f"revendre ~{fmt(f['revente_cible'])}{lots}, net **{fmt(f['net_u'])}/u** (+{f['marge']:.0%}), "
-               f"~{fmt(f['ma_part_j'])}/j → {fmt(f['profit_j'])}/j — {f['annonces']} annonce(s){surete_txt(f)}")
-        if _once(con, f"flip|{result['server']}|{f['item_id']}|{day}", msg):
-            msgs.append(msg)
-    return msgs
+def daily_news(con, days=7):
+    """Annonces officielles NCSOFT (site officiel) pas encore reprises dans un resume quotidien. Au tout premier
+    passage, celles deja connues sont seulement notees (deja postees par l'ancien systeme d'alertes)."""
+    first = not con.execute("SELECT 1 FROM alerts_sent WHERE key LIKE 'daily_news|%'").fetchone()
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()[:19]
+    rows = [r for r in con.execute("SELECT key, label, title, url, posted FROM news WHERE key NOT LIKE 'reddit|%' "
+                                   "AND posted >= ? ORDER BY posted", (since,))
+            if not con.execute("SELECT 1 FROM alerts_sent WHERE key = ?", (f"daily_news|{r['key']}",)).fetchone()]
+    for r in rows:
+        con.execute("INSERT OR IGNORE INTO alerts_sent VALUES (?,?,?)",
+                    (f"daily_news|{r['key']}", datetime.now(timezone.utc).isoformat(timespec="seconds"), r["title"][:500]))
+    con.commit()
+    return [] if first else rows
 
 
 def weekly(con, cfg, result, top=5):
@@ -346,7 +185,7 @@ def digest(con, cfg, result, top=8):
     srv = con.execute("SELECT name FROM servers WHERE id = ?", (result["server"],)).fetchone()
     sname = srv["name"] if srv else result["server"]
     lines = [f"📊 **Résumé du jour : {sname}** (prix de {paris(result['as_of'], '%H:%M')} heure de Paris, ventes mesurées sur le serveur)",
-             "", "**Ma récolte → craft → vente** (profit par jour à 20 % des ventes mesurées)"]
+             "", "**Récolte → craft → vente** (profit par jour à 20 % des ventes mesurées)"]
     h = result.get("hours")
     if h:
         lines.insert(1, f"🕒 Meilleur moment pour poster : **{h['best']}h – {(h['best'] + 3) % 24}h** "
@@ -373,19 +212,12 @@ def digest(con, cfg, result, top=8):
         lines += ["", "**Plan de production pour ta récolte**"]
         for p in result["plan"]:
             lines.append(f"• {p['quantite_j']} × {p['objet']} à ~{fmt(p['prix_conseille'])} → {fmt(p['kinah_j'])}/j")
-    if digest_only(cfg):
-        # alertes de la journee, gardees pour le resume (premiere ligne de chacune)
-        since = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat(timespec="seconds")
-        kept = [r for r in con.execute("SELECT key, message FROM alerts_sent WHERE ts >= ? ORDER BY ts", (since,))
-                if enabled(cfg, KEY_TYPES.get(r["key"].split("|")[0]))]
-        lines += ["", f"**Alertes des dernières 24 h** ({len(kept)})"]
-        lines += [f"• {r['message'].splitlines()[0][:300]}" for r in kept[:25]] or ["Aucune."]
-        if len(kept) > 25:
-            lines.append(f"… et {len(kept) - 25} autre(s) (voir le site).")
-    official = con.execute("SELECT title, url, posted FROM news WHERE key NOT LIKE 'reddit|%' "
-                           "ORDER BY posted DESC LIMIT 3").fetchall()
-    if official:
-        lines += ["", "**Dernières annonces officielles**"]
+    ops = opportunities(cfg, result)
+    if ops:
+        lines += ["", "**Opportunités sûres en ce moment** (feu vert)"] + [f"• {l}" for _, l in ops[:10]]
+    news = daily_news(con)
+    if news:
+        lines += ["", "**Annonces officielles NCSOFT**"]
         # <lien> : pas d'apercu Discord pour chaque lien du resume
-        lines += [f"• {paris(n['posted'], '%d/%m')} {n['title']} <{n['url']}>" for n in official]
+        lines += [f"• {paris(n['posted'], '%d/%m')} {n['label']} : {n['title']} <{n['url']}>" for n in news]
     return "\n".join(lines)

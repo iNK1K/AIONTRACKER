@@ -27,7 +27,7 @@ Python est **portable** (`.runtime\python`) : rien n'est installé sur le systè
 - `masteries` : ta maîtrise par métier (filtre les recettes)
 - `journal.json` : mes annonces et mes ventes (rempli depuis l’onglet Mes ventes, ne pas modifier à la main) → alertes « Tu es battu », sous le seuil, etc.
 - `github_repo` : dépôt où le site enregistre le journal
-- `alerts.types` : alertes envoyées en cours de journée (par défaut `annonces`, `achat_craft`, `notes`, `restriction` ; possibles aussi `bonne_affaire`, `prix`, `flip`, `uniques`) ; `alerts.resume_seul: true` = rien en journée, tout dans le résumé quotidien
+- `alerts.hourly` / `alerts.daily` : rapport Discord horaire (bonnes opportunités au feu vert, seulement s'il y en a de nouvelles) et résumé quotidien détaillé (+ annonces NCSOFT pas encore postées). Jamais d'alerte sur tes annonces (salon partagé)
 - `alerts.flip_min_margin`, `flip_min_samples`, `flip_min_profit_day` : seuils de l'onglet et de l'alerte Flip
 - `harvest_per_day` : ta récolte quotidienne, ex. `{"Bois d'Asvata": 300, "Azpha": 150}` → plan de production
 - `discord_webhook_url` : URL du webhook (sinon les alertes vont dans `logs\alerts.log`)
