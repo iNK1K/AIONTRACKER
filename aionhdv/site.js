@@ -481,16 +481,18 @@ function supplyRender(){const box=document.getElementById('sbox');if(!box)return
  const shown=rows.filter(([x,e])=>!pos||e.gain>0&&!e.rt.lock);
  box.innerHTML='<div class="toolbar" style="margin:10px 0"><span class="sub">Capture lue le '+d.t.slice(8,10)+'/'+d.t.slice(5,7)+' à '+d.t.slice(11)+' · '+rows.length+' objet(s)</span>'
   +'<label class="tg"><input type="checkbox"'+(pos?' checked':'')+' onchange="try{localStorage.setItem(\'supplyPos\',this.checked?\'1\':\'\')}catch(e){}supplyRender()"> Rentables seulement</label></div>'
-  +'<div class="wrap"><table><thead><tr><th>Objet</th><th class="n">Vente /u</th><th class="n">Coût / craft</th><th class="n">Gain / craft</th><th class="n">Réussite</th><th class="n">Annonces</th><th></th></tr></thead><tbody>'
+  +'<div class="wrap"><table><thead><tr><th>Objet</th><th class="n">Vente /u</th><th class="n">Coût / craft</th><th class="n" title="Objet normal, sans compter le combo">Gain / craft</th><th class="n">Réussite</th><th class="n">Annonces</th><th></th></tr></thead><tbody>'
   +(shown.length?shown.map(([x,e])=>{const b=e.best,g=e.gain,up=x.ask!=null&&x.med?x.ask/x.med-1:null;
-   const v=e.rt.lock?['🔒','niveau de métier trop bas pour ce craft']:g==null?['❔','prix manquant']:g>0&&e.dep?['⚠','rentable seulement grâce au combo ('+Math.round(e.c*100)+' %)']
+   const v=e.rt.lock?['🔒','niveau de métier trop bas pour ce craft']:g==null?['❔','prix manquant']
+    :g<=0&&e.avg>0?['🎲','à perte avec l’objet normal ; rentable en moyenne seulement grâce au combo ('+Math.round(e.c*100)+' %) : un pari']
     :g>0&&x.l<=2?['⚠','rentable, mais '+x.l+' annonce(s) seulement : prix de vente incertain']:g>0?['✅','rentable']:['❌','à perte'];
    const row='<tr'+(e.rt.lock?' class="locked"':'')+'><td><span class="it"><span title="'+v[1]+'">'+v[0]+'</span> <img src="'+jEsc(x.s)+'" width="30" height="30" style="border-radius:5px" loading="lazy"><span><span class="nm" title="Cliquer pour copier">'+jEsc(x.n)+'</span>'
     +'<div class="sub">'+(PROF[x.prof]||x.prof)+' '+lvTxt(Math.max(1,x.m))+(e.cb?' · combo '+Math.round(e.c*100)+' %':'')+'</div></span></span></td>'
     +'<td class="n"><input type="number" min="0" class="search" style="width:115px;display:inline-block;padding:4px 7px;text-align:right" value="'+(e.sell??'')+'" onchange="supplySell('+x.i+',this.value)">'
     +'<div class="sub">'+(e.ov!=null?'saisi · ':e.capped?'<span title="annonce la plus basse anormalement haute : prix réaliste proposé">plafonné · </span>':'')+'min '+n(x.ask)+' · méd. 3 j '+n(x.med)+(up!=null&&up>=0.15?' <span class="badge b-ok">↑ +'+Math.round(up*100)+' %</span>':'')+'</div></td>'
     +'<td class="n">'+(b?n(b.S)+(e.cols.length>1?' <span class="badge b-mut" title="'+(b.k==='A'?'ingrédient éclatant crafté par sa chaîne':'ingrédient éclatant acheté à l’HDV')+'">'+b.k+'</span>':''):'<span class="neg">incomplet</span>')+'</td>'
-    +'<td class="n '+(g==null?'':g>0?'pos':'neg')+'"><b>'+(g==null?'–':(g>0?'+':'')+n(g))+'</b>'+(e.vUnk?'<div class="sub" title="'+jEsc(e.cb.n)+' : aucun prix connu, le combo est compté 0">combo sans prix : compté 0</div>':'')+'</td>'
+    +'<td class="n '+(g==null?'':g>0?'pos':'neg')+'"><b>'+(g==null?'–':(g>0?'+':'')+n(g))+'</b>'
+    +(e.cb&&e.avg!=null&&!e.vUnk?'<div class="sub" title="Moyenne sur beaucoup de crafts, combo ('+Math.round(e.c*100)+' %) revendu '+n(e.cb.v)+'">moy. avec combo '+(e.avg>0?'+':'')+n(e.avg)+'</div>':'')+(e.vUnk?'<div class="sub" title="'+jEsc(e.cb.n)+' : aucun prix connu, le combo est compté 0">combo sans prix : compté 0</div>':'')+'</td>'
     +'<td class="n">'+(e.rt.lock?'🔒':e.rt.u?'?':(e.rt.r*100).toFixed(0)+' %')+'</td><td class="n">'+x.l+'</td>'
     +'<td style="white-space:nowrap"><button class="mapbtn" onclick="supplyToggle('+x.i+')">'+(SOPEN.has(x.i)?'▾':'▸')+' détail</button> '
     +'<button class="mapbtn" title="Ouvrir Mes ventes avec cet objet, ce prix et ce coût" onclick="supplyPost('+x.i+')">📦 Poster</button></td></tr>';
@@ -543,10 +545,11 @@ function sEval(x){const cb=x.combo,c=cb?cb.c:0,V=cb?SNET(cb.v)||0:0,ov=supplySel
  const sum=f=>{let K=x.rest;for(const y of x.need){const v=f(y);if(v==null||K==null)return null;K+=y.q*v}return K/q};
  const cols=x.need.length?[{k:'A',t:'A. je crafte',K:sum(y=>{const e=chainCost(y.chain);return e&&e.e})},{k:'B',t:'B. j’achète',K:sum(y=>y.buy)}]
   :[{k:'',t:'Craft',K:x.c}];
- cols.forEach(o=>{if(o.K==null)return;o.S=sPer(o.K,rt);o.res=P==null?null:(1-c)*P+c*V;o.gain=o.res==null?null:o.res-o.S;o.net=c<1?(o.S-c*V)/(1-c):null});
- const best=cols.filter(o=>o.S!=null).sort((a,b)=>a.S-b.S)[0]||null,gain=best&&best.gain;
- return{cols,best,gain,cb,c,V,sell,ov,P,rt,capped:x.ask!=null&&x.real!=null&&x.real<x.ask-1,
-  vUnk:!!cb&&cb.v==null,dep:best&&P!=null&&gain>0&&(1-c)*P-best.S<0}}
+ cols.forEach(o=>{if(o.K==null)return;o.S=sPer(o.K,rt);o.res=P==null?null:(1-c)*P+c*V;o.gain=o.res==null?null:o.res-o.S;o.plain=P==null?null:P-o.S;o.net=c<1?(o.S-c*V)/(1-c):null});
+ // gain retenu = objet normal (sans combo) ; le gain moyen avec combo est un pari, affiche a part
+ const best=cols.filter(o=>o.S!=null).sort((a,b)=>a.S-b.S)[0]||null,gain=best&&best.plain,avg=best&&best.gain;
+ return{cols,best,gain,avg,cb,c,V,sell,ov,P,rt,capped:x.ask!=null&&x.real!=null&&x.real<x.ask-1,
+  vUnk:!!cb&&cb.v==null}}
 function supplyCalc(x,e,part){const n=v=>v==null?'–':NF.format(Math.round(v)),{cols,cb,c,V,rt}=e;
  const tr=(t,f,cls)=>'<tr><td>'+t+'</td>'+cols.map(o=>{const v=o.K==null?null:f(o);return '<td class="n '+(cls?cls(v):'')+'">'+n(v)+'</td>'}).join('')+'</tr>';
  const pn=v=>v==null?'':v>0?'pos':'neg';
@@ -562,9 +565,10 @@ function supplyCalc(x,e,part){const n=v=>v==null?'–':NF.format(Math.round(v)),
  h+='<thead><tr><th>'+jEsc(x.n)+' <span class="sub">· '+(rt.lock?'🔒 niveau trop bas':rt.u?'réussite ? (niveau non renseigné)':'réussite '+(rt.r*100).toFixed(1).replace('.',',')+' %')
   +(cb?' · combo '+Math.round(c*100)+' % → '+jEsc(cb.n):'')+'</span></th>'+cols.map(o=>'<th class="n">'+o.t+'</th>').join('')+'</tr></thead><tbody>'
   +tr('Coût d’un craft'+(lvState().lose&&rt.r<1?' <span class="sub">(échecs compris)</span>':'')+((x.q||1)>1?' <span class="sub">(par objet, la recette en donne '+x.q+')</span>':''),o=>o.S)
-  +(cb?tr('Résultat moyen <span class="sub">('+Math.round((1-c)*100)+' % objet normal à '+n(e.P)+' net, '+Math.round(c*100)+' % '+jEsc(cb.n)+' à '+n(cb.v)+' → '+n(V)+' net)</span>',o=>o.res)
-   :tr('Vente après taxe',o=>o.res))
-  +tr('<b>Gain par craft</b>',o=>o.gain,pn)
+  +tr('Vente de l’objet normal après taxe',()=>e.P)
+  +tr('<b>Gain par craft</b> <span class="sub">(objet normal, sans combo)</span>',o=>o.plain,pn)
+  +(cb?tr('Résultat moyen avec combo <span class="sub">('+Math.round((1-c)*100)+' % objet normal, '+Math.round(c*100)+' % '+jEsc(cb.n)+' à '+n(cb.v)+' → '+n(V)+' net)</span>',o=>o.res)
+   +tr('Gain moyen avec combo <span class="sub">(sur beaucoup de crafts : un pari)</span>',o=>o.gain,pn):'')
   +'</tbody></table></div>';
  return h}
 

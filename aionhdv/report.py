@@ -1074,11 +1074,14 @@ def supply_tab(ctx, cfg, my):
         return rnd(st["median"] if st else u["price"] if u else None)
 
     def combo(r):
-        """Chance de combo d'une recette et objet obtenu (nom, valeur)."""
-        if not r["combo_item_id"] or r["combo_item_id"] not in m.items:
+        """Chance de combo d'une recette et objet obtenu (nom, valeur). Valeur prudente : le plus bas entre le prix
+        realiste et le prix habituel (objets chers, peu d'annonces et de ventes)."""
+        cid = r["combo_item_id"]
+        if not cid or cid not in m.items:
             return None
+        sp = m.sell_price(cid)
         return dict(c=combo_cfg if combo_cfg is not None else (r["combo_prob_raw"] or 0) / 10000,
-                    n=m.items[r["combo_item_id"]]["name"], v=value(r["combo_item_id"]))
+                    n=m.items[cid]["name"], v=rnd(sp["pess"]) if sp else value(cid))
 
     def needs(r, seen):
         """Ingredients eclatants d'une recette, avec la chaine pour les crafter (toute la chaine) et le prix HDV."""
