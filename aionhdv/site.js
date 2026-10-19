@@ -170,7 +170,13 @@ function applyLevels(){const st=lvState();
   const net=Math.round(sell-(st.lose?cost/info.rate:cost)),cn=el.querySelector('.cnet'),cp=el.querySelector('.cprof');
   if(cn){cn.textContent=NF.format(net);cn.dataset.v=net;cn.classList.toggle('pos',net>0);cn.classList.toggle('neg',net<=0)}
   if(cp){const pr=net*day;cp.textContent=kf(pr);cp.dataset.v=pr;cp.classList.toggle('pos',pr>0);cp.classList.toggle('neg',pr<=0)}});
- calc();renderMetiers();if(window.PLANDATA){planSafe();planGamble()}}
+ calc();renderMetiers();todoBuys();if(window.PLANDATA){planSafe();planGamble()}}
+// « A faire maintenant » : achats -> craft que mes niveaux permettent (metier non renseigne = garde), 2 au plus,
+// avec le taux de reussite quand le niveau est connu
+function todoBuys(){let n=0;
+ document.querySelectorAll('#todo li.buy').forEach(li=>{const sp=li.querySelector('[data-item]'),info=sp&&craftInfo(sp.dataset.item);
+  const ok=!info||info.ok;li.style.display=ok&&n<2?'':'none';if(ok)n++;
+  const r=li.querySelector('.td-rate');if(r)r.textContent=info&&info.ok&&info.rate!=null?' · réussite '+(info.rate*100).toFixed(0)+' %':''})}
 function setLevel(p,v){const st=lvState();if(v===''||v==null||isNaN(v))delete st.lv[p];else st.lv[p]=Math.max(0,Math.min(100,Math.round(v)));lvSave(st);applyLevels()}
 function bumpLevel(p,d){const st=lvState();setLevel(p,(st.lv[p]||0)+d);toast(PROF[p]+' : '+lvTxt(lvState().lv[p]))}
 function setGrade(p,g,n){const st=lvState(),cur=st.lv[p];if(n===undefined)n=cur==null?'':(cur>50?cur-50:cur);

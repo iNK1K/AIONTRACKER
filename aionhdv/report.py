@@ -494,21 +494,26 @@ def todo_html(con, my):
         if (l.get("ecoulement_h") or 0) > 24:
             items.append(("warn", f"🐢 <b>{esc(l['nom'])}</b> : ~{l['ecoulement_h']:.0f} h pour écouler ton stock : "
                                   "mets moins d’annonces à la fois."))
-    seen = set()                                              # 2. achats surs (vert)
+    # 2. achats surs (vert) : plusieurs candidats, la page masque ceux que mes niveaux de metier ne permettent pas
+    # de fabriquer (niveaux enregistres dans le navigateur) et n'en garde que 2
+    seen = set()
     for e in (my.get("buy_trans") or []) + (my.get("buy_direct") or []):
         s_ = e.get("surete") or {}
         if s_.get("feu") == "vert" and e["net_u"] > 0 and not e["flags"] and e["item_id"] not in seen:
             seen.add(e["item_id"])
             how = "via Od transmuté" if any("transmuté" in x for x in e["ingredients"]) else "à l’HDV"
-            items.append(("ok", f"🟢 Achat → craft <b>{esc(e['objet'])}</b> ({how}) : +{fmt(e['net_u'])}/u, "
-                                f"max ~{fmt(s_['qte_max'])} u, ne vends pas sous {fmt(s_['prix_plancher'])}."))
-        if len(seen) >= 2:
+            metier = METIERS.get(e.get("metier"), e.get("metier") or "?")
+            items.append(("ok buy", f'<span data-item="{e["item_id"]}">🟢 Achat → craft <b>{esc(e["objet"])}</b> '
+                                    f'<span class="badge b-mut">🛠️ {esc(metier)}<span class="td-rate"></span></span> ({how}) : '
+                                    f'+{fmt(e["net_u"])}/u, max ~{fmt(s_["qte_max"])} u, '
+                                    f'ne vends pas sous {fmt(s_["prix_plancher"])}.</span>'))
+        if len(seen) >= 8:
             break
     since = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()[:19]
     for n in con.execute("SELECT * FROM news WHERE key LIKE 'update%' AND posted >= ? ORDER BY posted DESC LIMIT 2", (since,)):
         items.append(("mut", f"🛠️ Nouvelle note de version : <a href=\"{esc(n['url'])}\" target=\"_blank\" rel=\"noopener\" "
                              f"style=\"color:var(--acc)\">{esc(n['title'])}</a>"))
-    order = {"bad": 0, "warn": 1, "ok": 2, "mut": 3}
+    order = {"bad": 0, "warn": 1, "ok": 2, "ok buy": 2, "mut": 3}
     rows = "".join(f'<li class="td-{k}">{t}</li>' for k, t in sorted(items, key=lambda x: order[x[0]]))
     return ('<div class="card todo"><b>✅ À faire maintenant</b><ol id="todo">' + rows
             + '<li id="todo-plan" class="td-plan">Plan du jour : calcul en cours…</li></ol></div>')
