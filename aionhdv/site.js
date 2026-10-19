@@ -180,7 +180,8 @@ function jDo(id,kind){const l=jLot(id),s=jState(l),g=k=>document.getElementById(
   if(!(q>0)||!(p>0))return;l.ev.push({id:jid(),t,type:'vendu',prix:p,qte:q,recu:net(p,q)})}
  else if(kind==='reliste'){const p=+g('p').value;if(!(p>0))return;l.ev.push({id:jid(),t:jNow(),type:'reliste',prix:p,qte:s.reste,frais:lost(s.prix,s.reste)})}
  else if(kind==='retire')l.ev.push({id:jid(),t:jNow(),type:'retire',qte:s.reste,frais:lost(s.prix,s.reste)});
- else if(kind==='src')l.ev.push({id:jid(),t:jNow(),type:'src',src:g('s').value});
+ else if(kind==='src'){const src=g('s').value,c=g('c').value;l.ev.push({id:jid(),t:jNow(),type:'src',src});
+  if(c!==''&&+c!==s.cout)l.ev.push({id:jid(),t:jNow(),type:'cout',cout:+c})}
  else if(kind==='cout'){const c=+g('c').value;if(!(c>=0))return;l.ev.push({id:jid(),t:jNow(),type:'cout',cout:c})}
  JOPEN=null;jSync(kind+' '+l.objet)}
 function jUndo(id){const l=jLot(id),ev=l.ev.filter(e=>!e.x&&e.t).sort((a,b)=>a.t.localeCompare(b.t));
@@ -236,8 +237,10 @@ function jRender(){if(!J)return;const box=document.getElementById('jopen');if(!b
    +' <span class="sub">reçu après taxe : '+NF.format(net(s.prix,s.reste))+'</span>'
    :k==='reliste'?'Nouveau prix '+inp('p',f?Math.max(1,f[0]-1):s.prix,110)+' /u '+go+' <span class="sub">tu perds la taxe payée sur l’annonce retirée : <b class="neg">'+NF.format(lost(s.prix,s.reste))+'</b> ('+Math.round(JC().tax*100)+' % de '+s.reste+' × '+NF.format(s.prix)+') ; la nouvelle annonce repaye '+Math.round(JC().tax*100)+' %, déduits de la vente</span>'
    :k==='retire'?'Retirer les '+s.reste+' restants : tu perds la taxe payée, <b class="neg">'+NF.format(lost(s.prix,s.reste))+'</b> '+go
-   :k==='src'?'Origine <select id="jas" class="search" style="width:auto;display:inline-block">'+jSrcOpts(s.src||jSrcDefault(l.objet))+'</select> '+go
-    +' <span class="sub">pense à ajuster le coût : 0 pour ta récolte, ce que tu as payé sinon</span>'
+   :k==='src'?'Origine <select id="jas" class="search" style="width:auto;display:inline-block" onchange="jSrcCost(\''+l.id+'\')">'+jSrcOpts(s.src||jSrcDefault(l.objet))+'</select> '
+    +'coût '+inp('c',(()=>{const src=s.src||jSrcDefault(l.objet),c=jCostFor(src,l.objet);   // 0 hors recolte = cout oublie
+      return (s.cout==null||(s.cout===0&&src!=='recolte'))&&c!=null?c:(s.cout??'')})(),110)+' /u '+go
+    +' <span class="sub">le coût suit l’origine choisie : 0 pour ta récolte, estimation des ingrédients achetés pour l’achat → craft, ton prix d’achat pour un flip</span>'
    :'Coût de revient '+inp('c',s.cout??'',110)+' /u '+go;
   return row+'<tr><td colspan="9" style="background:var(--card2)">'+f2+'</td></tr>'}).join('')
   :'<tr><td colspan="9" class="mut">Aucune annonce en cours : ajoute-les ci-dessous ou colle une capture de ta fenêtre des ventes.</td></tr>';
@@ -276,6 +279,8 @@ function jLog(lots){const ev=[];lots.forEach(([l,s])=>s.ev.forEach(e=>e.t&&e.typ
  const T={poste:'📦 posté',reliste:'🔁 relisté',vendu:'✅ vendu',retire:'↩ retiré'};
  document.getElementById('jlog').innerHTML=ev.slice(0,40).map(([e,l])=>'<tr><td>'+e.t.slice(8,10)+'/'+e.t.slice(5,7)+' '+e.t.slice(11)+'</td><td>'+T[e.type]+'</td><td>'+jEsc(l.objet)+'</td>'
   +'<td class="n">'+(e.qte||'')+'</td><td class="n">'+(e.prix?NF.format(e.prix):'')+'</td><td class="n '+(e.type==='vendu'?'pos':'neg')+'">'+(e.type==='vendu'?'+'+NF.format(e.recu||0):e.frais?'−'+NF.format(e.frais):'')+'</td></tr>').join('')}
+// changement d'origine d'une annonce : le cout propose suit (vide si le site n'a pas d'estimation)
+function jSrcCost(id){const l=jLot(id),c=jCostFor(document.getElementById('jas').value,l.objet);document.getElementById('jac').value=c==null?'':c}
 // formulaire : l'objet propose son origine (craft de ma recolte ou non), l'origine propose le cout
 function jCostFill(fromObj){const n=document.getElementById('jo').value.trim(),sel=document.getElementById('js');
  if(fromObj&&n)sel.value=jSrcDefault(n);const c=jCostFor(sel.value,n);document.getElementById('jc').value=c==null?'':c}
