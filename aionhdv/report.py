@@ -892,31 +892,12 @@ def home(con, cfg, ctx, my, sname):
                      f'{_th("Seuil de rentabilité", "Coût de revient + taxe de 10 % : ne vends pas en dessous", True)}'
                      f'{_th("Gain/u au plus bas", None, True)}{_th("Conseil")}</tr></thead><tbody>{rows}</tbody></table></div>')
     else:
-        mine_html = ('<p class="mut">Liste tes annonces dans <code>mes_annonces.json</code> (nom exact : prix, ou prix + coût '
-                     'de revient + quantité) pour être alerté quand quelqu’un vend moins cher que toi ou sous ton seuil.</p>')
+        mine_html = ('<p class="mut">Aucune annonce en cours dans ton journal : note-les dans l’onglet 💰 Mes ventes pour être '
+                     'alerté quand quelqu’un vend moins cher que toi ou sous ton seuil.</p>')
 
-    edit = cfg.get("_github_edit_url")
-    mine_html += ('<div class="card" id="vdrop" style="margin-top:10px" ondragover="event.preventDefault()" '
-                  'ondrop="event.preventDefault();scanSales(event.dataTransfer.files[0])"><b>📷 Remplir depuis une capture de mes ventes</b>'
-                  '<span class="mut">En jeu, fais une capture de ta fenêtre des ventes (Win + Maj + S), puis colle-la ici avec '
-                  '<b>Ctrl + V</b> (sur cet onglet), glisse le fichier, ou <label style="color:var(--acc);cursor:pointer;'
-                  'text-decoration:underline">choisis un fichier<input type="file" accept="image/*" hidden '
-                  'onchange="scanSales(this.files[0])"></label>. Plusieurs captures s’ajoutent. Le coût de revient est '
-                  'prérempli avec l’estimation du site (achat des ingrédients) : corrige-le si tu as récolté.</span>'
-                  '<span id="vmsg" class="mut"></span><div class="chips" id="vrows"></div>'
-                  '<div class="toolbar" style="margin:0"><select id="vmode" class="search" style="width:auto" onchange="renderSales()">'
-                  '<option value="replace">Remplacer mes annonces</option><option value="add">Ajouter à mes annonces actuelles</option></select>'
-                  '<button class="mapbtn" onclick="copySales()">📋 Copier le fichier</button>'
-                  + (f'<a class="mapbtn" style="text-decoration:none" href="{esc(edit)}" target="_blank" rel="noopener">'
-                     '✏️ Ouvrir mes_annonces.json sur GitHub</a>' if edit else '')
-                  + '<button class="mapbtn" onclick="SALES=[];renderSales();document.getElementById(\'vmsg\').textContent=\'\'">Effacer</button></div>'
-                  '<textarea id="vjson" spellcheck="false" style="width:100%;min-height:120px;padding:8px 10px;border:1px solid var(--line);'
-                  'border-radius:8px;background:var(--bg2);color:var(--txt);font:12.5px/1.5 ui-monospace,Consolas,monospace"></textarea>'
-                  '<span class="sub">Colle ce contenu à la place de celui du fichier sur GitHub, puis « Commit changes » : '
-                  'le prochain passage horaire suivra tes annonces.</span></div>'
-                  f'<script>window.MY_LISTINGS={json.dumps(cfg.get("my_listings") or {}, ensure_ascii=False)};'
-                  f'window.MY_LISTINGS_HELP={json.dumps(cfg.get("_my_listings_help") or "", ensure_ascii=False)};'
-                  f'window.COSTS={json.dumps(costs, ensure_ascii=False)};'
+    mine_html += ('<p class="sub" style="margin-top:8px">Pour noter une annonce postée, vendue, relistée ou retirée : '
+                  '<a href="#" onclick="show(\'gains\');return false" style="color:var(--acc)">onglet 💰 Mes ventes</a>.</p>'
+                  f'<script>window.COSTS={json.dumps(costs, ensure_ascii=False)};'
                   f'window.MARKET_ICONS={json.dumps(ctx.market_icons(), ensure_ascii=False)};</script>')
 
     # 6. annonces officielles
@@ -937,13 +918,80 @@ def home(con, cfg, ctx, my, sname):
             + "<h3>⑥ Annonces officielles</h3>" + news_html)
 
 
+def journal_html(ctx, cfg, my):
+    """Journal des ventes : annonces en cours avec leurs actions (vendu, relister, retirer), ajout, captures, bilan.
+    Tout est calcule et affiche dans le navigateur (site.js, j*) a partir de journal.json."""
+    m = my["market"]
+    j = cfg.get("journal") or {"lots": []}
+    floor = {}
+    for lot in j.get("lots") or []:
+        iid = m.by_base.get(lot["objet"])
+        if iid in m.price:
+            floor[lot["objet"]] = [m.price[iid], m.listings.get(iid, 0)]
+    fee = cfg.get("listing_fee", 0.02)
+    names = "".join(f'<option value="{esc(n["n"])}">' for n in sorted(ctx.market_icons(), key=lambda x: x["n"]))
+    inp = lambda i, ph, w, t="number", extra="": (f'<input id="{i}" class="search" type="{t}" placeholder="{ph}" '
+                                                 f'style="width:{w}px;display:inline-block" {extra}>')
+    return (
+        '<p class="lead">Note ici ce que deviennent tes annonces : un clic quand tu postes, vends, relistes ou retires. '
+        f'Le site calcule ce que tu gagnes vraiment : taxe de {cfg["fees"]:.0%} sur les ventes et frais de mise en vente '
+        f'(~{fee:.0%} du prix affiché, payés à chaque mise en vente et à chaque reliste, jamais remboursés).</p>'
+        '<span id="jsync" class="sub"></span>'
+        '<h3>Mes annonces en cours</h3><div class="wrap"><table><thead><tr>'
+        f'{_th("Objet")}{_th("Reste", None, True)}{_th("Prix /u", None, True)}{_th("Coût /u", "Coût de revient (clique « Coût » pour le changer)", True)}'
+        f'{_th("Gain /u", "Prix − taxe − coût", True)}{_th("Posté le")}{_th("Relistes", None, True)}'
+        f'{_th("Frais payés", "Frais de mise en vente de cette annonce, relistes compris", True)}{_th("Actions")}'
+        '</tr></thead><tbody id="jopen"></tbody></table></div>'
+        '<div class="card" style="margin-top:10px"><b>📦 J’ai posté</b><div class="toolbar" style="margin:0;flex-wrap:wrap;gap:6px">'
+        + inp("jo", "Objet (nom exact)", 260, "text", 'list="jnames" onchange="jCostFill()"') + f'<datalist id="jnames">{names}</datalist>'
+        + inp("jq", "Quantité", 90) + inp("jp", "Prix /u", 110) + inp("jc", "Coût /u (facultatif)", 150)
+        + inp("jn", "Nb d’annonces", 120, extra='value="1" min="1"')
+        + '<button class="mapbtn" onclick="jPost()">Ajouter</button></div>'
+        '<span class="sub">Nb d’annonces : pour poster plusieurs lots identiques d’un coup (ex. 5 annonces de 30). '
+        'Le coût est prérempli avec l’estimation du site (achat des ingrédients) : mets 0 si c’est ta récolte.</span></div>'
+        '<div class="card" style="margin-top:10px" ondragover="event.preventDefault()" '
+        'ondrop="event.preventDefault();jScan(event.dataTransfer.files[0])"><b>📷 Ou colle une capture (Ctrl + V sur cet onglet)</b>'
+        '<span class="mut">Fenêtre de <b>tes annonces en vente</b> : les nouvelles annonces sont ajoutées (celles déjà notées sont '
+        'reconnues). <b>Historique des ventes</b> : chaque vente est rattachée à ton annonce (même objet, même prix), avec sa vraie '
+        'date et le montant reçu ; les ventes déjà notées ne sont pas doublées. Ou <label style="color:var(--acc);cursor:pointer;'
+        'text-decoration:underline">choisis un fichier<input type="file" accept="image/*" hidden onchange="jScan(this.files[0])">'
+        '</label>.</span><span id="jmsg" class="mut"></span></div>'
+        '<h3>Bilan</h3><div class="toolbar" style="margin:0 0 8px"><select id="jper" class="search" style="width:auto" '
+        'onchange="jRender()"><option value="1">Dernières 24 h</option><option value="7" selected>7 derniers jours</option>'
+        '<option value="30">30 derniers jours</option><option value="0">Depuis le début</option></select></div>'
+        '<div class="kpis" id="jkpi"></div><div class="wrap"><table><thead><tr>'
+        f'{_th("Objet")}{_th("Unités vendues", None, True)}{_th("Prix moyen /u", None, True)}{_th("Reçu", "Après taxe", True)}'
+        f'{_th("Coût", None, True)}{_th("Frais de mise en vente", None, True)}{_th("Relistes (frais)", None, True)}'
+        f'{_th("Bénéfice", "Reçu − coût − frais (* : une partie sans coût connu)", True)}'
+        '</tr></thead><tbody id="jitems"></tbody></table></div>'
+        '<h3>Derniers mouvements</h3><div class="wrap"><table><thead><tr>'
+        f'{_th("Date")}{_th("Action")}{_th("Objet")}{_th("Qté", None, True)}{_th("Prix /u", None, True)}{_th("Kinah", None, True)}'
+        '</tr></thead><tbody id="jlog"></tbody></table></div>'
+        '<details class="card" style="margin-top:14px"><summary><b>🔗 Enregistrement sur GitHub (à faire une fois par appareil)</b></summary>'
+        '<span class="mut">Pour que le journal soit gardé dans ton dépôt (et serve aux alertes Discord), le site a besoin d’un jeton '
+        'GitHub qui ne peut écrire <b>que</b> dans ce dépôt. Il reste dans ce navigateur, il n’est jamais publié.<br>'
+        '1. <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener" style="color:var(--acc)">'
+        'Créer un jeton « fine-grained »</a> : nom « journal HDV », expiration au choix ; <b>Repository access</b> → '
+        f'<i>Only select repositories</i> → <b>{esc((cfg.get("_github_repo") or "ton dépôt").split("/")[-1])}</b> ; '
+        '<b>Permissions</b> → Repository permissions → <b>Contents : Read and write</b>. « Generate token ».<br>'
+        '2. Colle-le ici :</span><div class="toolbar" style="margin:0">'
+        + inp("jtoken", "github_pat_…", 320, "password")
+        + '<button class="mapbtn" onclick="jSetToken()">Enregistrer</button>'
+        '<button class="mapbtn" onclick="jForget()">Oublier le jeton</button></div>'
+        '<span class="sub">Sans jeton, le journal est gardé dans ce navigateur seulement.</span></details>'
+        f'<script>window.JOURNAL={json.dumps(j, ensure_ascii=False)};'
+        f'window.JCFG={json.dumps(dict(tax=cfg["fees"], fee=fee, repo=cfg.get("_github_repo")))};'
+        f'window.JFLOOR={json.dumps(floor, ensure_ascii=False)};</script>')
+
+
 def gains_tab(ctx, cfg, my):
-    """💰 Mes gains : mes vraies ventes (mes_ventes.json) face aux estimations de l'outil, et remplissage depuis une
-    capture de l'historique des ventes en jeu."""
+    """💰 Mes ventes : journal des annonces (journal.json) et mes ventes face aux estimations de l'outil."""
     g = my.get("gains")
-    head = ("<h2>Mes gains réels</h2><p class='lead'>Tes ventes réelles (historique des ventes en jeu) comparées à ce que "
+    head = ("<h2>Mes ventes</h2>" + journal_html(ctx, cfg, my)
+            + "<h3>Mes ventes face aux estimations de l’outil</h3><p class='lead'>Tes ventes du journal comparées à ce que "
             "l’outil prévoit, pour vérifier ses estimations : combien tu vends par jour, à quel prix, et ta vraie part du "
-            "marché. Une ligne de l’historique = un achat (un acheteur peut ne prendre qu’une partie d’une annonce).</p>")
+            "marché. Une vente = un achat (un acheteur peut ne prendre qu’une partie d’une annonce). Mis à jour à chaque "
+            "passage horaire.</p>")
     if g:
         pct = lambda v: f"{v:.0%}" if v is not None else "–"
         kpis = (f'<div class="kpis">'
@@ -977,7 +1025,7 @@ def gains_tab(ctx, cfg, my):
         loss = [x for x in g["items"] if x["marge_u"] is not None and x["marge_u"] < 0]
         for x in loss:
             notes.append(f"<b class='neg'>⚠ {esc(x['objet'])} : vendu à perte</b> (reçu {fmt(round(x['recu_u']))} /u après "
-                         f"taxe, coût {fmt(x['cout'])} /u dans mes_annonces.json, soit {fmt(round(x['marge_u']))} /u).")
+                         f"taxe, coût {fmt(x['cout'])} /u dans le journal, soit {fmt(round(x['marge_u']))} /u).")
         rows = "".join(
             f"<tr><td>{ctx.label(x['item_id'], x['objet'])}</td>"
             f"{_num_td(x['lots'], color=False)}{_num_td(x['unites'], color=False)}{_num_td(x['recu'], color=False, k=True)}"
@@ -992,7 +1040,7 @@ def gains_tab(ctx, cfg, my):
                  f'{_th("Unités", None, True)}{_th("Reçu", "Après la taxe de 10 %", True)}'
                  f'{_th("Prix obtenu /u", "Prix de vente moyen par unité", True)}'
                  f'{_th("Prix du marché /u", "Médiane des ventes observées sur le marché pendant la même période", True)}'
-                 f'{_th("Marge /u", "Reçu par unité − coût de revient (mes_annonces.json)", True)}'
+                 f'{_th("Marge /u", "Reçu par unité − coût de revient noté dans le journal", True)}'
                  f'{_th("Unités /j réel", "À partir de 3 ventes : (n − 1) achats entre le premier et le dernier", True)}'
                  f'{_th("Unités /j prévu", "Ventes mesurées sur le serveur × ta part supposée", True)}'
                  f'{_th("Part réelle", "Mes unités vendues / unités vendues sur le marché", True)}'
@@ -1000,27 +1048,8 @@ def gains_tab(ctx, cfg, my):
                  f'</tr></thead><tbody>{rows}</tbody></table></div>')
         body = kpis + "<div class='card' style='margin:12px 0'>" + "".join(f"<div>{n}</div>" for n in notes) + "</div>" + table
     else:
-        body = "<p class='mut'>Aucune vente enregistrée : colle une capture de ton historique des ventes ci-dessous.</p>"
-    edit = cfg.get("_github_sales_edit_url")
-    paste = ('<div class="card" style="margin-top:14px" ondragover="event.preventDefault()" '
-             'ondrop="event.preventDefault();scanHist(event.dataTransfer.files[0])"><b>📷 Ajouter des ventes depuis une capture</b>'
-             '<span class="mut">En jeu, ouvre l’historique des ventes et fais une capture de la liste (Win + Maj + S), puis colle-la '
-             'ici avec <b>Ctrl + V</b> (sur cet onglet), glisse le fichier, ou <label style="color:var(--acc);cursor:pointer;'
-             'text-decoration:underline">choisis un fichier<input type="file" accept="image/*" hidden '
-             'onchange="scanHist(this.files[0])"></label>. Plusieurs captures s’ajoutent, les ventes déjà connues ne sont pas '
-             'doublées. Contrôles automatiques : reçu = prix − 10 %, prix = unitaire × quantité, dates dans l’ordre.</span>'
-             '<span id="gmsg" class="mut"></span><div class="chips" id="grows"></div>'
-             '<div class="toolbar" style="margin:0"><button class="mapbtn" onclick="copyHist()">📋 Copier le fichier</button>'
-             + (f'<a class="mapbtn" style="text-decoration:none" href="{esc(edit)}" target="_blank" rel="noopener">'
-                '✏️ Ouvrir mes_ventes.json sur GitHub</a>' if edit else '')
-             + '<button class="mapbtn" onclick="HIST=[];renderHist();document.getElementById(\'gmsg\').textContent=\'\'">Effacer</button></div>'
-             '<textarea id="gjson" spellcheck="false" style="width:100%;min-height:120px;padding:8px 10px;border:1px solid var(--line);'
-             'border-radius:8px;background:var(--bg2);color:var(--txt);font:12.5px/1.5 ui-monospace,Consolas,monospace"></textarea>'
-             '<span class="sub">Colle ce contenu à la place de celui du fichier sur GitHub, puis « Commit changes » : '
-             'le prochain passage horaire met à jour cet onglet.</span></div>'
-             f'<script>window.MY_SALES={json.dumps(cfg.get("my_sales") or [], ensure_ascii=False)};'
-             f'window.MY_SALES_HELP={json.dumps(cfg.get("_my_sales_help") or "", ensure_ascii=False)};</script>')
-    return head + body + paste
+        body = "<p class='mut'>Pas encore de vente dans le journal.</p>"
+    return head + body
 
 
 def build(con, cfg, results):
@@ -1082,7 +1111,7 @@ def build(con, cfg, results):
         add("plan", "🧮 Mon stock", "<h2>Mon stock → quoi fabriquer</h2>" + stock_calc(ctx, cfg, my["harvest"], my["market"].gather_names(),
                          {t: my["market"].items[s]["base_name"] for t, s in my["market"].transmute.items()})
             + ("<h3>Plan quotidien (config)</h3>" + table_plan(my["plan"]) if my["plan"] else ""))
-        add("gains", "💰 Mes gains", gains_tab(ctx, cfg, my))
+        add("gains", "💰 Mes ventes", gains_tab(ctx, cfg, my))
         sep()
     others = [r for r in results if r is not my]
     if others:

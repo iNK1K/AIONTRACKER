@@ -460,3 +460,27 @@ Par objet : ventes, unités, kinah reçus, prix obtenu face au prix du marché p
 - Le JavaScript de la page est sorti de `report.py` dans **`aionhdv/site.js`** (295 lignes), publié à côté de la page comme `scan.js`. Le lien contient une empreinte du fichier (`site.js?v=…`) : après une mise à jour, le navigateur ne garde pas l'ancienne version.
 - **Tests automatiques** : `python -m unittest discover tests` (15 tests, 0,1 s, sur une petite base fabriquée en mémoire) : transmutation (Od moins cher, achat direct, transmutation forcée, récolte gratuite), ventes mesurées, prix habituel (avec et sans ventes observées), indice de sûreté (feu vert / rouge, quantité max, prix plancher, vieux pic), chaînes gamble (étapes, ressources, taux de combo), vrais gains, syntaxe de `site.js` et `scan.js`.
 - Les tests ont déjà trouvé un écart : sans taille d'annonce connue, les vrais gains ne calculaient pas de part de marché alors que les ventes comptent 1 unité par annonce (corrigé). En les écrivant, j'ai aussi repéré et corrigé une erreur introduite pendant cette session (un commentaire qui coupait une ligne du plan du jour) ; elle n'avait pas été publiée.
+
+---
+
+# Journal des ventes — onglet 💰 Mes ventes — 19/10/2026
+
+## Le problème
+`mes_annonces.json` et `mes_ventes.json` étaient pénibles à tenir (copier-coller dans GitHub) et donnaient des chiffres faux : une annonce n'avait pas de date ni d'historique, un prix changé écrasait l'ancien, une vente n'était pas rattachée à son annonce, et les frais de reliste n'étaient comptés nulle part.
+
+## Le système retenu (ta proposition, plus l'enregistrement automatique)
+Un seul fichier, **`journal.json`**, où chaque annonce garde ses événements datés :
+- **📦 posté** (quantité, prix, frais de mise en vente) — formulaire « J'ai posté » (plusieurs lots identiques d'un coup) ou capture de ta fenêtre des annonces ;
+- **✅ vendu** (quantité — une vente partielle laisse le reste en vente —, prix, montant reçu après la taxe de 10 %) — bouton « Vendu » ou capture de l'historique des ventes (vraie date, rattachée à l'annonce de même objet et même prix, sans doublon) ;
+- **🔁 relisté** (nouveau prix, **nouveaux frais** sur ce qui reste) — le prix proposé est 1 sous le plus bas du marché ;
+- **↩ retiré** (les frais payés sont perdus) ; **Coût** (changer le coût de revient) ; **↶** annule la dernière action.
+
+**Bilan** (24 h / 7 j / 30 j / tout) : kinah reçus, frais de mise en vente dont relistes, bénéfice = reçu − coût − frais, part des kinah perdue en frais de relistes, détail par objet, derniers mouvements. Calculé dans le navigateur, mis à jour à chaque clic.
+
+**Enregistrement** : le site écrit directement `journal.json` dans ton dépôt GitHub, avec un jeton « fine-grained » limité à ce dépôt (droit *Contents* seulement), gardé dans ton navigateur et jamais publié. Plus de copier-coller. Si deux appareils écrivent, les événements sont fusionnés (aucun n'est perdu). Sans jeton, le journal reste dans le navigateur. Le passage horaire lit le journal : alertes « Tu es battu », sous le seuil, etc., et comparaison avec les estimations de l'outil.
+
+## Frais de mise en vente : à vérifier
+Un guide (tiers, pas NCSOFT) indique **~2 % du prix affiché**, payés à chaque mise en vente, **non remboursés** en cas de retrait ou de reliste (exemple : 1 435 de frais pour une annonce de 71 775). C'est la valeur utilisée (`listing_fee: 0.02` dans `config.json`). **Vérifie-la en jeu** sur une annonce (frais affichés ÷ prix total) ; si c'est différent, dis-le-moi ou change la valeur.
+
+## Reprise de l'existant
+Tes 6 annonces en cours et tes 24 ventes ont été reprises dans le journal (marquées « avant le journal » : date de mise en vente et frais inconnus). `mes_annonces.json` et `mes_ventes.json` sont supprimés (ils restent dans l'historique git).

@@ -102,52 +102,158 @@ async function scanFile(file){if(!file||!(file.type||'').startsWith('image/'))re
  }catch(e){msg.textContent='Lecture impossible : '+e+' (la lecture fonctionne sur le site en ligne)'}}
 document.addEventListener('paste',e=>{const it=[...((e.clipboardData||{}).items||[])].find(i=>(i.type||'').startsWith('image/'));if(!it)return;
  const on=id=>{const sec=document.getElementById(id);return sec&&sec.classList.contains('on')};
- if(on('plan')){e.preventDefault();scanFile(it.getAsFile())}else if(on('home')){e.preventDefault();scanSales(it.getAsFile())}
- else if(on('gains')){e.preventDefault();scanHist(it.getAsFile())}});
-let SALES=[];
-async function scanSales(file){if(!file||!(file.type||'').startsWith('image/'))return;const msg=document.getElementById('vmsg');
+ if(on('plan')){e.preventDefault();scanFile(it.getAsFile())}else if(on('gains')){e.preventDefault();jScan(it.getAsFile())}});
+
+// ======================================================================== journal des ventes
+// Mes annonces et ce qu'elles deviennent : postee, vendue (tout ou partie), relistee (nouveau prix = nouveaux frais),
+// retiree. Enregistre dans journal.json du depot GitHub (jeton garde dans ce navigateur), sinon dans ce navigateur.
+// Meme calcul d'etat que config.lot_state (Python).
+let J=null,JSHA=null,JBUSY=false,JOPEN=null;
+const JC=()=>window.JCFG||{tax:0.1,fee:0.02,repo:null};
+const jEsc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function jNow(){const d=new Date(),p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes())}
+function jid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
+function jState(l){const ev=(l.ev||[]).filter(e=>!e.x).sort((a,b)=>(a.t||'').localeCompare(b.t||''));
+ let prix=l.prix,cout=l.cout,sold=0,ret=0,frais=0,recu=0,rel=0,fraisRel=0,poste=null;
+ ev.forEach(e=>{if(e.type==='poste'||e.type==='reliste'){prix=e.prix;frais+=e.frais||0;if(e.type==='reliste'){rel++;fraisRel+=e.frais||0}else poste=e.t}
+  else if(e.type==='vendu'){sold+=e.qte;recu+=e.recu||0}else if(e.type==='retire')ret+=e.qte;else if(e.type==='cout')cout=e.cout});
+ return {prix,cout,vendus:sold,retires:ret,reste:Math.max(0,l.qte-sold-ret),frais,fraisRel,recu,relistes:rel,poste,ev}}
+function jMerge(a,b){const lots={},order=[];
+ [a,b].forEach(x=>((x&&x.lots)||[]).forEach(l=>{let o=lots[l.id];
+  if(!o){o=lots[l.id]=JSON.parse(JSON.stringify(l));order.push(l.id);return}
+  if(l.del)o.del=1;const by={};o.ev.forEach(e=>by[e.id]=e);
+  (l.ev||[]).forEach(e=>{if(!by[e.id])o.ev.push(JSON.parse(JSON.stringify(e)));else if(e.x)by[e.id].x=1})}));
+ return {_:(a&&a._)||(b&&b._)||'',maj:[(a&&a.maj)||'',(b&&b.maj)||''].sort().pop(),lots:order.map(i=>lots[i])}}
+function jText(j){return '{\n "_": '+JSON.stringify(j._||'')+',\n "maj": '+JSON.stringify(j.maj||'')+',\n "lots": [\n'
+ +j.lots.map(l=>'  '+JSON.stringify(l)).join(',\n')+'\n ]\n}\n'}
+function jLocal(){try{return JSON.parse(localStorage.getItem('journal')||'null')}catch(e){return null}}
+function jKeep(){try{localStorage.setItem('journal',JSON.stringify(J))}catch(e){}}
+function jToken(){try{return localStorage.getItem('ghtoken')||''}catch(e){return ''}}
+function jStatus(t,cls){const el=document.getElementById('jsync');if(el){el.innerHTML=t;el.className='sub '+(cls||'')}}
+const b64e=s=>{let b='';new TextEncoder().encode(s).forEach(c=>b+=String.fromCharCode(c));return btoa(b)};
+const b64d=s=>new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\s/g,'')),c=>c.charCodeAt(0)));
+async function jApi(method,body){const r=await fetch('https://api.github.com/repos/'+JC().repo+'/contents/journal.json'+(method==='GET'?'?ref=main&t='+Date.now():''),
+  {method,headers:{Authorization:'Bearer '+jToken(),Accept:'application/vnd.github+json','Content-Type':'application/json'},body:body&&JSON.stringify(body)});
+ if(r.status===404&&method==='GET')return null;if(!r.ok){const e=new Error('GitHub '+r.status);e.status=r.status;throw e}return r.json()}
+async function jPull(){const d=await jApi('GET');if(!d){JSHA=null;return null}JSHA=d.sha;return JSON.parse(b64d(d.content))}
+// enregistrement : fusion avec la version du depot (un autre appareil a pu ecrire entre-temps), puis ecriture
+async function jSync(label){jKeep();
+ if(!jToken()||!JC().repo){jStatus('💾 Enregistré dans ce navigateur seulement : ajoute ton jeton GitHub (ci-dessous) pour le garder sur le dépôt et l’utiliser dans les alertes.','neg');return}
+ if(JBUSY)return;JBUSY=true;jStatus('⏳ Enregistrement sur GitHub…');
+ try{for(let k=0;k<3;k++){const remote=await jPull();const merged=jMerge(remote,J);merged.maj=jNow();
+   if(remote&&jText(remote)===jText({...merged,maj:remote.maj})){J=remote;break}
+   try{const r=await jApi('PUT',{message:'Journal : '+(label||'mise à jour'),content:b64e(jText(merged)),branch:'main',...(JSHA?{sha:JSHA}:{})});
+    JSHA=r.content.sha;J=merged;break}catch(e){if(e.status!==409&&e.status!==422)throw e}}
+  jKeep();jStatus('✅ Enregistré sur GitHub à '+jNow().slice(11)+' (pris en compte au prochain passage horaire).','pos')}
+ catch(e){jStatus('⚠ Pas enregistré sur GitHub ('+jEsc(e.message)+(e.status===401?' : jeton refusé':e.status===403||e.status===404?' : le jeton n’a pas le droit d’écrire dans ce dépôt':'')
+  +'). Gardé dans ce navigateur, nouvel essai à la prochaine action.','neg')}
+ JBUSY=false;jRender()}
+async function jInit(){if(!document.getElementById('jopen'))return;
+ J=jMerge(window.JOURNAL||{lots:[]},jLocal());jRender();
+ const tk=document.getElementById('jtoken');if(tk)tk.value=jToken()?'••••••••':'';
+ if(jToken()&&JC().repo){try{const remote=await jPull();J=jMerge(remote,J);jKeep();jRender();
+   if(!remote||jText(jMerge(remote,{lots:[]}))!==jText({...J,maj:remote.maj}))await jSync('synchronisation');
+   else jStatus('✅ À jour avec GitHub.','pos')}catch(e){jStatus('⚠ GitHub injoignable ('+jEsc(e.message)+') : modifications gardées dans ce navigateur.','neg')}}
+ else jSync()}
+function jSetToken(){const v=document.getElementById('jtoken').value.trim();if(!v||v.startsWith('•'))return;
+ try{localStorage.setItem('ghtoken',v)}catch(e){}document.getElementById('jtoken').value='••••••••';jInit()}
+function jForget(){try{localStorage.removeItem('ghtoken')}catch(e){}document.getElementById('jtoken').value='';jStatus('Jeton oublié dans ce navigateur.')}
+// ---------------------------------------------------------------- actions
+const fee=(p,q)=>Math.floor(JC().fee*p*q),net=(p,q)=>Math.floor(p*q*(1-JC().tax));
+function jLot(id){return J.lots.find(l=>l.id===id)}
+function jPost(){const g=id=>document.getElementById(id),objet=g('jo').value.trim(),q=+g('jq').value,p=+g('jp').value,n=Math.max(1,+g('jn').value||1);
+ const c=g('jc').value===''?null:+g('jc').value;
+ if(!objet||!(q>0)||!(p>0)){toast('Indique l’objet, la quantité et le prix');return}
+ for(let k=0;k<n;k++){const id=jid();J.lots.push({id,objet,qte:q,prix:p,...(c!=null?{cout:c}:{}),ev:[{id:jid(),t:jNow(),type:'poste',prix:p,qte:q,frais:fee(p,q)}]})}
+ g('jq').value=g('jp').value='';jSync(n+' annonce(s) '+objet)}
+function jAct(id,kind){JOPEN=JOPEN&&JOPEN.id===id&&JOPEN.kind===kind?null:{id,kind};jRender()}
+function jDo(id,kind){const l=jLot(id),s=jState(l),g=k=>document.getElementById('ja'+k);
+ if(kind==='vendu'){const q=Math.min(s.reste,+g('q').value||0),p=+g('p').value,t=(g('t').value||jNow()).replace('T',' ');
+  if(!(q>0)||!(p>0))return;l.ev.push({id:jid(),t,type:'vendu',prix:p,qte:q,recu:net(p,q)})}
+ else if(kind==='reliste'){const p=+g('p').value;if(!(p>0))return;l.ev.push({id:jid(),t:jNow(),type:'reliste',prix:p,qte:s.reste,frais:fee(p,s.reste)})}
+ else if(kind==='retire')l.ev.push({id:jid(),t:jNow(),type:'retire',qte:s.reste});
+ else if(kind==='cout'){const c=+g('c').value;if(!(c>=0))return;l.ev.push({id:jid(),t:jNow(),type:'cout',cout:c})}
+ JOPEN=null;jSync(kind+' '+l.objet)}
+function jUndo(id){const l=jLot(id),ev=l.ev.filter(e=>!e.x&&e.t).sort((a,b)=>a.t.localeCompare(b.t));
+ const last=ev[ev.length-1];if(!last)return;if(last.type==='poste'){if(confirm('Supprimer cette annonce du journal ?')){l.del=1;jSync('suppression '+l.objet)}return}
+ last.x=1;jSync('annulation '+l.objet)}
+// ---------------------------------------------------------------- captures : annonces en cours ou historique des ventes
+async function jScan(file){if(!file||!(file.type||'').startsWith('image/'))return;const msg=document.getElementById('jmsg');
  msg.textContent='Lecture de la capture…';
  try{await scanLoad();const url=URL.createObjectURL(file);
   const img=await new Promise((ok,ko)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=()=>ko('image illisible');i.src=url});
-  const rows=await scanListings(img,{progress:m=>msg.textContent=m});URL.revokeObjectURL(url);
-  rows.forEach(r=>{const cv=document.createElement('canvas');cv.width=cv.height=40;cv.getContext('2d').drawImage(img,r.x,r.y,r.w,r.h,0,0,40,40);r.cv=cv});
-  SALES=SALES.concat(rows);renderSales();
-  msg.textContent=rows.length+' annonce(s) lue(s)'+(SALES.length>rows.length?' (ajoutées aux précédentes : colle d’autres captures si tes ventes tiennent sur plusieurs écrans)':'')
-   +'. Vérifie, corrige le coût si besoin, puis copie le fichier.'}catch(e){msg.textContent='Lecture impossible : '+e+' (la lecture fonctionne sur le site en ligne)'}}
-function renderSales(){const box=document.getElementById('vrows');box.innerHTML='';
- SALES.forEach((r,k)=>{const d=document.createElement('span');d.className='chip';if(r.check.length)d.style.borderColor='var(--warn)';d.title=r.check.join(', ');
-  d.appendChild(r.cv);d.appendChild(document.createTextNode((r.check.length?'⚠ ':'')+(r.name||'?')+' × '+r.qty+' à '+(r.unit==null?'?':NF.format(r.unit))));box.appendChild(d)});
- const agg={};SALES.forEach(r=>{if(!r.name)return;const a=agg[r.name]||(agg[r.name]={prix:r.unit,quantite:0});a.quantite+=r.qty;
-  if(r.unit!=null&&(a.prix==null||r.unit<a.prix))a.prix=r.unit});
- const keep=document.getElementById('vmode').value==='add'?{...(window.MY_LISTINGS||{})}:{};
- Object.entries(agg).forEach(([n,a])=>{const old=keep[n]&&typeof keep[n]==='object'?keep[n]:{};const cost=old.cout??(window.COSTS||{})[n];
-  keep[n]={prix:a.prix,quantite:a.quantite,...(cost!=null?{cout:cost}:{})}});
- const file={_:(window.MY_LISTINGS_HELP||''),annonces:keep};document.getElementById('vjson').value=JSON.stringify(file,null,2)}
-// historique des ventes -> mes_ventes.json (ventes deja connues + ventes lues, sans doublon, de la plus recente a la plus ancienne)
-let HIST=[];
-async function scanHist(file){if(!file||!(file.type||'').startsWith('image/'))return;const msg=document.getElementById('gmsg');
- msg.textContent='Lecture de la capture…';
- try{await scanLoad();const url=URL.createObjectURL(file);
-  const img=await new Promise((ok,ko)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=()=>ko('image illisible');i.src=url});
-  const rows=await scanHistory(img,{progress:m=>msg.textContent=m});URL.revokeObjectURL(url);
-  if(!rows.length){msg.textContent='Aucune vente trouvée : capture la liste de l’historique des ventes (prix, montant reçu et date sur chaque ligne).';return}
-  rows.forEach(r=>{const cv=document.createElement('canvas');cv.width=cv.height=40;cv.getContext('2d').drawImage(img,r.x,r.y,r.w,r.h,0,0,40,40);r.cv=cv});
-  HIST=HIST.concat(rows);renderHist();const bad=rows.filter(r=>r.check.length).length;
-  msg.textContent=rows.length+' vente(s) lue(s)'+(bad?', dont '+bad+' à vérifier (en orange : corrige-les dans le texte ci-dessous)':'')
-   +'. Colle d’autres captures si ton historique est plus long, puis copie le fichier.'}catch(e){msg.textContent='Lecture impossible : '+e+' (la lecture fonctionne sur le site en ligne)'}}
-function renderHist(){const box=document.getElementById('grows');box.innerHTML='';
- HIST.forEach(r=>{const d=document.createElement('span');d.className='chip';if(r.check.length)d.style.borderColor='var(--warn)';d.title=r.check.join(', ');
-  d.appendChild(r.cv);d.appendChild(document.createTextNode((r.check.length?'⚠ ':'')+(r.date||'date ?')+' · '+(r.name||'?')+' × '+r.qty+' : '+(r.total==null?'?':NF.format(r.total))));box.appendChild(d)});
- const all={},key=v=>v.date+'|'+v.objet+'|'+v.prix;
- (window.MY_SALES||[]).forEach(v=>all[key(v)]=v);
- HIST.forEach(r=>{const v={date:r.date||'?',objet:r.name||'?',quantite:r.qty,prix:r.total,recu:r.net};all[key(v)]=v});
- const list=Object.values(all).sort((a,b)=>b.date.localeCompare(a.date));
- document.getElementById('gjson').value='{\n "_": '+JSON.stringify(window.MY_SALES_HELP||'')+',\n "ventes": [\n'
-  +list.map(v=>'  '+JSON.stringify(v).replace(/,"/g,', "').replace(/":/g,'": ')).join(',\n')+'\n ]\n}\n'}
-function copyHist(){const t=document.getElementById('gjson').value;const done=()=>toast('Contenu de mes_ventes.json copié');
- if(navigator.clipboard&&window.isSecureContext)navigator.clipboard.writeText(t).then(done,()=>copyOld(t,done));else copyOld(t,done)}
-function copySales(){const t=document.getElementById('vjson').value;const done=()=>toast('Contenu de mes_annonces.json copié');
- if(navigator.clipboard&&window.isSecureContext)navigator.clipboard.writeText(t).then(done,()=>copyOld(t,done));else copyOld(t,done)}
+  const hist=__historyRows(img).rows.length>0;let added=0,known=0,bad=[];
+  if(hist){const rows=await scanHistory(img,{progress:m=>msg.textContent=m});
+   rows.forEach(r=>{if(r.check.some(c=>c!=='objet incertain')||!r.name||!r.date){bad.push((r.name||'?')+' '+(r.date||''));return}
+    const unit=Math.round(r.total/r.qty);
+    const dup=J.lots.some(l=>!l.del&&l.objet===r.name&&l.ev.some(e=>!e.x&&e.type==='vendu'&&e.t===r.date&&e.prix*e.qte===r.total));
+    if(dup){known++;return}
+    const open=J.lots.filter(l=>!l.del&&l.objet===r.name).map(l=>[l,jState(l)]).filter(([l,s])=>s.reste>=r.qty&&(!s.poste||s.poste<=r.date||l.avant));
+    const pick=(open.find(([l,s])=>s.prix===unit)||open[0]||[])[0];
+    const ev={id:jid(),t:r.date,type:'vendu',prix:unit,qte:r.qty,recu:r.net};
+    if(pick)pick.ev.push(ev);else J.lots.push({id:jid(),objet:r.name,qte:r.qty,prix:unit,avant:1,ev:[ev]});added++})
+   msg.textContent=added+' vente(s) ajoutée(s)'+(known?', '+known+' déjà connue(s)':'')+(bad.length?' ; à saisir à la main (lecture incertaine) : '+bad.join(', '):'')+'.'}
+  else{const rows=await scanListings(img,{progress:m=>msg.textContent=m});
+   rows.forEach(r=>{if(!r.name||r.unit==null||r.check.length){bad.push(r.name||'?');return}
+    const same=J.lots.filter(l=>!l.del&&l.objet===r.name).map(l=>jState(l)).filter(s=>s.reste===r.qty&&s.prix===r.unit).length;
+    const seen=rows.filter(x=>x!==r&&x.name===r.name&&x.qty===r.qty&&x.unit===r.unit&&rows.indexOf(x)<rows.indexOf(r)).length;
+    if(same>seen){known++;return}
+    const c=(window.COSTS||{})[r.name];
+    J.lots.push({id:jid(),objet:r.name,qte:r.qty,prix:r.unit,...(c!=null?{cout:c}:{}),ev:[{id:jid(),t:jNow(),type:'poste',prix:r.unit,qte:r.qty,frais:fee(r.unit,r.qty)}]});added++});
+   msg.textContent=added+' annonce(s) ajoutée(s)'+(known?', '+known+' déjà dans le journal':'')+(bad.length?' ; à saisir à la main (lecture incertaine) : '+bad.join(', '):'')+'.'}
+  URL.revokeObjectURL(url);if(added)jSync('capture : '+added+(hist?' vente(s)':' annonce(s)'));else jRender()}
+ catch(e){msg.textContent='Lecture impossible : '+e+' (la lecture fonctionne sur le site en ligne)'}}
+// ---------------------------------------------------------------- affichage
+function jRender(){if(!J)return;const box=document.getElementById('jopen');if(!box)return;
+ const F=window.JFLOOR||{},lots=J.lots.filter(l=>!l.del).map(l=>[l,jState(l)]);
+ const open=lots.filter(([l,s])=>s.reste>0).sort((a,b)=>a[0].objet.localeCompare(b[0].objet,'fr'));
+ const nm=n=>'<span class="nm" title="Cliquer pour copier">'+jEsc(n)+'</span>';
+ box.innerHTML=open.length?open.map(([l,s])=>{const f=F[l.objet],bat=f&&f[0]<s.prix;
+  const row='<tr><td>'+nm(l.objet)+(bat?' <span class="badge b-bad">battu : '+NF.format(f[0])+'</span>':f?' <span class="badge b-ok">le moins cher</span>':'')+'</td>'
+   +'<td class="n">'+s.reste+(s.reste<l.qte?' / '+l.qte:'')+'</td><td class="n">'+NF.format(s.prix)+'</td>'
+   +'<td class="n">'+(s.cout!=null?NF.format(s.cout):'–')+'</td><td class="n '+(s.cout!=null?(net(s.prix,1)-s.cout>0?'pos':'neg'):'')+'">'+(s.cout!=null?NF.format(net(s.prix,1)-s.cout):'–')+'</td>'
+   +'<td>'+(s.poste?s.poste.slice(8,10)+'/'+s.poste.slice(5,7)+' '+s.poste.slice(11):'<span class="mut">avant le journal</span>')+'</td>'
+   +'<td class="n">'+(s.relistes||'–')+'</td><td class="n">'+(s.frais?NF.format(s.frais):'–')+'</td>'
+   +'<td style="white-space:nowrap"><button class="mapbtn" onclick="jAct(\''+l.id+'\',\'vendu\')">✅ Vendu</button> '
+   +'<button class="mapbtn" onclick="jAct(\''+l.id+'\',\'reliste\')">🔁 Relister</button> '
+   +'<button class="mapbtn" onclick="jAct(\''+l.id+'\',\'retire\')">↩ Retirer</button> '
+   +'<button class="mapbtn" onclick="jAct(\''+l.id+'\',\'cout\')">Coût</button> '
+   +'<button class="mapbtn" title="Annuler la dernière action" onclick="jUndo(\''+l.id+'\')">↶</button></td></tr>';
+  if(!JOPEN||JOPEN.id!==l.id)return row;
+  const k=JOPEN.kind,inp=(id,v,w,t)=>'<input id="ja'+id+'" class="search" type="'+(t||'number')+'" value="'+v+'" style="width:'+w+'px;display:inline-block">';
+  const go='<button class="mapbtn" onclick="jDo(\''+l.id+'\',\''+k+'\')">OK</button>';
+  const f2=k==='vendu'?'Vendu '+inp('q',s.reste,80)+' à '+inp('p',s.prix,110)+' /u, le '+inp('t',jNow().replace(' ','T'),190,'datetime-local')+' '+go
+   +' <span class="sub">reçu après taxe : '+NF.format(net(s.prix,s.reste))+'</span>'
+   :k==='reliste'?'Nouveau prix '+inp('p',f?Math.max(1,f[0]-1):s.prix,110)+' /u '+go+' <span class="sub">nouveaux frais de mise en vente : ~'+NF.format(fee(f?f[0]-1:s.prix,s.reste))+' ('+Math.round(JC().fee*100)+' % du prix des '+s.reste+' restants, non remboursés)</span>'
+   :k==='retire'?'Retirer les '+s.reste+' restants (les frais payés ne sont pas remboursés) '+go
+   :'Coût de revient '+inp('c',s.cout??'',110)+' /u '+go;
+  return row+'<tr><td colspan="9" style="background:var(--card2)">'+f2+'</td></tr>'}).join('')
+  :'<tr><td colspan="9" class="mut">Aucune annonce en cours : ajoute-les ci-dessous ou colle une capture de ta fenêtre des ventes.</td></tr>';
+ jStats(lots);jLog(lots)}
+function jStats(lots){const per=+(document.getElementById('jper')||{}).value||0,since=per?new Date(Date.now()-per*864e5):null;
+ const p=n=>String(n).padStart(2,'0'),lim=since?since.getFullYear()+'-'+p(since.getMonth()+1)+'-'+p(since.getDate())+' '+p(since.getHours())+':'+p(since.getMinutes()):'';
+ const by={},T={recu:0,frais:0,fraisRel:0,cout:0,vendus:0,ventes:0,relistes:0,sansCout:0};
+ lots.forEach(([l,s])=>{const o=by[l.objet]||(by[l.objet]={recu:0,brut:0,frais:0,fraisRel:0,cout:0,vendus:0,ventes:0,relistes:0,sansCout:0});
+  let cout=l.cout;(s.ev).forEach(e=>{if(e.type==='cout'){cout=e.cout;return}if(!e.t||e.t<lim)return;
+   if(e.type==='poste'||e.type==='reliste'){o.frais+=e.frais||0;if(e.type==='reliste'){o.fraisRel+=e.frais||0;o.relistes++}}
+   else if(e.type==='vendu'){o.recu+=e.recu||0;o.brut+=e.prix*e.qte;o.vendus+=e.qte;o.ventes++;if(cout!=null)o.cout+=cout*e.qte;else o.sansCout+=e.qte}})});
+ Object.values(by).forEach(o=>Object.keys(T).forEach(k=>T[k]+=o[k]));
+ const ben=T.recu-T.cout-T.frais,kpi=(l,v,s,c)=>'<div class="kpi"><div class="l">'+l+'</div><div class="v '+(c||'')+'">'+v+'</div><div class="s">'+s+'</div></div>';
+ document.getElementById('jkpi').innerHTML=kpi('Kinah reçus',kf(T.recu),T.ventes+' vente(s), '+NF.format(T.vendus)+' unités, après taxe','pos')
+  +kpi('Frais de mise en vente',kf(T.frais),'dont relistes '+kf(T.fraisRel)+' ('+T.relistes+' reliste(s))',T.frais?'neg':'')
+  +kpi('Bénéfice',kf(ben),T.sansCout?NF.format(T.sansCout)+' unités vendues sans coût connu (comptées gratuites)':'reçu − coût − frais',ben>0?'pos':'neg')
+  +kpi('Perte due aux relistes',T.recu?(T.fraisRel/T.recu*100).toFixed(1).replace('.',',')+' %':'–','frais de relistes / kinah reçus');
+ const rows=Object.entries(by).filter(([n,o])=>o.ventes||o.frais).sort((a,b)=>b[1].recu-a[1].recu);
+ document.getElementById('jitems').innerHTML=rows.length?rows.map(([n,o])=>{const b=o.recu-o.cout-o.frais;
+  return '<tr><td><span class="nm">'+jEsc(n)+'</span></td><td class="n">'+NF.format(o.vendus)+'</td><td class="n">'+(o.vendus?NF.format(Math.round(o.brut/o.vendus)):'–')+'</td>'
+   +'<td class="n">'+NF.format(o.recu)+'</td><td class="n">'+(o.cout?NF.format(o.cout):'–')+'</td><td class="n">'+(o.frais?NF.format(o.frais):'–')+'</td>'
+   +'<td class="n">'+(o.relistes?o.relistes+' ('+NF.format(o.fraisRel)+')':'–')+'</td><td class="n '+(b>0?'pos':'neg')+'">'+NF.format(b)+(o.sansCout?' *':'')+'</td></tr>'}).join('')
+  :'<tr><td colspan="8" class="mut">Rien sur cette période.</td></tr>'}
+function jLog(lots){const ev=[];lots.forEach(([l,s])=>s.ev.forEach(e=>e.t&&e.type!=='cout'&&ev.push([e,l,ev.length])));ev.sort((a,b)=>b[0].t.localeCompare(a[0].t)||b[2]-a[2]);
+ const T={poste:'📦 posté',reliste:'🔁 relisté',vendu:'✅ vendu',retire:'↩ retiré'};
+ document.getElementById('jlog').innerHTML=ev.slice(0,40).map(([e,l])=>'<tr><td>'+e.t.slice(8,10)+'/'+e.t.slice(5,7)+' '+e.t.slice(11)+'</td><td>'+T[e.type]+'</td><td>'+jEsc(l.objet)+'</td>'
+  +'<td class="n">'+(e.qte||'')+'</td><td class="n">'+(e.prix?NF.format(e.prix):'')+'</td><td class="n">'+(e.type==='vendu'?'+'+NF.format(e.recu||0):e.frais?'−'+NF.format(e.frais):'')+'</td></tr>').join('')}
+function jCostFill(){const n=document.getElementById('jo').value.trim(),c=(window.COSTS||{})[n],el=document.getElementById('jc');if(c!=null&&el.value==='')el.value=c}
 const PROF={Alchemy:'Alchimie',Handicrafting:'Artisanat',Armorsmithing:"Forge d'armures",Blacksmithing:"Forge d'armes",Cooking:'Cuisine'};
 function lvState(){let st={};try{st=JSON.parse(localStorage.getItem('metiers')||'{}')}catch(e){}st.lv=st.lv||{};if(st.lose===undefined)st.lose=true;return st}
 function lvSave(st){try{localStorage.setItem('metiers',JSON.stringify(st))}catch(e){}}
@@ -299,4 +405,4 @@ document.addEventListener('DOMContentLoaded',()=>{let t='home';try{t=localStorag
  if(localStorage.getItem('detail')){document.body.classList.add('detail');document.querySelectorAll('input.dt').forEach(x=>x.checked=true)}}catch(e){}
  if(!document.getElementById(t))t='home';show(t);
  try{const s=JSON.parse(localStorage.getItem('stock')||'null');if(s)document.querySelectorAll('#stock input[data-r]').forEach(i=>i.value=s[i.dataset.r]||'')}catch(e){}
- importLevelsFromHash();applyLevels();rateCalc();planSafe();planGamble();document.querySelectorAll('th').forEach(th=>th.onclick=()=>sortT(th))});
+ importLevelsFromHash();applyLevels();jInit();rateCalc();planSafe();planGamble();document.querySelectorAll('th').forEach(th=>th.onclick=()=>sortT(th))});

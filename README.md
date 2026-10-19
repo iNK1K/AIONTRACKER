@@ -14,7 +14,7 @@ Onglet **Mon stock** : coller une capture de la réserve (Ctrl + V) remplit le s
 
 Onglet **Mes métiers** : niveaux de métier enregistrés dans le navigateur ; les crafts impossibles sont grisés partout et le profit tient compte du taux de réussite du jeu (tables extraites du client, mises à jour par le passage daily).
 
-Onglet **Mes gains** : coller une capture de l’historique des ventes en jeu remplit `mes_ventes.json` (objet, quantité, prix, montant reçu, date) ; l’onglet compare tes ventes réelles aux estimations (ventes par jour, part de marché réelle, prix obtenu, ventes à perte).
+Onglet **Mes ventes** : journal des annonces (`journal.json`) — un clic quand tu postes, vends (tout ou partie), relistes ou retires, ou une capture (fenêtre des annonces ou historique des ventes). Bilan réel : kinah reçus, taxe, frais de mise en vente, relistes, bénéfice ; comparaison avec les estimations de l’outil. Le site enregistre le journal sur GitHub avec un jeton à droits limités (gardé dans le navigateur).
 
 Tests des calculs : `python -m unittest discover tests`.
 
@@ -25,8 +25,8 @@ Python est **portable** (`.runtime\python`) : rien n'est installé sur le systè
 ## Réglages : `config.json`
 - `my_server` / `watch_servers` : ids a2-tracker (2310 Hadala, 2315 Zemurru, 2318 Baba…)
 - `masteries` : ta maîtrise par métier (filtre les recettes)
-- `mes_annonces.json` : ce que tu as en vente (`"Nom exact": prix`) → alerte « Tu es battu » quand quelqu'un vend moins cher
-- `mes_ventes.json` : mes ventes réelles (rempli depuis l’onglet Mes gains)
+- `journal.json` : mes annonces et mes ventes (rempli depuis l’onglet Mes ventes, ne pas modifier à la main) → alertes « Tu es battu », sous le seuil, etc.
+- `listing_fee` : frais de mise en vente (0,02 = 2 % du prix affiché, à vérifier en jeu) ; `github_repo` : dépôt du journal
 - `alerts.types` : alertes envoyées en cours de journée (par défaut `annonces`, `achat_craft`, `notes`, `restriction` ; possibles aussi `bonne_affaire`, `prix`, `flip`, `uniques`) ; `alerts.resume_seul: true` = rien en journée, tout dans le résumé quotidien
 - `alerts.flip_min_margin`, `flip_min_samples`, `flip_min_profit_day` : seuils de l'onglet et de l'alerte Flip
 - `harvest_per_day` : ta récolte quotidienne, ex. `{"Bois d'Asvata": 300, "Azpha": 150}` → plan de production

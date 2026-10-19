@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from aionhdv.analysis import Market
+from aionhdv.config import from_journal, lot_state
 from aionhdv.db import SCHEMA
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -150,6 +151,27 @@ class VraisGains(unittest.TestCase):
         self.assertAlmostEqual(p["unites_j"], 2.0)                  # 2 intervalles sur 24 h
         self.assertAlmostEqual(p["part"], 2.0 / 24)                 # 24 annonces vendues par jour sur le marche
         self.assertEqual(p["marge_u"], -10)                         # 990 recus pour un cout de 1000
+
+
+class Journal(unittest.TestCase):
+    LOT = dict(id="a", objet="Planche", qte=20, prix=1000, cout=600, ev=[
+        dict(id="1", t="2026-10-19 10:00", type="poste", prix=1000, qte=20, frais=400),
+        dict(id="2", t="2026-10-19 12:00", type="vendu", prix=1000, qte=8, recu=7200),
+        dict(id="3", t="2026-10-19 14:00", type="reliste", prix=900, qte=12, frais=216),
+        dict(id="4", t="2026-10-19 15:00", type="vendu", prix=900, qte=5, recu=4050),
+        dict(id="5", t="2026-10-19 16:00", type="vendu", prix=900, qte=2, recu=1620, x=1),   # annule
+        dict(id="6", t="2026-10-19 17:00", type="cout", cout=650)])
+
+    def test_etat_d_une_annonce(self):
+        s = lot_state(self.LOT)
+        self.assertEqual((s["prix"], s["cout"], s["vendus"], s["reste"], s["frais"], s["recu"], s["relistes"]),
+                         (900, 650, 13, 7, 616, 11250, 1))
+
+    def test_annonces_et_ventes_pour_l_analyse(self):
+        listings, sales = from_journal({"lots": [self.LOT, dict(self.LOT, id="b", del_=0), dict(self.LOT, id="c", **{"del": 1})]})
+        self.assertEqual(listings, {"Planche": {"prix": 900, "quantite": 14, "cout": 650}})
+        self.assertEqual(len(sales), 4)                                # 2 ventes par annonce, l'annulee ne compte pas
+        self.assertEqual(sales[0], dict(date="2026-10-19 15:00", objet="Planche", quantite=5, prix=4500, recu=4050, cout=650))
 
 
 @unittest.skipUnless(shutil.which("node"), "node absent")

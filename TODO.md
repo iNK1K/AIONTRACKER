@@ -4,6 +4,7 @@ Une tâche par ligne. Claude les traite dans l'ordre et coche `[x]` quand c'est 
 
 
 ## Fait
+- [x] Journal des ventes (onglet 💰 Mes ventes) : annonces postées / vendues / relistées / retirées en un clic ou par capture, enregistré sur GitHub depuis le site, bilan réel (taxe, frais de mise en vente, relistes, bénéfice) ; remplace mes_annonces.json et mes_ventes.json
 - [x] Accueil fiable : taxe 10 %, prix habituel = prix des ventes observées (48 h), potentiel du jour = Planning safe (compter seulement les « vrais achats » écarté : sous-compte 7 à 14 fois, voir rapport.md)
 - [x] Accueil orienté action : liste « ✅ À faire maintenant » (annonces à ajuster, achats sûrs, plan du jour, quand poster, notes de version)
 - [x] Suivi des vrais gains : onglet 💰 Mes gains (capture de l'historique des ventes → mes_ventes.json, réel vs estimé, part de marché réelle, ventes à perte)

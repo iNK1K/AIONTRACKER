@@ -104,7 +104,7 @@ class Market:
         return dict(median=statistics.median(vals), low=min(vals), n=len(vals)) if vals else None
 
     def my_listings(self):
-        """Mes annonces (mes_annonces.json) face au prix le plus bas actuel. Une annonce peut etre un simple prix,
+        """Mes annonces en cours (journal.json) face au prix le plus bas actuel. Une annonce peut etre un simple prix,
         ou {"prix": .., "cout": .., "quantite": ..} : avec le cout de revient, on calcule le seuil de rentabilite."""
         fees, out = self.cfg["fees"], []
         for name, v in (self.cfg.get("my_listings") or {}).items():
@@ -125,7 +125,7 @@ class Market:
         return out
 
     def real_gains(self):
-        """Mes vraies ventes (mes_ventes.json, lues sur les captures de l'historique en jeu) face aux estimations de
+        """Mes vraies ventes (journal.json) face aux estimations de
         l'outil : ventes par jour, part de marche, prix obtenu, taille des achats. Une ligne de l'historique = un achat
         (un acheteur peut prendre une partie d'une annonce). Les rythmes ne sont calcules qu'a partir de 3 ventes d'un
         meme objet, sur sa propre periode : (n - 1) achats entre le premier et le dernier."""
@@ -146,9 +146,11 @@ class Market:
         items = {}
         for s in sales:
             it = items.setdefault(s["objet"], dict(objet=s["objet"], item_id=self.by_base.get(s["objet"]), lots=0,
-                                                   unites=0, brut=0, recu=0, ts=[]))
+                                                   unites=0, brut=0, recu=0, ts=[], _c=0, _cq=0))
             q = s.get("quantite") or 1
             it["lots"] += 1; it["unites"] += q; it["brut"] += s["prix"]; it["ts"].append(s["t"])
+            if s.get("cout") is not None:                    # cout de revient note dans le journal pour cette vente
+                it["_c"] += s["cout"] * q; it["_cq"] += q
             it["recu"] += s.get("recu") or math.floor(s["prix"] * (1 - fees))
         out = []
         for it in items.values():
@@ -175,7 +177,8 @@ class Market:
             # prix : ce que le marche payait pendant la periode (ventes observees sur les releves horaires)
             seen = self.sale_prices(iid, (b - a).total_seconds() / 3600 + 24, until=b + timedelta(hours=1)) if iid else []
             it["prix_marche"] = statistics.median(seen) if len(seen) >= 3 else None
-            cost = costs.get(it["objet"])
+            c, cq = it.pop("_c"), it.pop("_cq")
+            cost = round(c / cq) if cq else costs.get(it["objet"])
             it["cout"] = cost
             it["marge_u"] = it["recu_u"] - cost if cost else None
             out.append(it)

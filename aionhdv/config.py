@@ -21,24 +21,62 @@ def load_config():
     if local.exists():
         with open(local, encoding="utf-8") as f:
             cfg.update(json.load(f))
-    listings = ROOT / "mes_annonces.json"
-    if listings.exists():
-        with open(listings, encoding="utf-8") as f:
-            data = json.load(f)
-        cfg["my_listings"] = data.get("annonces") or {}
-        cfg["_my_listings_help"] = data.get("_", "")
-    sales = ROOT / "mes_ventes.json"
-    if sales.exists():
-        with open(sales, encoding="utf-8") as f:
-            data = json.load(f)
-        cfg["my_sales"] = data.get("ventes") or []
-        cfg["_my_sales_help"] = data.get("_", "")
-    # liens vers l'editeur GitHub des fichiers (le depot est connu dans GitHub Actions)
-    repo = os.environ.get("GITHUB_REPOSITORY") or cfg.get("github_repo")
-    if repo:
-        cfg["_github_edit_url"] = f"https://github.com/{repo}/edit/main/mes_annonces.json"
-        cfg["_github_sales_edit_url"] = f"https://github.com/{repo}/edit/main/mes_ventes.json"
+    journal = ROOT / "journal.json"
+    if journal.exists():
+        # journal des ventes (rempli depuis le site, onglet Mes ventes)
+        with open(journal, encoding="utf-8") as f:
+            cfg["journal"] = json.load(f)
+        cfg["my_listings"], cfg["my_sales"] = from_journal(cfg["journal"])
+    # depot GitHub ou le site enregistre le journal (connu dans GitHub Actions)
+    cfg["_github_repo"] = os.environ.get("GITHUB_REPOSITORY") or cfg.get("github_repo")
     for key in ("discord_webhook_url", "discord_webhook_unique_url", "discord_webhook_news_url"):
         if os.environ.get(key.upper()):
             cfg[key] = os.environ[key.upper()]
     return cfg
+
+
+def lot_state(lot):
+    """Etat d'une annonce du journal d'apres ses evenements (poste, reliste, vendu, retire) : meme calcul que le site
+    (site.js, jState)."""
+    ev = sorted((e for e in lot.get("ev") or [] if not e.get("x")), key=lambda e: e.get("t") or "")   # x = annule
+    prix, cout, sold, retired, frais, recu, relistes = lot.get("prix"), lot.get("cout"), 0, 0, 0, 0, 0
+    for e in ev:
+        if e["type"] in ("poste", "reliste"):
+            prix = e.get("prix", prix)
+            frais += e.get("frais") or 0
+            relistes += e["type"] == "reliste"
+        elif e["type"] == "vendu":
+            sold += e["qte"]
+            recu += e.get("recu") or 0
+        elif e["type"] == "retire":
+            retired += e["qte"]
+        elif e["type"] == "cout":
+            cout = e["cout"]
+    return dict(prix=prix, cout=cout, vendus=sold, retires=retired, reste=max(0, lot["qte"] - sold - retired), frais=frais,
+                recu=recu, relistes=relistes)
+
+
+def from_journal(journal):
+    """Journal -> (mes annonces en cours par objet, mes ventes) : le format qu'utilisent l'analyse et les alertes."""
+    listings, sales = {}, []
+    for lot in journal.get("lots") or []:
+        if lot.get("del"):
+            continue
+        st = lot_state(lot)
+        if st["reste"] > 0:
+            a = listings.setdefault(lot["objet"], {"prix": st["prix"], "quantite": 0, "_c": 0, "_q": 0})
+            a["prix"] = min(a["prix"], st["prix"])           # mon annonce la moins chere face au marche
+            a["quantite"] += st["reste"]
+            if st["cout"] is not None:
+                a["_c"] += st["cout"] * st["reste"]
+                a["_q"] += st["reste"]
+        for e in lot.get("ev") or []:
+            if e["type"] == "vendu" and e.get("t") and not e.get("x"):
+                sales.append(dict(date=e["t"], objet=lot["objet"], quantite=e["qte"], prix=e["prix"] * e["qte"],
+                                  recu=e.get("recu"), cout=st["cout"]))
+    for a in listings.values():
+        if a["_q"]:
+            a["cout"] = round(a["_c"] / a["_q"])
+        del a["_c"], a["_q"]
+    sales.sort(key=lambda v: v["date"], reverse=True)
+    return listings, sales
