@@ -1055,7 +1055,8 @@ def ingredient_tab(cfg, my):
 def supply_tab(ctx, cfg, my):
     """📦 Ravitaillement : capture de la fenetre des ravitaillements (objets demandes chaque jour, donc recherches a
     l'HDV) -> pour chaque objet, de quoi calculer dans le navigateur le gain a le crafter pour le revendre : ingredients
-    au dernier releve, ingredient eclatant crafte par sa chaine ou achete, combo, plus bas prix en vente et mediane 3 j."""
+    au prix d'achat realiste, ingredient eclatant crafte par sa chaine ou achete, combo, plus bas prix en vente, prix
+    de vente realiste (plafond du prix propose) et mediane 3 j."""
     m, fees, items = my["market"], cfg["fees"], []
     rnd = lambda v: round(v) if v is not None else None
     combo_cfg = cfg.get("combo_rate")
@@ -1087,14 +1088,14 @@ def supply_tab(ctx, cfg, my):
             if o and o["item_id"] not in seen and len(seen) < 6:
                 bp = m.buy_price(o["item_id"])
                 out.append(dict(i=o["item_id"], n=m.items[o["item_id"]]["name"], q=o["qty"],
-                                buy=rnd(bp and bp["ask"]), med=value(o["item_id"]), l=bp["listings"] if bp else 0,
+                                buy=rnd(bp and bp["real"]), med=value(o["item_id"]), l=bp["listings"] if bp else 0,
                                 chain=step(combo_of[o["item_id"]], seen | {o["item_id"]})))
         return out
 
     def step(r, seen):
         """Une etape de chaine : la recette de l'objet de base, dont le combo donne l'ingredient eclatant voulu."""
         sub = needs(r, seen)
-        c = m.recipe_cost(r, "buy", skip={x["i"] for x in sub}, price="ask")
+        c = m.recipe_cost(r, "buy", skip={x["i"] for x in sub})
         return dict(i=r["item_id"], n=m.items[r["item_id"]]["name"], prof=r["profession"], m=r["mastery"] or 0, cv=r.get("rate_curve"),
                     c=combo(r)["c"], k=rnd(c["cost_r"]) if c["ok"] else None, plain=value(r["item_id"]),
                     parts=[dict(p, p=rnd(p["p"]), sub=[dict(x, p=rnd(x["p"])) for x in p.get("sub") or []]) for p in c["parts"]],
@@ -1102,7 +1103,7 @@ def supply_tab(ctx, cfg, my):
 
     def rest_cost(r, need):
         """Cout des autres ingredients (hors eclatants), communs aux deux options."""
-        c = m.recipe_cost(r, "buy", skip={x["i"] for x in need}, price="ask")
+        c = m.recipe_cost(r, "buy", skip={x["i"] for x in need})
         return rnd(c["cost_r"]) if c["ok"] else None
 
     for iid, recs in m.recipes_by_item.items():
@@ -1110,14 +1111,14 @@ def supply_tab(ctx, cfg, my):
         if it.get("category") != "Equip" or it.get("bound") or not it.get("icon_file") \
                 or not (DATA_DIR / it["icon_file"]).exists():
             continue
-        best = None                                          # recette la moins chere, ingredients au prix le plus bas releve
+        best = None                                          # recette la moins chere, ingredients au prix d'achat realiste
         for r in recs:
-            c = m.recipe_cost(r, "buy", price="ask")
+            c = m.recipe_cost(r, "buy")
             q = r["output_qty"] or 1
             cu = c["cost_r"] / q if c["ok"] else None
             if best is None or (cu is not None and (best[0] is None or cu < best[0])):
                 best = (cu, c, q, r)
-        st = m.price_stats(iid, 3)
+        st, sp = m.price_stats(iid, 3), m.sell_price(iid)
         r = best[3]
         need = needs(r, {iid})
         items.append(dict(i=iid, n=it["name"], s=f"../data/{it['icon_file']}", c=rnd(best[0]), q=best[2],
@@ -1125,11 +1126,11 @@ def supply_tab(ctx, cfg, my):
                           rest=rest_cost(r, need) if need else None,
                           parts=[dict(p, p=rnd(p["p"]), sub=[dict(x, p=rnd(x["p"])) for x in p.get("sub") or []])
                                  for p in best[1]["parts"]],
-                          l=m.listings.get(iid, 0), med=rnd(st and st["median"]), ask=rnd(m.price.get(iid)),
+                          l=m.listings.get(iid, 0), med=rnd(st and st["median"]), ask=rnd(m.price.get(iid)), real=rnd(sp and sp["real"]),
                           prof=best[3]["profession"], m=best[3]["mastery"] or 0))
     return ("<h2>Ravitaillement</h2><p class='lead'>Les objets demandés du jour sont recherchés à l’HDV : colle une capture "
             "de ta fenêtre de ravitaillement (<b>Ctrl + V</b> sur cet onglet) pour voir lesquels rapportent à crafter puis "
-            f"revendre. Gain par craft = vente après taxe ({fees:.0%}) − coût des ingrédients (dernier relevé, "
+            f"revendre. Gain par craft = vente après taxe ({fees:.0%}) − coût des ingrédients (prix d’achat réaliste, dernier relevé "
             f"{esc(paris(m.as_of, '%d/%m %H:%M')) if m.as_of else '?'}), échecs compris selon tes niveaux (🛠️ Mes métiers) "
             "et combo compté. Un ingrédient éclatant est crafté par sa chaîne <b>(A)</b> ou acheté <b>(B)</b>, au moins cher.</p>"
             '<div class="card" ondragover="event.preventDefault()" ondrop="event.preventDefault();supplyScan(event.dataTransfer.files[0])">'
