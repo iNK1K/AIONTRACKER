@@ -590,16 +590,19 @@ function ingRender(name){const D=window.INGDATA,box=document.getElementById('ing
  const best=rows.find(o=>!o.rt.lock&&o.v!=null);
  box.innerHTML='<div class="card" style="margin:10px 0"><b>Vente directe de '+jEsc(I.n)+'</b><span class="mut">plus bas en vente '+n(I.ask)+' · habituel '+n(I.u)+' · '+I.l+' annonce(s) → <b>≈ '+n(fn)+' net / unité</b></span>'
   +(best&&fn!=null?'<span>'+(best.v>fn?'✅ Le mieux : <b>'+jEsc(best.r.o)+'</b>, '+n(best.v)+' par unité (<span class="pos">+'+n(best.v-fn)+'</span> par rapport à la vente directe)'+(best.rt.u?' <span class="sub">· niveau non renseigné dans Mes métiers</span>':'')
-   :'❌ Aucun craft que tu peux faire ne rapporte plus que la vente directe.')+'</span>':'')+'</div>'
+   :'❌ Aucun craft que tu peux faire ne rapporte plus que la vente directe.')+'</span>':'')
+  +(fn!=null?(()=>{const w=rows.filter(o=>!o.rt.lock&&o.d!=null&&o.d<=0).map(o=>o.r.o);
+    return w.length?'<span class="neg">💰 Vendre brut plutôt que crafter : '+w.map(jEsc).join(', ')+'</span>':''})():'')+'</div>'
   +'<div class="wrap"><table><thead><tr><th>Produit</th><th>Métier</th><th class="n">Réussite</th><th class="n">Utilise</th><th class="n">Autres ingrédients</th>'
-  +'<th class="n">Vente du produit</th><th class="n">Valeur d’1 unité</th><th class="n">vs vente directe</th><th class="n">Vendus/j (serveur)</th></tr></thead><tbody>'
+  +'<th class="n">Vente du produit</th><th class="n">Valeur d’1 unité</th><th>Brut ou craft ? <span class="sub">(par craft)</span></th><th class="n">Vendus/j (serveur)</th></tr></thead><tbody>'
   +(rows.length?rows.map(o=>{const r=o.r,rt=o.rt,lk=rt.lock;
    const met=r.a.map(([p,m])=>(PROF[p]||p)+' '+lvTxt(Math.max(1,m))).join(' ou ');
    return '<tr'+(lk?' class="locked"':'')+'><td><span class="nm" title="Cliquer pour copier">'+jEsc(r.o)+'</span>'+(r.q>1?' <span class="sub">×'+r.q+'</span>':'')+'</td><td class="sub">'+met+'</td>'
     +'<td class="n">'+(lk?'🔒':rt.u?'?':(rt.r*100).toFixed(1).replace('.',',')+' %')+'</td><td class="n">'+NF.format(o.qx)+'</td>'
     +'<td class="n">'+n(o.other)+(o.e?' <span class="sub" title="Comprend un outil lié compté au prix PNJ estimé">*</span>':'')+'</td>'
     +'<td class="n">'+n(r.sell)+'<div class="sub">'+n(o.pn)+' net · '+(r.l||0)+' ann.</div></td>'
-    +'<td class="n"><b>'+n(o.v)+'</b></td><td class="n '+(o.d==null?'':o.d>0?'pos':'neg')+'">'+(o.d==null?'–':(o.d>0?'+':'')+n(o.d))+'</td>'
+    +'<td class="n"><b>'+n(o.v)+'</b></td><td>'+(o.d==null?'–':(o.d>0?'<b class="pos">🔨 Crafter</b>':'<b class="neg">💰 Vendre brut</b>')
+     +' <span class="sub">'+NF.format(o.qx)+' brut '+n(fn*o.qx)+' · craft '+n(o.v*o.qx)+' → '+(o.d>0?'+'+n(o.d*o.qx)+' en craftant':n(-o.d*o.qx)+' de plus en vendant brut')+'</span>')+'</td>'
     +'<td class="n">'+(r.vj==null?'–':NF.format(r.vj))+'</td></tr>'}).join('')
    :'<tr><td colspan="9" class="mut">Aucun craft '+(only?'que tu peux faire ':'')+'avec cet ingrédient.</td></tr>')
   +'</tbody></table></div>'
