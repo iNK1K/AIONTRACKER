@@ -120,13 +120,14 @@ function jState(l){const ev=(l.ev||[]).filter(e=>!e.x).sort((a,b)=>(a.t||'').loc
  ev.forEach(e=>{if(e.type==='poste'||e.type==='reliste'){prix=e.prix;frais+=e.frais||0;if(e.type==='reliste')rel++;else poste=e.t}
   else if(e.type==='vendu'){sold+=e.qte;recu+=e.recu||0}else if(e.type==='retire'){ret+=e.qte;frais+=e.frais||0}else if(e.type==='cout')cout=e.cout});
  return {prix,cout,vendus:sold,retires:ret,reste:Math.max(0,l.qte-sold-ret),frais,recu,relistes:rel,poste,ev}}
-function jMerge(a,b){const lots={},order=[];
- [a,b].forEach(x=>((x&&x.lots)||[]).forEach(l=>{let o=lots[l.id];
+// « debut » : date de remise a zero du journal ; une copie plus ancienne (navigateur, autre appareil) est ignoree
+function jMerge(a,b){const lots={},order=[],debut=[(a&&a.debut)||'',(b&&b.debut)||''].sort().pop();
+ [a,b].filter(x=>x&&(x.debut||'')===debut).forEach(x=>(x.lots||[]).forEach(l=>{let o=lots[l.id];
   if(!o){o=lots[l.id]=JSON.parse(JSON.stringify(l));order.push(l.id);return}
   if(l.del)o.del=1;const by={};o.ev.forEach(e=>by[e.id]=e);
   (l.ev||[]).forEach(e=>{if(!by[e.id])o.ev.push(JSON.parse(JSON.stringify(e)));else if(e.x)by[e.id].x=1})}));
- return {_:(a&&a._)||(b&&b._)||'',maj:[(a&&a.maj)||'',(b&&b.maj)||''].sort().pop(),lots:order.map(i=>lots[i])}}
-function jText(j){return '{\n "_": '+JSON.stringify(j._||'')+',\n "maj": '+JSON.stringify(j.maj||'')+',\n "lots": [\n'
+ return {_:(a&&a._)||(b&&b._)||'',debut,maj:[(a&&a.maj)||'',(b&&b.maj)||''].sort().pop(),lots:order.map(i=>lots[i])}}
+function jText(j){return '{\n "_": '+JSON.stringify(j._||'')+',\n "debut": '+JSON.stringify(j.debut||'')+',\n "maj": '+JSON.stringify(j.maj||'')+',\n "lots": [\n'
  +j.lots.map(l=>'  '+JSON.stringify(l)).join(',\n')+'\n ]\n}\n'}
 function jLocal(){try{return JSON.parse(localStorage.getItem('journal')||'null')}catch(e){return null}}
 function jKeep(){try{localStorage.setItem('journal',JSON.stringify(J))}catch(e){}}
