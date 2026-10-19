@@ -16,6 +16,8 @@ Onglet **Mes métiers** : niveaux de métier enregistrés dans le navigateur ; l
 
 Onglet **Mes ventes** : journal des annonces (`journal.json`) — un clic quand tu postes, vends (tout ou partie), relistes ou retires, ou une capture (fenêtre des annonces ou historique des ventes). Bilan réel : kinah reçus, taxe perdue en relistes et retraits, bénéfice ; comparaison avec les estimations de l’outil. Le site enregistre le journal sur GitHub avec un jeton à droits limités (gardé dans le navigateur).
 
+Onglet **Ravitaillement** : coller une capture de la fenêtre de ravitaillement → objets reconnus, coût du craft, prix à l’HDV, annonces, revente, façon la moins chère de livrer chaque case.
+
 Tests des calculs : `python -m unittest discover tests`.
 
 Mode test : ajouter `--dry-run` (ex. `python -m aionhdv hourly --dry-run`) pour ne rien envoyer sur Discord.

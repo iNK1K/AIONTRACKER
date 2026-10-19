@@ -565,4 +565,114 @@ window.reserveToList = async function (img, progress) {
     });
     return out;
   };
+
+  // ====================================================================== ravitaillement
+  // Capture de la fenetre de ravitaillement : des cartes, chacune avec une rangee de cases (objets a livrer, icones
+  // assombries) sur fond uni plus clair, puis « N livre(s) parmi les objets ci-dessus », « 0 / N » et les recompenses.
+  // Cases : taches carrees sombres ; objet : forme de l'icone (contours) comparee aux icones de reference, ce qui
+  // resiste a l'assombrissement ; N : dernier chiffre de la ligne « 0 / N ».
+  const SN = 32;
+  function edges(img, x, y, w, h) {
+    const c = canvas(SN, SN), g = c.getContext('2d', { willReadFrequently: true });
+    g.drawImage(img, x, y, w, h, 0, 0, SN, SN);
+    const d = g.getImageData(0, 0, SN, SN).data, v = [], e = [];
+    for (let i = 0; i < d.length; i += 4) v.push((d[i] + d[i + 1] + d[i + 2]) / 3);
+    for (let yy = 1; yy < SN - 1; yy++) for (let xx = 1; xx < SN - 1; xx++) {
+      const k = yy * SN + xx;
+      e.push(Math.hypot(v[k + 1] - v[k - 1], v[k + SN] - v[k - SN]));
+    }
+    const m = e.reduce((a, b) => a + b, 0) / e.length, sd = Math.sqrt(e.reduce((a, b) => a + (b - m) ** 2, 0) / e.length) || 1;
+    return e.map(z => (z - m) / sd);
+  }
+  const corr = (a, b) => { let t = 0; for (let i = 0; i < a.length; i++) t += a[i] * b[i]; return t / a.length; };
+  let supplyRefs = null;
+  async function supplyIcons(progress) {
+    if (supplyRefs) return supplyRefs;
+    const all = window.SUPPLY || [], out = [], seen = {};
+    for (let k = 0; k < all.length; k += 24) {
+      progress(`Chargement des icônes de référence : ${k} / ${all.length}…`);
+      const got = await Promise.all(all.slice(k, k + 24).map(r => new Promise(ok => {
+        if (seen[r.s]) return ok(null);
+        seen[r.s] = 1;
+        const i = new Image();
+        i.onload = () => ok({ s: r.s, v: edges(i, 0, 0, i.naturalWidth, i.naturalHeight) });
+        i.onerror = () => ok(null);
+        i.src = r.s;
+      })));
+      got.forEach(g => g && out.push(g));
+    }
+    return (supplyRefs = out);
+  }
+  // cases : composantes de pixels sombres (plus sombres que le fond de carte), carrees, de 30 a 90 px
+  function supplyBoxes(P) {
+    const { W, H, d } = P, dark = new Uint8Array(W * H), seen = new Uint8Array(W * H), out = [];
+    const hist = new Array(256).fill(0);
+    for (let k = 0; k < W * H; k++) hist[Math.round(lum(d, k * 4))]++;
+    const bg = hist.indexOf(Math.max(...hist));                       // fond de carte le plus frequent
+    for (let k = 0; k < W * H; k++) dark[k] = lum(d, k * 4) < bg - 5 ? 1 : 0;
+    for (let k = 0; k < W * H; k++) {
+      if (!dark[k] || seen[k]) continue;
+      let a = W, b = 0, t = H, u = 0, n = 0;
+      const st = [k]; seen[k] = 1;
+      while (st.length) {
+        const q = st.pop(), x = q % W, y = (q - x) / W; n++;
+        if (x < a) a = x; if (x > b) b = x; if (y < t) t = y; if (y > u) u = y;
+        for (const nq of [q + 1, q - 1, q + W, q - W]) {
+          if (nq < 0 || nq >= W * H || seen[nq] || !dark[nq] || Math.abs((nq % W) - x) > 1) continue;
+          seen[nq] = 1; st.push(nq);
+        }
+      }
+      const w = b - a + 1, h = u - t + 1;
+      if (w >= 30 && w <= 90 && h >= 30 && h <= 90 && Math.abs(w - h) <= 0.15 * w && n > 0.35 * w * h)
+        out.push({ x: a, y: t, w, h });
+    }
+    return out;
+  }
+  // « 0 / N » : chiffres blancs sous les cases ; on lit le dernier glyphe avec les chiffres de la date de l'historique
+  function supplyCount(P, card) {
+    const { W, d } = P, x0 = Math.max(0, card.x0 - 20), x1 = Math.min(W, card.x1 + 20), top = card.y1 + 4;
+    const lines = [];
+    for (let y = top, inLine = false, start = 0; y < Math.min(P.H, top + 160); y++) {
+      let n = 0; for (let x = x0; x < x1; x++) if (lum(d, (y * W + x) * 4) > 170 && sat(d, (y * W + x) * 4) < 60) n++;
+      if (n >= 2 && !inLine) { inLine = true; start = y; }
+      else if (n < 2 && inLine) { inLine = false; if (y - start >= 7) lines.push([start, y]); }
+    }
+    if (lines.length < 2) return null;
+    const [ya, yb] = lines[1];
+    const gl = clean(glyphs(P, x0, x1, ya - 1, yb + 1, 40));
+    const last = gl[gl.length - 1];
+    if (!last) return null;
+    const v = vecOf(last.M, last.a, last.b);
+    let best = null;
+    for (const [digit, m] of Object.entries(HIST_MODELS.date)) {
+      if (digit === '0') continue;
+      let e = 0; for (let i = 0; i < m.length; i++) e += (v[i] - m[i]) ** 2; e /= m.length;
+      if (!best || e < best.e) best = { digit, e };
+    }
+    return best && best.e < 0.15 ? +best.digit : null;
+  }
+  window.scanSupply = async function (img, opts) {
+    opts = opts || {};
+    const progress = opts.progress || (() => {});
+    const refs = await supplyIcons(progress), P = pixels(img);
+    progress('Recherche des cases…');
+    const boxes = supplyBoxes(P).sort((p, q) => p.x - q.x);
+    // une case est un objet si son icone ressemble nettement a un equipement connu (les recompenses sont ignorees)
+    const items = [];
+    for (const b of boxes) {
+      let best = { c: -1 };
+      const v = edges(img, b.x, b.y, b.w, b.h);
+      for (const r of refs) { const c = corr(v, r.v); if (c > best.c) best = { c, s: r.s }; }
+      if (best.c >= 0.55) items.push({ ...b, s: best.s, score: best.c });
+    }
+    // cartes : cases sur la meme rangee, separees de moins d'une largeur de case
+    const cards = [];
+    for (const it of items) {
+      const c = cards.find(c => Math.abs(c.y - it.y) < it.h / 2 && it.x - c.x1 < it.w);
+      if (c) { c.items.push(it); c.x1 = it.x + it.w; c.y1 = Math.max(c.y1, it.y + it.h); }
+      else cards.push({ y: it.y, x0: it.x, x1: it.x + it.w, y1: it.y + it.h, items: [it] });
+    }
+    cards.forEach(c => { c.need = supplyCount(P, c); });
+    return cards;
+  };
 })();

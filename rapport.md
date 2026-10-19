@@ -505,3 +505,15 @@ Le salon est utilisé par d'autres personnes : **plus aucune alerte sur tes anno
 - **Chaque jour (17 h 40)** : le résumé détaillé (meilleur moment pour poster, récolte → craft, achat → craft, flips, plan de production, opportunités sûres) + les **annonces officielles NCSOFT pas encore postées** (les annonces déjà envoyées par l'ancien système ne sont pas reprises). Le dimanche, le résumé de la semaine en plus.
 - Plus d'envoi d'annonces officielles heure par heure, ni d'alertes individuelles (bonne affaire, flip, Unique, effet d'une note de version).
 - Réglages : `alerts.hourly` et `alerts.daily` (true / false) dans `config.json`.
+
+---
+
+# Onglet 📦 Ravitaillement — 19/10/2026
+
+Colle une capture de la fenêtre de ravitaillement (Ctrl + V sur l'onglet). Le site :
+- **trouve les cases** de chaque carte (carrés plus sombres que le fond de la carte) et **reconnaît chaque objet** par la forme de son icône (contours comparés aux 174 équipements fabricables, ce qui résiste à l'assombrissement des cases) ; les récompenses en bas des cartes sont ignorées ;
+- **lit le nombre à livrer** (« 0 / N ») ; modifiable si besoin ;
+- pour chaque objet : **coût du craft** (ingrédients achetés à l'HDV, ou Od transmuté si moins cher ; ÷ ton taux de réussite si l'échec fait perdre les ingrédients ; 🔒 si ton niveau ne suffit pas), **prix à l'HDV**, **nombre d'annonces au dernier relevé**, **revente nette** (prix réaliste − 10 % ; « dernier prix vu le … » s'il n'est plus en vente), et **pour livrer** = le moins cher entre crafter et acheter ;
+- par carte : **la façon la moins chère de livrer le nombre demandé** (objets surlignés).
+
+Test sur ta capture : 4 cartes, 13 objets reconnus, nombres à livrer 3 / 3 / 2 / 2 lus correctement, en 0,1 s. Limites : une version normale et sa version éclatante ont la même icône (c'est la version normale, fabricable, qui est retenue) ; la dernière capture est gardée dans le navigateur et recalculée avec les prix de chaque passage.

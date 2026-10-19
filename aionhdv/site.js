@@ -102,7 +102,8 @@ async function scanFile(file){if(!file||!(file.type||'').startsWith('image/'))re
  }catch(e){msg.textContent='Lecture impossible : '+e+' (la lecture fonctionne sur le site en ligne)'}}
 document.addEventListener('paste',e=>{const it=[...((e.clipboardData||{}).items||[])].find(i=>(i.type||'').startsWith('image/'));if(!it)return;
  const on=id=>{const sec=document.getElementById(id);return sec&&sec.classList.contains('on')};
- if(on('plan')){e.preventDefault();scanFile(it.getAsFile())}else if(on('gains')){e.preventDefault();jScan(it.getAsFile())}});
+ if(on('plan')){e.preventDefault();scanFile(it.getAsFile())}else if(on('gains')){e.preventDefault();jScan(it.getAsFile())}
+ else if(on('supply')){e.preventDefault();supplyScan(it.getAsFile())}});
 
 // ======================================================================== journal des ventes
 // Mes annonces et ce qu'elles deviennent : postee, vendue (tout ou partie), relistee (nouveau prix = nouveaux frais),
@@ -436,3 +437,49 @@ document.addEventListener('DOMContentLoaded',()=>{let t='home';try{t=localStorag
  if(!document.getElementById(t))t='home';show(t);
  try{const s=JSON.parse(localStorage.getItem('stock')||'null');if(s)document.querySelectorAll('#stock input[data-r]').forEach(i=>i.value=s[i.dataset.r]||'')}catch(e){}
  importLevelsFromHash();applyLevels();jInit();rateCalc();planSafe();planGamble();document.querySelectorAll('th').forEach(th=>th.onclick=()=>sortT(th))});
+
+// ======================================================================== ravitaillement
+// Cartes lues sur la capture (icone de chaque case + nombre a livrer), gardees dans ce navigateur ; les prix viennent
+// du dernier passage (window.SUPPLY). Cout du craft = ingredients achetes, divise par le taux de reussite si l'echec
+// fait perdre les ingredients (niveaux de Mes metiers).
+function supplyLoad(){try{return JSON.parse(localStorage.getItem('supply')||'null')}catch(e){return null}}
+async function supplyScan(file){if(!file||!(file.type||'').startsWith('image/'))return;const msg=document.getElementById('smsg');
+ msg.textContent='Lecture de la capture…';
+ try{await scanLoad();const url=URL.createObjectURL(file);
+  const img=await new Promise((ok,ko)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=()=>ko('image illisible');i.src=url});
+  const cards=await scanSupply(img,{progress:m=>msg.textContent=m});URL.revokeObjectURL(url);
+  if(!cards.length){msg.textContent='Aucune case reconnue : capture la fenêtre de ravitaillement (cartes avec les objets à livrer).';return}
+  const data=cards.map(c=>({need:c.need,items:c.items.map(i=>i.s)}));
+  try{localStorage.setItem('supply',JSON.stringify({t:jNow(),cards:data}))}catch(e){}
+  msg.textContent=cards.length+' case(s), '+cards.reduce((a,c)=>a+c.items.length,0)+' objet(s) reconnu(s)'
+   +(cards.some(c=>!c.need)?' ; nombre à livrer illisible sur une case : indique-le':'')+'.';supplyRender()}
+ catch(e){msg.textContent='Lecture impossible : '+e+' (la lecture fonctionne sur le site en ligne)'}}
+function supplySetNeed(k,v){const d=supplyLoad();if(!d)return;d.cards[k].need=Math.max(1,+v||1);try{localStorage.setItem('supply',JSON.stringify(d))}catch(e){}supplyRender()}
+function supplyRender(){const box=document.getElementById('sbox');if(!box)return;const d=supplyLoad();if(!d){box.innerHTML='';return}
+ const byIcon={};(window.SUPPLY||[]).forEach(x=>(byIcon[x.s]=byIcon[x.s]||[]).push(x));
+ const st=lvState(),n=v=>v==null?'–':NF.format(Math.round(v));
+ box.innerHTML='<p class="sub">Capture lue le '+d.t.slice(8,10)+'/'+d.t.slice(5,7)+' à '+d.t.slice(11)+'.</p>'+d.cards.map((c,k)=>{
+  const rows=[];c.items.forEach(s=>(byIcon[s]||[]).forEach(x=>{
+   if(window.CRAFTDATA&&!CRAFTDATA.items[x.i])CRAFTDATA.items[x.i]=x.alts;
+   const info=craftInfo(x.i),locked=info&&!info.ok,rate=info&&info.ok&&info.rate!=null?info.rate:null;
+   const craft=x.c==null||locked?null:(rate&&st.lose?x.c/rate:x.c);
+   const opts=[[craft,'crafter'],[x.a,'acheter']].filter(o=>o[0]!=null).sort((a,b)=>a[0]-b[0]);
+   rows.push({x,info,locked,rate,craft,best:opts[0]||null})}));
+  const need=c.need||rows.length,pick=rows.filter(r=>r.best).sort((a,b)=>a.best[0]-b.best[0]).slice(0,need);
+  const total=pick.reduce((a,r)=>a+r.best[0],0),ok=pick.length===need;
+  const prof=r=>{const a=r.x.alts[0];return a?(PROF[a[0]]||a[0])+' '+lvTxt(Math.max(1,a[1])):''};
+  return '<div class="card" style="margin-top:12px"><b>Case '+(k+1)+'</b><div class="toolbar" style="margin:0">À livrer : '
+   +'<input class="search" type="number" min="1" value="'+need+'" style="width:70px;display:inline-block" onchange="supplySetNeed('+k+',this.value)"> '
+   +(c.need?'':'<span class="badge b-warn">nombre lu illisible : vérifie</span> ')+'parmi '+rows.length+' objet(s)</div>'
+   +'<div class="wrap"><table><thead><tr><th>Objet</th><th class="n" title="Ingrédients achetés à l’HDV (ou Od transmuté), ÷ ta réussite si l’échec fait perdre les ingrédients">Coût du craft</th>'
+   +'<th class="n">Prix à l’HDV</th><th class="n">Annonces</th><th class="n" title="Prix réaliste à la revente, après la taxe de 10 %">Revente nette</th><th class="n">Pour livrer</th></tr></thead><tbody>'
+   +rows.map(r=>'<tr'+(pick.includes(r)?' style="background:rgba(62,207,142,.08)"':'')+'><td><span class="it"><img src="'+jEsc(r.x.s)+'" width="34" height="34" style="border-radius:6px" loading="lazy">'
+    +'<span><span class="nm" title="Cliquer pour copier">'+jEsc(r.x.n)+'</span><div class="sub">'+prof(r)
+    +(r.locked?' · 🔒 niveau insuffisant':r.rate!=null?' · réussite '+Math.round(r.rate*100)+' %':'')+'</div></span></span></td>'
+    +'<td class="n" title="'+jEsc((r.x.ing||[]).join(' ; '))+'">'+(r.locked?'<span class="mut">🔒 '+n(r.x.c)+'</span>':r.x.c==null?'<span class="mut">ingrédient introuvable</span>':n(r.craft)+(r.rate&&st.lose&&r.rate<1?'<div class="sub">'+n(r.x.c)+' ÷ '+Math.round(r.rate*100)+' %</div>':''))+'</td>'
+    +'<td class="n">'+(r.x.a!=null?n(r.x.a):'<span class="mut">aucune</span>')+'</td><td class="n">'+r.x.l+'</td>'
+    +'<td class="n">'+n(r.x.v)+(r.x.vs?'<div class="sub">dernier prix vu le '+r.x.vs+'</div>':'')+'</td>'
+    +'<td class="n">'+(r.best?'<b>'+n(r.best[0])+'</b><div class="sub">'+r.best[1]+'</div>':'–')+'</td></tr>').join('')
+   +'</tbody></table></div><div>'+(ok?'💰 Le moins cher pour livrer '+need+' : <b class="neg">'+n(total)+'</b> ('+pick.map(r=>jEsc(r.x.n)+' : '+r.best[1]).join(', ')+')'
+     :'<span class="neg">Pas assez d’objets disponibles (craft possible ou en vente) pour en livrer '+need+'.</span>')+'</div></div>'}).join('')}
+document.addEventListener('DOMContentLoaded',()=>supplyRender());

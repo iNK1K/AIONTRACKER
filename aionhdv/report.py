@@ -996,6 +996,40 @@ def journal_html(ctx, cfg, my):
         f'window.HARVEST_ITEMS={json.dumps(sorted({e["objet"] for e in my["harvest"]}), ensure_ascii=False)};</script>')
 
 
+def supply_tab(ctx, cfg, my):
+    """📦 Ravitaillement : capture de la fenetre des ravitaillements (cartes d'objets a livrer) -> pour chaque objet,
+    cout du craft, prix a l'HDV, annonces au dernier releve, revente ; lecture et calculs dans le navigateur."""
+    m, fees, items = my["market"], cfg["fees"], []
+    for iid, recs in m.recipes_by_item.items():
+        it = m.items.get(iid) or {}
+        if it.get("category") != "Equip" or it.get("bound") or not it.get("icon_file") \
+                or not (DATA_DIR / it["icon_file"]).exists():
+            continue
+        best = None                                          # recette la moins chere (ingredients achetes a l'HDV)
+        for r in recs:
+            c = m.recipe_cost(r, "buy")
+            cu = c["cost_r"] / (r["output_qty"] or 1) if c["ok"] else None
+            if best is None or (cu is not None and (best[0] is None or cu < best[0])):
+                best = (cu, c)
+        sp = m.sell_price(iid)
+        items.append(dict(i=iid, n=it["name"], s=f"../data/{it['icon_file']}", c=round(best[0]) if best[0] is not None else None,
+                          ing=best[1]["lines"], a=m.price.get(iid), l=m.listings.get(iid, 0),
+                          v=round(sp["real"] * (1 - fees)) if sp else None, vs=sp and sp["stale"] and paris(sp["stale"], "%d/%m"),
+                          alts=sorted({(r["profession"], r["mastery"] or 0, r.get("rate_curve")) for r in recs})))
+    return ("<h2>Ravitaillement</h2><p class='lead'>Colle une capture de ta fenêtre de ravitaillement (<b>Ctrl + V</b> sur cet "
+            "onglet) : pour chaque objet demandé, le site donne le coût du craft (ingrédients achetés à l’HDV, ou Od transmuté "
+            "si moins cher), le prix à l’HDV et le nombre d’annonces au dernier relevé "
+            f"({esc(paris(m.as_of, '%d/%m %H:%M')) if m.as_of else '?'}), et ce qu’il rapporterait à la revente (après taxe). "
+            "Pour chaque case : la façon la moins chère de livrer le nombre demandé.</p>"
+            '<div class="card" ondragover="event.preventDefault()" ondrop="event.preventDefault();supplyScan(event.dataTransfer.files[0])">'
+            '<b>📷 Capture de la fenêtre de ravitaillement</b><span class="mut">Ctrl + V sur cet onglet, glisse le fichier, ou '
+            '<label style="color:var(--acc);cursor:pointer;text-decoration:underline">choisis un fichier<input type="file" '
+            'accept="image/*" hidden onchange="supplyScan(this.files[0])"></label>. La dernière lecture est gardée dans ce '
+            'navigateur et recalculée avec les prix du jour.</span><span id="smsg" class="mut"></span></div>'
+            '<div id="sbox"></div>'
+            f'<script>window.SUPPLY={json.dumps(items, ensure_ascii=False, separators=(",", ":"))};</script>')
+
+
 def gains_tab(ctx, cfg, my):
     """💰 Mes ventes : journal des annonces (journal.json) et mes ventes face aux estimations de l'outil."""
     g = my.get("gains")
@@ -1124,6 +1158,7 @@ def build(con, cfg, results):
                          {t: my["market"].items[s]["base_name"] for t, s in my["market"].transmute.items()})
             + ("<h3>Plan quotidien (config)</h3>" + table_plan(my["plan"]) if my["plan"] else ""))
         add("gains", "💰 Mes ventes", gains_tab(ctx, cfg, my))
+        add("supply", "📦 Ravitaillement", supply_tab(ctx, cfg, my))
         sep()
     others = [r for r in results if r is not my]
     if others:
