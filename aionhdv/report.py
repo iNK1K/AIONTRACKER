@@ -998,6 +998,60 @@ def journal_html(ctx, cfg, my):
         f'window.HARVEST_ITEMS={json.dumps(sorted({e["objet"] for e in my["harvest"]}), ensure_ascii=False)};</script>')
 
 
+def ingredient_tab(cfg, my):
+    """🧪 Par ingredient : je choisis un ingredient (ex. Essence de Balaur), la page compare sa vente telle quelle a
+    chaque craft qui l'utilise (valeur d'une unite dans le craft, reussite selon mes niveaux). Donnees par recette :
+    cout des autres ingredients (prix realiste), prix de vente realiste du produit, ventes mesurees."""
+    m = my["market"]
+    rnd = lambda v: round(v) if v is not None else None
+    ings, groups = {}, {}
+
+    def ing(iid):
+        if iid not in ings:
+            bp, u = m.buy_price(iid), m.usual_price(iid)
+            ings[iid] = dict(n=m.items[iid]["name"], ask=rnd(bp and bp["ask"]), u=rnd(u and u["price"]),
+                             l=bp["listings"] if bp else 0)
+        return iid
+    for oi, recs in m.recipes_by_item.items():
+        it = m.items.get(oi) or {}
+        sp = m.sell_price(oi)
+        if it.get("bound") or not sp:
+            continue
+        sl = m.sales(oi)
+        for r in recs:
+            if r["unresolved"]:
+                continue
+            x = {}
+            for opts in m.ingredients.get(r["id"], {}).values():
+                for o in opts:
+                    oit = m.items.get(o["item_id"]) or {}
+                    if oit.get("bound") or o["item_id"] in x:
+                        continue                               # ingredient lie : jamais a vendre tel quel
+                    c = m.recipe_cost(r, "buy", skip={o["item_id"]})
+                    x[ing(o["item_id"])] = [o["qty"], rnd(c["cost_r"]) if c["ok"] else None,
+                                            int(any(p["k"] == "pnj" for p in c["parts"]))]
+            if not x:
+                continue
+            key = (oi, json.dumps(sorted(x.items())))
+            g = groups.get(key)
+            if g:
+                g["a"].append([r["profession"], r["mastery"] or 0, r.get("rate_curve")])
+                continue
+            groups[key] = dict(o=it["name"], oi=oi, q=r["output_qty"] or 1, sell=rnd(sp["real"]), ask=rnd(sp["ask"]),
+                               l=sp["listings"], vj=round(sl["units"], 1) if sl else None,
+                               a=[[r["profession"], r["mastery"] or 0, r.get("rate_curve")]], x=x)
+    data = dict(ing=ings, rec=list(groups.values()), tax=cfg["fees"])
+    return ("<h2>Que faire de… ?</h2><p class='lead'>Choisis un ingrédient que tu as (récupéré en jeu, pas récolté) : "
+            "sa vente telle quelle face à chaque craft qui l’utilise. <b>Valeur d’1 unité</b> = (vente du produit après "
+            f"taxe ({cfg['fees']:.0%}) × réussite − autres ingrédients au prix réaliste) ÷ unités utilisées ; meilleure "
+            "que la vente directe = le craft rapporte plus. Réussite et 🔒 selon tes niveaux (🛠️ Mes métiers).</p>"
+            '<div class="toolbar"><input id="ingq" class="search" list="ingnames" placeholder="Ingrédient (nom exact)" '
+            'style="width:320px" onchange="ingRender(this.value)"><datalist id="ingnames"></datalist>'
+            '<label class="tg"><input type="checkbox" id="ingok" onchange="ingRender()"> Seulement ce que je peux crafter</label></div>'
+            '<div id="ingbox"></div>'
+            f'<script>window.INGDATA={json.dumps(data, ensure_ascii=False, separators=(",", ":"))};</script>')
+
+
 def supply_tab(ctx, cfg, my):
     """📦 Ravitaillement : capture de la fenetre des ravitaillements (objets demandes chaque jour, donc recherches a
     l'HDV) -> pour chaque objet, de quoi calculer dans le navigateur le gain a le crafter pour le revendre : ingredients
@@ -1209,6 +1263,7 @@ def build(con, cfg, results):
             "<div id='bdir' class='segp'>" + table_crafts(ctx, direct, "tb", False, compare_ways(direct, trans, "via Od"))
             + "</div><div id='btr' class='segp' style='display:none'>"
             + table_crafts(ctx, trans, "tbt", False, compare_ways(trans, direct, "l’achat à l’HDV")) + "</div>")
+        add("ingr", "🧪 Par ingrédient", ingredient_tab(cfg, my))
         add("flips", "🔁 Flip", "<h2>Achat → revente (sans craft)</h2>" + table_flips(ctx, my["flips"], cfg))
         add("uniques", "💎 Uniques", "<h2>Équipements Unique : prix bradés</h2>" + table_uniques(ctx, my["uniques"], cfg))
         add("metiersTab", "🛠️ Mes métiers", metiers_tab(con, my))

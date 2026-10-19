@@ -323,7 +323,7 @@ function applyLevels(){const st=lvState();
   const net=Math.round(sell-(st.lose?cost/info.rate:cost)),cn=el.querySelector('.cnet'),cp=el.querySelector('.cprof');
   if(cn){cn.textContent=NF.format(net);cn.dataset.v=net;cn.classList.toggle('pos',net>0);cn.classList.toggle('neg',net<=0)}
   if(cp){const pr=net*day;cp.textContent=kf(pr);cp.dataset.v=pr;cp.classList.toggle('pos',pr>0);cp.classList.toggle('neg',pr<=0)}});
- calc();renderMetiers();todoBuys();if(window.PLANDATA){planSafe();planGamble()}if(window.SUPPLY)supplyRender()}
+ calc();renderMetiers();todoBuys();if(window.PLANDATA){planSafe();planGamble()}if(window.SUPPLY)supplyRender();if(window.INGDATA)ingRender()}
 // « A faire maintenant » : achats -> craft que mes niveaux permettent (metier non renseigne = garde), 2 au plus,
 // avec le taux de reussite quand le niveau est connu
 function todoBuys(){let n=0;
@@ -565,3 +565,43 @@ function supplyCalc(x,e,part){const n=v=>v==null?'–':NF.format(Math.round(v)),
   +tr('<b>Gain par craft</b>',o=>o.gain,pn)
   +'</tbody></table></div>';
  return h}
+
+// ======================================================================== par ingredient
+// « Que faire de… ? » : vente directe d'un ingredient face a chaque craft qui l'utilise (INGDATA). Valeur d'1 unite
+// dans un craft = (vente du produit apres taxe x reussite - autres ingredients) / unites utilisees ; sans perte des
+// materiaux en cas d'echec (Mes metiers), la reussite ne compte pas.
+function ingRate(alts){let best=null,unk=false,need=null;
+ alts.forEach(([p,m,cv])=>{const rt=sRate(p,m,cv);if(rt.u){unk=true;return}if(rt.lock){if(!need||m<need.m)need={p,m};return}
+  if(!best||rt.r>best.r)best={r:rt.r,p,m}});
+ return best?best:unk?{r:1,u:true}:{r:1,lock:true,need}}
+function ingRender(name){const D=window.INGDATA,box=document.getElementById('ingbox');if(!D||!box)return;
+ const q=document.getElementById('ingq'),dl=document.getElementById('ingnames');
+ if(dl&&!dl.options.length)dl.innerHTML=Object.values(D.ing).map(x=>x.n).sort((a,b)=>a.localeCompare(b,'fr')).map(n=>'<option value="'+jEsc(n)+'">').join('');
+ if(name==null){try{name=q.value||localStorage.getItem('ingSel')||'Essence de Balaur'}catch(e){name=q.value||'Essence de Balaur'}}
+ const id=Object.keys(D.ing).find(k=>D.ing[k].n.toLowerCase()===String(name).trim().toLowerCase());
+ if(!id){box.innerHTML='<p class="mut">Ingrédient inconnu ou utilisé dans aucun craft vendable : choisis-le dans la liste.</p>';return}
+ const I=D.ing[id],n=v=>v==null?'–':NF.format(Math.round(v)),net=v=>v==null?null:v*(1-D.tax),lose=lvState().lose;
+ q.value=I.n;try{localStorage.setItem('ingSel',I.n)}catch(e){}
+ const flat=I.ask==null?I.u:I.u&&I.ask>I.u?(I.ask+I.u)/2:I.ask,fn=net(flat),only=document.getElementById('ingok').checked;
+ let pnj=false;
+ const rows=D.rec.filter(r=>r.x[id]).map(r=>{const [qx,other,e]=r.x[id],rt=ingRate(r.a),pn=net(r.sell)*r.q;if(e)pnj=true;
+   const v=other==null?null:((lose?rt.r:1)*pn-other)/qx;return{r,qx,other,e,rt,pn,v,d:v==null||fn==null?null:v-fn}})
+  .filter(o=>!only||!o.rt.lock).sort((a,b)=>(!!a.rt.lock-!!b.rt.lock)||((b.v??-Infinity)-(a.v??-Infinity)));
+ const best=rows.find(o=>!o.rt.lock&&o.v!=null);
+ box.innerHTML='<div class="card" style="margin:10px 0"><b>Vente directe de '+jEsc(I.n)+'</b><span class="mut">plus bas en vente '+n(I.ask)+' · habituel '+n(I.u)+' · '+I.l+' annonce(s) → <b>≈ '+n(fn)+' net / unité</b></span>'
+  +(best&&fn!=null?'<span>'+(best.v>fn?'✅ Le mieux : <b>'+jEsc(best.r.o)+'</b>, '+n(best.v)+' par unité (<span class="pos">+'+n(best.v-fn)+'</span> par rapport à la vente directe)'+(best.rt.u?' <span class="sub">· niveau non renseigné dans Mes métiers</span>':'')
+   :'❌ Aucun craft que tu peux faire ne rapporte plus que la vente directe.')+'</span>':'')+'</div>'
+  +'<div class="wrap"><table><thead><tr><th>Produit</th><th>Métier</th><th class="n">Réussite</th><th class="n">Utilise</th><th class="n">Autres ingrédients</th>'
+  +'<th class="n">Vente du produit</th><th class="n">Valeur d’1 unité</th><th class="n">vs vente directe</th><th class="n">Vendus/j (serveur)</th></tr></thead><tbody>'
+  +(rows.length?rows.map(o=>{const r=o.r,rt=o.rt,lk=rt.lock;
+   const met=r.a.map(([p,m])=>(PROF[p]||p)+' '+lvTxt(Math.max(1,m))).join(' ou ');
+   return '<tr'+(lk?' class="locked"':'')+'><td><span class="nm" title="Cliquer pour copier">'+jEsc(r.o)+'</span>'+(r.q>1?' <span class="sub">×'+r.q+'</span>':'')+'</td><td class="sub">'+met+'</td>'
+    +'<td class="n">'+(lk?'🔒':rt.u?'?':(rt.r*100).toFixed(1).replace('.',',')+' %')+'</td><td class="n">'+NF.format(o.qx)+'</td>'
+    +'<td class="n">'+n(o.other)+(o.e?' <span class="sub" title="Comprend un outil lié compté au prix PNJ estimé">*</span>':'')+'</td>'
+    +'<td class="n">'+n(r.sell)+'<div class="sub">'+n(o.pn)+' net · '+(r.l||0)+' ann.</div></td>'
+    +'<td class="n"><b>'+n(o.v)+'</b></td><td class="n '+(o.d==null?'':o.d>0?'pos':'neg')+'">'+(o.d==null?'–':(o.d>0?'+':'')+n(o.d))+'</td>'
+    +'<td class="n">'+(r.vj==null?'–':NF.format(r.vj))+'</td></tr>'}).join('')
+   :'<tr><td colspan="9" class="mut">Aucun craft '+(only?'que tu peux faire ':'')+'avec cet ingrédient.</td></tr>')
+  +'</tbody></table></div>'
+  +(pnj?'<p class="sub">* comprend un outil lié (Marteau, Durcisseur, Assouplissant…) compté au prix PNJ estimé du réglage <code>npc_reagent_price</code> : vérifie son vrai prix en jeu.</p>':'')}
+document.addEventListener('DOMContentLoaded',()=>ingRender());
