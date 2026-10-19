@@ -282,9 +282,14 @@ function jStats(lots){const per=+(document.getElementById('jper')||{}).value||0,
    +'<td class="n '+(b>0?'pos':'neg')+'">'+NF.format(b)+(o.sansCout?' *':'')+'</td><td class="n">'+(o.recu?Math.round(b/o.recu*100)+' %':'–')+'</td></tr>'}).join('')
   :'<tr><td colspan="8" class="mut">Rien sur cette période.</td></tr>'}
 function jLog(lots){const ev=[];lots.forEach(([l,s])=>s.ev.forEach(e=>e.t&&e.type!=='cout'&&ev.push([e,l,ev.length])));ev.sort((a,b)=>b[0].t.localeCompare(a[0].t)||b[2]-a[2]);
- const T={poste:'📦 posté',reliste:'🔁 relisté',vendu:'✅ vendu',retire:'↩ retiré'};
+ const T={poste:'📦 posté',reliste:'🔁 relisté',vendu:'✅ vendu',retire:'↩ retiré',src:'🏷 origine'};
  document.getElementById('jlog').innerHTML=ev.slice(0,40).map(([e,l])=>'<tr><td>'+e.t.slice(8,10)+'/'+e.t.slice(5,7)+' '+e.t.slice(11)+'</td><td>'+T[e.type]+'</td><td>'+jEsc(l.objet)+'</td>'
-  +'<td class="n">'+(e.qte||'')+'</td><td class="n">'+(e.prix?NF.format(e.prix):'')+'</td><td class="n '+(e.type==='vendu'?'pos':'neg')+'">'+(e.type==='vendu'?'+'+NF.format(e.recu||0):e.frais?'−'+NF.format(e.frais):'')+'</td></tr>').join('')}
+  +'<td class="n">'+(e.qte||'')+'</td><td class="n">'+(e.prix?NF.format(e.prix):'')+'</td><td class="n '+(e.type==='vendu'?'pos':'neg')+'">'+(e.type==='vendu'?'+'+NF.format(e.recu||0):e.frais?'−'+NF.format(e.frais):'')+'</td>'
+  +'<td><button class="mapbtn" title="Annuler ce mouvement (erreur de clic)" onclick="jUndoEv(\''+l.id+'\',\''+e.id+'\')">↶</button></td></tr>').join('')}
+// annule un mouvement precis de « Derniers mouvements » ; annuler la mise en vente supprime l'annonce du journal
+function jUndoEv(id,eid){const l=jLot(id),e=l&&l.ev.find(x=>x.id===eid);if(!e)return;
+ if(e.type==='poste'){if(confirm('Supprimer l’annonce « '+l.objet+' » du journal ?')){l.del=1;jSync('suppression '+l.objet)}return}
+ if(!confirm('Annuler ce mouvement de « '+l.objet+' » ?'))return;e.x=1;jSync('annulation '+l.objet)}
 // changement d'origine d'une annonce : le cout propose suit (vide si le site n'a pas d'estimation)
 function jSrcCost(id){const l=jLot(id),c=jCostFor(document.getElementById('jas').value,l.objet);document.getElementById('jac').value=c==null?'':c}
 // formulaire : l'objet propose son origine (craft de ma recolte ou non), l'origine propose le cout

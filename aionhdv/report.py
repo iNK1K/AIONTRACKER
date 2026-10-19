@@ -978,7 +978,7 @@ def journal_html(ctx, cfg, my):
         f'{_th("Bénéfice", "Reçu − coût − taxe perdue (* : une partie sans coût connu)", True)}'
         '</tr></thead><tbody id="jitems"></tbody></table></div>'
         '<h3>Derniers mouvements</h3><div class="wrap"><table><thead><tr>'
-        f'{_th("Date")}{_th("Action")}{_th("Objet")}{_th("Qté", None, True)}{_th("Prix /u", None, True)}{_th("Kinah", None, True)}'
+        f'{_th("Date")}{_th("Action")}{_th("Objet")}{_th("Qté", None, True)}{_th("Prix /u", None, True)}{_th("Kinah", None, True)}{_th("")}'
         '</tr></thead><tbody id="jlog"></tbody></table></div>'
         '<details class="card" style="margin-top:14px"><summary><b>🔗 Enregistrement sur GitHub (à faire une fois par appareil)</b></summary>'
         '<span class="mut">Pour que le journal soit gardé dans ton dépôt (et serve aux alertes Discord), le site a besoin d’un jeton '
