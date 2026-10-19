@@ -473,14 +473,16 @@ class Market:
                     listings=self.listings.get(item_id, 0), stale=stale)
 
     # ------------------------------------------------------------ cout d'une recette
-    def recipe_cost(self, recipe, mode, depth=0, skip=(), trans="auto"):
+    def recipe_cost(self, recipe, mode, depth=0, skip=(), trans="auto", price="real"):
         """mode 'harvest' : ressources de recolte gratuites ; mode 'buy' : tout s'achete a l'HDV.
         skip : ingredients deja en main (ex. l'objet eclatant de l'etape precedente d'une chaine), non comptes.
         trans : 'auto' = le moins cher entre la ressource et l'Od a transmuter ; 'off' = achat direct seulement ;
-        'force' = l'Od transmute des qu'il est achetable (pour comparer les deux facons d'acheter)."""
+        'force' = l'Od transmute des qu'il est achetable (pour comparer les deux facons d'acheter).
+        price : 'real' = prix d'achat realiste (rapproche du prix habituel) ; 'ask' = prix le plus bas releve."""
         npc = self.cfg["npc_reagent_price"]
         cost_r = cost_p = 0.0
         lines, gather, buys, thin_list = [], {}, {}, []
+        parts = []          # detail : n nom, q quantite, p prix unitaire, k origine (hdv, od, pnj, craft, recolte, introuvable)
         ok = True
         for slot, opts in sorted(self.ingredients.get(recipe["id"], {}).items()):
             if any(o["item_id"] in skip for o in opts):
@@ -490,6 +492,7 @@ class Market:
                 base = self.items[gopt["item_id"]]["base_name"]
                 gather[base] = gather.get(base, 0) + gopt["qty"]
                 lines.append(f"{base} x{gopt['qty']:g} (récolte)")
+                parts.append(dict(n=base, q=gopt["qty"], p=0, k="recolte"))
                 continue
             best = None
             for thin_ok in (False, True):          # d'abord les ingredients achetables en volume (>= 2 annonces)
@@ -502,7 +505,7 @@ class Market:
                     for src, via in cands:
                         bp = self.buy_price(src) if src else None
                         if bp and (thin_ok or bp["listings"] >= 2):
-                            c = bp["real"] * o["qty"]
+                            c = bp[price] * o["qty"]
                             if best is None or c < best[0]:
                                 best = (c, bp["pess"] * o["qty"], o, bp, via)
                 if best:
@@ -515,14 +518,17 @@ class Market:
                 thin = best[3]["listings"] <= 1
                 if thin:
                     thin_list.append(name)
-                lines.append(f"{name} x{best[2]['qty']:g} @{best[3]['real']:,.0f}".replace(",", " ")
+                lines.append(f"{name} x{best[2]['qty']:g} @{best[3][price]:,.0f}".replace(",", " ")
                              + (f" → transmuté en {best[4]}" if best[4] else "") + (" (1 annonce)" if thin else ""))
+                parts.append(dict(n=name, q=best[2]["qty"], p=best[3][price], k="od" if best[4] else "hdv", via=best[4],
+                                  l=best[3]["listings"]))
                 continue
             o = opts[0]
             it = self.items.get(o["item_id"], {})
             if it.get("is_gather") and mode == "buy":
                 ok = False
                 lines.append(f"{it.get('base_name')} x{o['qty']:g} INTROUVABLE")
+                parts.append(dict(n=it.get("base_name"), q=o["qty"], p=None, k="introuvable"))
                 continue
             sub = self.recipes_by_item.get(self.by_base.get(it.get("base_name")) or o["item_id"]) or \
                 self.recipes_by_item.get(o["item_id"])
@@ -533,7 +539,7 @@ class Market:
                         sub = rs
                         break
             if depth == 0 and sub:
-                sc = self.recipe_cost(sub[0], mode, depth + 1, trans=trans)
+                sc = self.recipe_cost(sub[0], mode, depth + 1, trans=trans, price=price)
                 per = o["qty"] / (sub[0]["output_qty"] or 1)
                 cost_r += sc["cost_r"] * per
                 cost_p += sc["cost_p"] * per
@@ -544,11 +550,14 @@ class Market:
                 thin_list += sc["thin"]
                 ok = ok and sc["ok"]
                 lines.append(f"[{it.get('base_name')} x{o['qty']:g} à fabriquer : {', '.join(sc['lines'])}]")
+                parts.append(dict(n=it.get("base_name"), q=o["qty"], p=sc["cost_r"] / (sub[0]["output_qty"] or 1), k="craft",
+                                  sub=sc["parts"]))
             else:
                 cost_r += npc * o["qty"]
                 cost_p += npc * o["qty"]
                 lines.append(f"{it.get('base_name')} x{o['qty']:g} PNJ ~{npc}")
-        return dict(cost_r=cost_r, cost_p=cost_p, lines=lines, gather=gather, buys=buys, ok=ok, thin=thin_list)
+                parts.append(dict(n=it.get("base_name"), q=o["qty"], p=npc, k="pnj"))
+        return dict(cost_r=cost_r, cost_p=cost_p, lines=lines, gather=gather, buys=buys, ok=ok, thin=thin_list, parts=parts)
 
     # ------------------------------------------------------------ evaluation
     def evaluate(self, recipe, mode, trans="auto"):

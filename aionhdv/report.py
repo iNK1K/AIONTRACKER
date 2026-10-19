@@ -997,37 +997,43 @@ def journal_html(ctx, cfg, my):
 
 
 def supply_tab(ctx, cfg, my):
-    """📦 Ravitaillement : capture de la fenetre des ravitaillements (cartes d'objets a livrer) -> pour chaque objet,
-    cout du craft, prix a l'HDV, annonces au dernier releve, revente ; lecture et calculs dans le navigateur."""
-    m, fees, items = my["market"], cfg["fees"], []
+    """📦 Ravitaillement : capture de la fenetre des ravitaillements (objets demandes chaque jour) -> pour chaque objet,
+    le prix de chaque ingredient au dernier releve et le total du craft, les annonces en vente, la mediane sur 3 jours
+    et un prix de vente cible (marge sur le cout des ingredients, taxe comprise). Lecture et affichage dans le navigateur."""
+    m, fees, margin, items = my["market"], cfg["fees"], cfg.get("supply_margin", 0.20), []
     for iid, recs in m.recipes_by_item.items():
         it = m.items.get(iid) or {}
         if it.get("category") != "Equip" or it.get("bound") or not it.get("icon_file") \
                 or not (DATA_DIR / it["icon_file"]).exists():
             continue
-        best = None                                          # recette la moins chere (ingredients achetes a l'HDV)
+        best = None                                          # recette la moins chere, ingredients au prix le plus bas releve
         for r in recs:
-            c = m.recipe_cost(r, "buy")
-            cu = c["cost_r"] / (r["output_qty"] or 1) if c["ok"] else None
+            c = m.recipe_cost(r, "buy", price="ask")
+            q = r["output_qty"] or 1
+            cu = c["cost_r"] / q if c["ok"] else None
             if best is None or (cu is not None and (best[0] is None or cu < best[0])):
-                best = (cu, c)
-        sp = m.sell_price(iid)
-        items.append(dict(i=iid, n=it["name"], s=f"../data/{it['icon_file']}", c=round(best[0]) if best[0] is not None else None,
-                          ing=best[1]["lines"], a=m.price.get(iid), l=m.listings.get(iid, 0),
-                          v=round(sp["real"] * (1 - fees)) if sp else None, vs=sp and sp["stale"] and paris(sp["stale"], "%d/%m"),
-                          alts=sorted({(r["profession"], r["mastery"] or 0, r.get("rate_curve")) for r in recs})))
+                best = (cu, c, q, r)
+        st = m.price_stats(iid, 3)
+        rnd = lambda v: round(v) if v is not None else None
+        items.append(dict(i=iid, n=it["name"], s=f"../data/{it['icon_file']}", c=rnd(best[0]), q=best[2],
+                          parts=[dict(p, p=rnd(p["p"]), sub=[dict(x, p=rnd(x["p"])) for x in p.get("sub") or []])
+                                 for p in best[1]["parts"]],
+                          l=m.listings.get(iid, 0), med=rnd(st and st["median"]),
+                          cible=rnd(best[0] * (1 + margin) / (1 - fees)) if best[0] else None,
+                          prof=best[3]["profession"], m=best[3]["mastery"] or 0))
     return ("<h2>Ravitaillement</h2><p class='lead'>Colle une capture de ta fenêtre de ravitaillement (<b>Ctrl + V</b> sur cet "
-            "onglet) : pour chaque objet demandé, le site donne le coût du craft (ingrédients achetés à l’HDV, ou Od transmuté "
-            "si moins cher), le prix à l’HDV et le nombre d’annonces au dernier relevé "
-            f"({esc(paris(m.as_of, '%d/%m %H:%M')) if m.as_of else '?'}), et ce qu’il rapporterait à la revente (après taxe). "
-            "Pour chaque case : la façon la moins chère de livrer le nombre demandé.</p>"
+            "onglet) : pour chaque objet demandé, le prix de chaque ingrédient au dernier relevé "
+            f"({esc(paris(m.as_of, '%d/%m %H:%M')) if m.as_of else '?'}, prix le plus bas en vente) et le total du craft, "
+            "le nombre d’annonces de l’objet, son prix médian sur 3 jours, et un <b>prix de vente cible</b> = total du craft "
+            f"+ {margin:.0%} de marge, taxe de {fees:.0%} comprise.</p>"
             '<div class="card" ondragover="event.preventDefault()" ondrop="event.preventDefault();supplyScan(event.dataTransfer.files[0])">'
             '<b>📷 Capture de la fenêtre de ravitaillement</b><span class="mut">Ctrl + V sur cet onglet, glisse le fichier, ou '
             '<label style="color:var(--acc);cursor:pointer;text-decoration:underline">choisis un fichier<input type="file" '
             'accept="image/*" hidden onchange="supplyScan(this.files[0])"></label>. La dernière lecture est gardée dans ce '
-            'navigateur et recalculée avec les prix du jour.</span><span id="smsg" class="mut"></span></div>'
+            'navigateur et recalculée avec les prix de chaque passage.</span><span id="smsg" class="mut"></span></div>'
             '<div id="sbox"></div>'
-            f'<script>window.SUPPLY={json.dumps(items, ensure_ascii=False, separators=(",", ":"))};</script>')
+            f'<script>window.SUPPLY={json.dumps(items, ensure_ascii=False, separators=(",", ":"))};'
+            f'window.SUPPLY_CFG={json.dumps(dict(margin=margin, tax=fees))};</script>')
 
 
 def gains_tab(ctx, cfg, my):
