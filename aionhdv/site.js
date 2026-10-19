@@ -166,9 +166,14 @@ function jForget(){try{localStorage.removeItem('ghtoken')}catch(e){}document.get
 const lost=(p,q)=>Math.floor(JC().tax*p*q),net=(p,q)=>Math.floor(p*q*(1-JC().tax));
 function jLot(id){return J.lots.find(l=>l.id===id)}
 // origine d'une annonce : recolte -> craft (cout 0), achat -> craft (cout = ingredients achetes), flip (cout = prix d'achat)
-const JSRC={recolte:'🌲 Récolte → craft',achat:'🛒 Achat → craft',flip:'🔁 Flip'};
-const jSrcDefault=n=>(window.HARVEST_ITEMS||[]).includes(n)?'recolte':'achat';
-const jCostFor=(src,n)=>src==='recolte'?0:src==='achat'?(window.COSTS||{})[n]:undefined;
+const JSRC={recolte:'🌲 Récolte → craft',achat:'🛒 Achat → craft',ravit:'📦 Ravitaillement',flip:'🔁 Flip'};
+// objets de ma derniere capture de ravitaillement (onglet Ravitaillement) : origine proposee « Ravitaillement »
+function jSupplyNames(){const d=supplyLoad(),by={};if(!d)return [];(window.SUPPLY||[]).forEach(x=>(by[x.s]=by[x.s]||[]).push(x));
+ return d.cards.flatMap(c=>c.items.flatMap(s=>(by[s]||[]).map(x=>x.n)))}
+const jSrcDefault=n=>jSupplyNames().includes(n)?'ravit':(window.HARVEST_ITEMS||[]).includes(n)?'recolte':'achat';
+// cout propose : ravitaillement = total du craft de l'onglet Ravitaillement (ingredients au plus bas), sinon comme l'achat -> craft
+const jCostFor=(src,n)=>{if(src==='recolte')return 0;if(src==='flip')return undefined;
+ const sp=src==='ravit'&&(window.SUPPLY||[]).find(x=>x.n===n&&x.c!=null);return sp?sp.c:(window.COSTS||{})[n]}
 const jSrcOpts=v=>Object.entries(JSRC).map(([k,t])=>'<option value="'+k+'"'+(k===v?' selected':'')+'>'+t+'</option>').join('');
 function jPost(){const g=id=>document.getElementById(id),objet=g('jo').value.trim(),q=+g('jq').value,p=+g('jp').value,n=Math.max(1,+g('jn').value||1);
  const c=g('jc').value===''?null:+g('jc').value,src=g('js').value;
@@ -241,7 +246,7 @@ function jRender(){if(!J)return;const box=document.getElementById('jopen');if(!b
    :k==='src'?'Origine <select id="jas" class="search" style="width:auto;display:inline-block" onchange="jSrcCost(\''+l.id+'\')">'+jSrcOpts(s.src||jSrcDefault(l.objet))+'</select> '
     +'coût '+inp('c',(()=>{const src=s.src||jSrcDefault(l.objet),c=jCostFor(src,l.objet);   // 0 hors recolte = cout oublie
       return (s.cout==null||(s.cout===0&&src!=='recolte'))&&c!=null?c:(s.cout??'')})(),110)+' /u '+go
-    +' <span class="sub">le coût suit l’origine choisie : 0 pour ta récolte, estimation des ingrédients achetés pour l’achat → craft, ton prix d’achat pour un flip</span>'
+    +' <span class="sub">le coût suit l’origine choisie : 0 pour ta récolte, ingrédients achetés pour l’achat → craft et le ravitaillement, ton prix d’achat pour un flip</span>'
    :'Coût de revient '+inp('c',s.cout??'',110)+' /u '+go;
   return row+'<tr><td colspan="9" style="background:var(--card2)">'+f2+'</td></tr>'}).join('')
   :'<tr><td colspan="9" class="mut">Aucune annonce en cours : ajoute-les ci-dessous ou colle une capture de ta fenêtre des ventes.</td></tr>';

@@ -945,13 +945,14 @@ def journal_html(ctx, cfg, my):
         '<div class="card" style="margin-top:10px"><b>📦 J’ai posté</b><div class="toolbar" style="margin:0;flex-wrap:wrap;gap:6px">'
         + '<select id="js" class="search" style="width:auto;display:inline-block" onchange="jCostFill()">'
         '<option value="recolte">🌲 Récolte → craft</option><option value="achat">🛒 Achat → craft</option>'
+        '<option value="ravit">📦 Ravitaillement</option>'
         '<option value="flip">🔁 Flip</option></select>'
         + inp("jo", "Objet (nom exact)", 260, "text", 'list="jnames" onchange="jCostFill(1)"') + f'<datalist id="jnames">{names}</datalist>'
         + inp("jq", "Quantité", 90) + inp("jp", "Prix /u", 110) + inp("jc", "Coût /u (facultatif)", 150)
         + inp("jn", "Nb d’annonces", 120, extra='value="1" min="1"')
         + '<button class="mapbtn" onclick="jPost()">Ajouter</button></div>'
         '<span class="sub">Origine : proposée selon l’objet (craft de ta récolte ou non), à changer si besoin. Coût /u proposé : '
-        '0 pour ta récolte, l’estimation du site (ingrédients achetés) pour l’achat → craft, ton prix d’achat à saisir pour '
+        '0 pour ta récolte, l’estimation du site (ingrédients achetés) pour l’achat → craft, le total du craft de l’onglet Ravitaillement pour le ravitaillement, ton prix d’achat à saisir pour '
         'un flip. Nb d’annonces : pour poster plusieurs lots identiques d’un coup (ex. 5 annonces de 30).</span></div>'
         '<div class="card" style="margin-top:10px" ondragover="event.preventDefault()" '
         'ondrop="event.preventDefault();jScan(event.dataTransfer.files[0])"><b>📷 Ou colle une capture (Ctrl + V sur cet onglet)</b>'
@@ -965,6 +966,7 @@ def journal_html(ctx, cfg, my):
         '<option value="30">30 derniers jours</option><option value="0">Depuis le début</option></select>'
         '<select id="jsrc" class="search" style="width:auto" onchange="jRender()"><option value="">Toutes les activités</option>'
         '<option value="recolte">🌲 Récolte → craft</option><option value="achat">🛒 Achat → craft</option>'
+        '<option value="ravit">📦 Ravitaillement</option>'
         '<option value="flip">🔁 Flip</option></select></div>'
         '<div class="wrap" style="margin-bottom:10px"><table><thead><tr>'
         f'{_th("Activité")}{_th("Ventes", None, True)}{_th("Unités", None, True)}{_th("Reçu", "Après taxe", True)}'

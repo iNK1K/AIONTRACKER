@@ -4,6 +4,7 @@ Une tâche par ligne. Claude les traite dans l'ordre et coche `[x]` quand c'est 
 
 
 ## Fait
+- [x] Mes ventes : origine « 📦 Ravitaillement » (coût = total du craft de l’onglet Ravitaillement, bilan et filtre par activité)
 - [x] Onglet 📦 Ravitaillement : capture → objets reconnus ; prix de chaque ingrédient et total du craft, annonces, médiane 3 j, prix de vente cible (+20 %, taxe comprise)
 - [x] Discord (salon partagé) : plus d’alertes sur mes annonces ; rapport horaire léger des opportunités sûres (seulement si nouvelles) ; résumé quotidien détaillé + annonces NCSOFT pas encore postées
 - [x] Journal : origine de chaque annonce (récolte → craft, achat → craft, flip), coût proposé selon l’origine, bilan et filtre par activité

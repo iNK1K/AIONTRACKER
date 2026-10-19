@@ -520,3 +520,6 @@ Pour chaque objet, seulement :
 
 Aucun calcul de livraison ni de profit. La dernière capture est gardée dans le navigateur et recalculée avec les prix de chaque passage. Limite : version normale et version éclatante ont la même icône ; c'est la version normale (fabricable) qui est affichée.
 
+
+## Origine « 📦 Ravitaillement » dans Mes ventes — 19/10/2026
+Quatrième origine d'annonce, calculée comme l'achat → craft (reçu − coût − taxe perdue). Coût proposé : le **total du craft de l'onglet Ravitaillement** (ingrédients au prix le plus bas relevé), sinon l'estimation de l'achat → craft. Un objet présent dans ta dernière capture de ravitaillement est proposé d'office en « Ravitaillement ». Le bilan par activité et le filtre l'incluent.
