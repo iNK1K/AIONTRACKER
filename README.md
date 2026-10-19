@@ -18,7 +18,7 @@ Onglet **Mes ventes** : journal des annonces (`journal.json`) — un clic quand 
 
 Onglet **🧪 Par ingrédient** : « Que faire de… ? » — pour un ingrédient choisi (ex. Essence de Balaur), sa vente directe face à chaque craft qui l’utilise : valeur d’une unité dans le craft (réussite selon mes niveaux, 🔒 si niveau trop bas), écart avec la vente directe, ventes du produit.
 
-Onglet **Ravitaillement** : coller une capture de la fenêtre de ravitaillement → objets reconnus ; un tableau des objets demandés du jour trié par gain à les crafter pour les revendre (prix de vente modifiable, prérempli avec la moins chère des annonces − 1 ; échecs et combo comptés ; ingrédient éclatant crafté par sa chaîne ou acheté), détail repliable, bouton 📦 Poster vers Mes ventes.
+Onglet **Ravitaillement** : coller une capture de la fenêtre de ravitaillement → objets reconnus ; un tableau des objets demandés du jour trié par gain à les crafter pour les revendre ; la lecture distingue l’objet normal de sa version éclatante par la couleur de qualité du fond de la case (même icône) : l’objet normal s’obtient sans combo (combo montré à part), l’éclatant seulement par combo de l’objet de base (coût = crafts pour un combo − objets normaux revendus) (prix de vente modifiable, prérempli avec la moins chère des annonces − 1 ; échecs et combo comptés ; ingrédient éclatant crafté par sa chaîne ou acheté), détail repliable, bouton 📦 Poster vers Mes ventes.
 
 Tests des calculs : `python -m unittest discover tests`.
 

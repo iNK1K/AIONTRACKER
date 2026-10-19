@@ -585,6 +585,21 @@ window.reserveToList = async function (img, progress) {
     return e.map(z => (z - m) / sd);
   }
   const corr = (a, b) => { let t = 0; for (let i = 0; i < a.length; i++) t += a[i] * b[i]; return t / a.length; };
+  // teinte du fond de la case (coins, hors objet) : couleur de la qualite, seule difference entre un objet et sa version
+  // eclatante (meme icone). Ecart de chaque canal a la moyenne : gris = commun ; vert, bleu, orange... meme assombri.
+  function tint(img, x, y, w, h) {
+    const c = canvas(SN, SN), g = c.getContext('2d', { willReadFrequently: true });
+    g.drawImage(img, x, y, w, h, 0, 0, SN, SN);
+    const d = g.getImageData(0, 0, SN, SN).data, t = [0, 0, 0];
+    let n = 0;
+    for (const [cx, cy] of [[2, 2], [SN - 5, 2], [2, SN - 5], [SN - 5, SN - 5]])
+      for (let yy = cy; yy < cy + 3; yy++) for (let xx = cx; xx < cx + 3; xx++) {
+        const i = (yy * SN + xx) * 4; t[0] += d[i]; t[1] += d[i + 1]; t[2] += d[i + 2]; n++;
+      }
+    const m = (t[0] + t[1] + t[2]) / 3 / n;
+    return t.map(v => v / n - m);
+  }
+  const norm = v => Math.hypot(v[0], v[1], v[2]);
   let supplyRefs = null;
   async function supplyIcons(progress) {
     if (supplyRefs) return supplyRefs;
@@ -595,7 +610,7 @@ window.reserveToList = async function (img, progress) {
         if (seen[r.s]) return ok(null);
         seen[r.s] = 1;
         const i = new Image();
-        i.onload = () => ok({ s: r.s, v: edges(i, 0, 0, i.naturalWidth, i.naturalHeight) });
+        i.onload = () => ok({ s: r.s, v: edges(i, 0, 0, i.naturalWidth, i.naturalHeight), t: tint(i, 0, 0, i.naturalWidth, i.naturalHeight) });
         i.onerror = () => ok(null);
         i.src = r.s;
       })));
@@ -662,7 +677,16 @@ window.reserveToList = async function (img, progress) {
     for (const b of boxes) {
       let best = { c: -1 };
       const v = edges(img, b.x, b.y, b.w, b.h);
-      for (const r of refs) { const c = corr(v, r.v); if (c > best.c) best = { c, s: r.s }; }
+      const sc = refs.map(r => ({ r, c: corr(v, r.v) }));
+      for (const x of sc) if (x.c > best.c) best = { c: x.c, s: x.r.s };
+      // meme forme (objet normal / version eclatante) : la teinte du fond de la case departage
+      const same = sc.filter(x => x.c >= best.c - 0.02);
+      if (same.length > 1) {
+        const t = tint(img, b.x, b.y, b.w, b.h), nt = norm(t);
+        const score = x => nt < 1.5 ? norm(x.r.t)
+          : -(norm(x.r.t) < 1.5 ? 0 : (t[0] * x.r.t[0] + t[1] * x.r.t[1] + t[2] * x.r.t[2]) / (nt * norm(x.r.t)));
+        best.s = same.sort((p, q) => score(p) - score(q))[0].r.s;
+      }
       if (best.c >= 0.55) items.push({ ...b, s: best.s, score: best.c });
     }
     // cartes : cases sur la meme rangee, separees de moins d'une largeur de case

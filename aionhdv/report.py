@@ -1109,33 +1109,53 @@ def supply_tab(ctx, cfg, my):
         c = m.recipe_cost(r, "buy", skip={x["i"] for x in need})
         return rnd(c["cost_r"]) if c["ok"] else None
 
-    for iid, recs in m.recipes_by_item.items():
-        it = m.items.get(iid) or {}
-        if it.get("category") != "Equip" or it.get("bound") or not it.get("icon_file") \
-                or not (DATA_DIR / it["icon_file"]).exists():
-            continue
-        best = None                                          # recette la moins chere, ingredients au prix d'achat realiste
+    def craft_info(iid, recs):
+        """Recette la moins chere d'un objet (ingredients au prix d'achat realiste) : de quoi calculer son craft."""
+        best = None
         for r in recs:
             c = m.recipe_cost(r, "buy")
             q = r["output_qty"] or 1
             cu = c["cost_r"] / q if c["ok"] else None
             if best is None or (cu is not None and (best[0] is None or cu < best[0])):
                 best = (cu, c, q, r)
-        st, sp = m.price_stats(iid, 3), m.sell_price(iid)
         r = best[3]
-        need = needs(r, {iid})
-        items.append(dict(i=iid, n=it["name"], s=f"../data/{it['icon_file']}", c=rnd(best[0]), q=best[2],
-                          cv=r.get("rate_curve"), combo=combo(r), sell=value(iid), need=need,
-                          rest=rest_cost(r, need) if need else None,
-                          parts=[dict(p, p=rnd(p["p"]), sub=[dict(x, p=rnd(x["p"])) for x in p.get("sub") or []])
-                                 for p in best[1]["parts"]],
-                          l=m.listings.get(iid, 0), med=rnd(st and st["median"]), ask=rnd(m.price.get(iid)), real=rnd(sp and sp["real"]),
-                          prof=best[3]["profession"], m=best[3]["mastery"] or 0))
+        need = needs(r, {iid, r["combo_item_id"]})
+        return dict(c=rnd(best[0]), q=best[2], cv=r.get("rate_curve"), combo=combo(r), need=need,
+                    rest=rest_cost(r, need) if need else None,
+                    parts=[dict(p, p=rnd(p["p"]), sub=[dict(x, p=rnd(x["p"])) for x in p.get("sub") or []])
+                           for p in best[1]["parts"]],
+                    prof=r["profession"], m=r["mastery"] or 0)
+
+    def sale(iid, it):
+        st, sp = m.price_stats(iid, 3), m.sell_price(iid)
+        return dict(i=iid, n=it["name"], s=f"../data/{it['icon_file']}", sell=value(iid), l=m.listings.get(iid, 0),
+                    med=rnd(st and st["median"]), ask=rnd(m.price.get(iid)), real=rnd(sp and sp["real"]))
+
+    def shown(it):
+        return it.get("category") == "Equip" and not it.get("bound") and it.get("icon_file") \
+            and (DATA_DIR / it["icon_file"]).exists()
+
+    # objet normal : obtenu par sa recette quand le craft ne fait pas combo
+    for iid, recs in m.recipes_by_item.items():
+        it = m.items.get(iid) or {}
+        if shown(it):
+            items.append(dict(sale(iid, it), **craft_info(iid, recs)))
+    # objet eclatant : obtenu seulement par le combo de la recette de l'objet de base (via) ; meme icone que l'objet
+    # normal sur un fond d'une autre qualite, ce qui permet a la lecture de la capture de les departager
+    for cid, r in combo_of.items():
+        it = m.items.get(cid) or {}
+        if shown(it):
+            bi = r["item_id"]
+            items.append(dict(sale(cid, it), via=dict(craft_info(bi, [r]), i=bi, n=m.items[bi]["name"], plain=value(bi)),
+                              prof=r["profession"], m=r["mastery"] or 0))
     return ("<h2>Ravitaillement</h2><p class='lead'>Les objets demandés du jour sont recherchés à l’HDV : colle une capture "
             "de ta fenêtre de ravitaillement (<b>Ctrl + V</b> sur cet onglet) pour voir lesquels rapportent à crafter puis "
             f"revendre. Gain par craft = vente après taxe ({fees:.0%}) − coût des ingrédients (prix d’achat réaliste, dernier relevé "
-            f"{esc(paris(m.as_of, '%d/%m %H:%M')) if m.as_of else '?'}), échecs compris selon tes niveaux (🛠️ Mes métiers) "
-            "et combo compté. Un ingrédient éclatant est crafté par sa chaîne <b>(A)</b> ou acheté <b>(B)</b>, au moins cher.</p>"
+            f"{esc(paris(m.as_of, '%d/%m %H:%M')) if m.as_of else '?'}), échecs compris selon tes niveaux (🛠️ Mes métiers). "
+            "La capture distingue l’objet normal de sa version <b>éclatante</b> (même icône, fond de "
+            "qualité différent) : l’objet normal s’obtient quand le craft ne fait pas combo (le combo est montré à part, c’est "
+            "un pari) ; l’éclatant seulement par combo, d’où plusieurs crafts par objet, objets normaux revendus. Un "
+            "ingrédient éclatant est crafté par sa chaîne <b>(A)</b> ou acheté <b>(B)</b>, au moins cher.</p>"
             '<div class="card" ondragover="event.preventDefault()" ondrop="event.preventDefault();supplyScan(event.dataTransfer.files[0])">'
             '<b>📷 Capture de la fenêtre de ravitaillement</b><span class="mut">Ctrl + V sur cet onglet, glisse le fichier, ou '
             '<label style="color:var(--acc);cursor:pointer;text-decoration:underline">choisis un fichier<input type="file" '
