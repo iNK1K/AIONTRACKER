@@ -1067,6 +1067,14 @@ def supply_tab(ctx, cfg, my):
             if r["combo_item_id"] and not r["unresolved"]:
                 combo_of.setdefault(r["combo_item_id"], r)
 
+    def meds(iid):
+        """Medianes 3 j et 7 j du prix plancher : de quoi signaler un prix trop haut (site.js, sHigh)."""
+        return [rnd(st and st["median"]) for st in (m.price_stats(iid, 3), m.price_stats(iid, 7))]
+
+    def part(p):
+        """Ligne de detail d'une recette, avec les medianes des ingredients achetes a l'HDV."""
+        return dict(p, p=rnd(p["p"]), md=meds(p["i"]) if p.get("i") else None, sub=[part(x) for x in p.get("sub") or []])
+
     def value(iid):
         """Prix de revente d'un objet : mediane 3 j du prix plancher, sinon prix habituel (avant taxe)."""
         st = m.price_stats(iid, 3)
@@ -1081,7 +1089,7 @@ def supply_tab(ctx, cfg, my):
             return None
         sp = m.sell_price(cid)
         return dict(c=combo_cfg if combo_cfg is not None else (r["combo_prob_raw"] or 0) / 10000,
-                    n=m.items[cid]["name"], v=rnd(sp["pess"]) if sp else value(cid))
+                    n=m.items[cid]["name"], v=rnd(sp["pess"]) if sp else value(cid), md=meds(cid))
 
     def plain(r):
         """Revente de l'objet de base d'une recette a combo, plafonnee a la valeur prudente de sa version eclatante :
@@ -1097,7 +1105,7 @@ def supply_tab(ctx, cfg, my):
             if o and o["item_id"] not in seen and len(seen) < 6:
                 bp = m.buy_price(o["item_id"])
                 out.append(dict(i=o["item_id"], n=m.items[o["item_id"]]["name"], q=o["qty"],
-                                buy=rnd(bp and bp["real"]), med=value(o["item_id"]), l=bp["listings"] if bp else 0,
+                                buy=rnd(bp and bp["real"]), med=value(o["item_id"]), md=meds(o["item_id"]), l=bp["listings"] if bp else 0,
                                 chain=step(combo_of[o["item_id"]], seen | {o["item_id"]})))
         return out
 
@@ -1107,7 +1115,7 @@ def supply_tab(ctx, cfg, my):
         c = m.recipe_cost(r, "buy", skip={x["i"] for x in sub})
         return dict(i=r["item_id"], n=m.items[r["item_id"]]["name"], prof=r["profession"], m=r["mastery"] or 0, cv=r.get("rate_curve"),
                     c=combo(r)["c"], k=rnd(c["cost_r"]) if c["ok"] else None, plain=plain(r),
-                    parts=[dict(p, p=rnd(p["p"]), sub=[dict(x, p=rnd(x["p"])) for x in p.get("sub") or []]) for p in c["parts"]],
+                    pmd=meds(r["item_id"]), parts=[part(p) for p in c["parts"]],
                     need=sub)
 
     def rest_cost(r, need):
@@ -1128,14 +1136,13 @@ def supply_tab(ctx, cfg, my):
         need = needs(r, {iid, r["combo_item_id"]})
         return dict(c=rnd(best[0]), q=best[2], cv=r.get("rate_curve"), combo=combo(r), need=need,
                     rest=rest_cost(r, need) if need else None,
-                    parts=[dict(p, p=rnd(p["p"]), sub=[dict(x, p=rnd(x["p"])) for x in p.get("sub") or []])
-                           for p in best[1]["parts"]],
+                    parts=[part(p) for p in best[1]["parts"]],
                     prof=r["profession"], m=r["mastery"] or 0)
 
     def sale(iid, it):
         st, sp = m.price_stats(iid, 3), m.sell_price(iid)
         return dict(i=iid, n=it["name"], s=f"../data/{it['icon_file']}", sell=value(iid), l=m.listings.get(iid, 0),
-                    med=rnd(st and st["median"]), ask=rnd(m.price.get(iid)), real=rnd(sp and sp["real"]))
+                    med=rnd(st and st["median"]), ask=rnd(m.price.get(iid)), real=rnd(sp and sp["real"]), md=meds(iid))
 
     def shown(it):
         return it.get("category") == "Equip" and not it.get("bound") and it.get("icon_file") \
@@ -1152,7 +1159,7 @@ def supply_tab(ctx, cfg, my):
         it = m.items.get(cid) or {}
         if shown(it):
             bi = r["item_id"]
-            items.append(dict(sale(cid, it), via=dict(craft_info(bi, [r]), i=bi, n=m.items[bi]["name"], plain=plain(r)),
+            items.append(dict(sale(cid, it), via=dict(craft_info(bi, [r]), i=bi, n=m.items[bi]["name"], plain=plain(r), pmd=meds(bi)),
                               prof=r["profession"], m=r["mastery"] or 0))
     return ("<h2>Ravitaillement</h2><p class='lead'>Les objets demandés du jour sont recherchés à l’HDV : colle une capture "
             "de ta fenêtre de ravitaillement (<b>Ctrl + V</b> sur cet onglet) pour voir lesquels rapportent à crafter puis "
@@ -1169,7 +1176,7 @@ def supply_tab(ctx, cfg, my):
             'navigateur et recalculée avec les prix de chaque passage.</span><span id="smsg" class="mut"></span></div>'
             '<div id="sbox"></div>'
             f'<script>window.SUPPLY={json.dumps(items, ensure_ascii=False, separators=(",", ":"))};'
-            f'window.SUPPLY_CFG={json.dumps(dict(tax=fees))};</script>')
+            f'window.SUPPLY_CFG={json.dumps(dict(tax=fees, warn=cfg["alerts"].get("price_vs_median", 0.5)))};</script>')
 
 
 def gains_tab(ctx, cfg, my):

@@ -472,7 +472,7 @@ function supplyRender(){const box=document.getElementById('sbox');if(!box)return
  const byIcon={},seen=new Set();(window.SUPPLY||[]).forEach(x=>(byIcon[x.s]=byIcon[x.s]||[]).push(x));
  const n=v=>v==null?'–':NF.format(Math.round(v)),K={hdv:'HDV',od:'Od transmuté',pnj:'PNJ (prix estimé)',craft:'à fabriquer',recolte:'récolte',introuvable:'introuvable'};
  const part=(p,ind)=>'<tr><td style="padding-left:'+(10+ind*18)+'px">'+jEsc(p.n)+(p.via?'<div class="sub">→ transmuté en '+jEsc(p.via)+'</div>':'')+'</td>'
-  +'<td class="n">'+NF.format(p.q)+'</td><td class="n">'+(p.p==null?'<span class="neg">introuvable</span>':n(p.p))+'</td>'
+  +'<td class="n">'+NF.format(p.q)+'</td><td class="n">'+(p.p==null?'<span class="neg">introuvable</span>':n(p.p))+(sHigh(p.p,p.md)!=null?' <span title="Au-dessus de ses médianes : 3 j '+n(p.md[0])+', 7 j '+n(p.md[1])+'">⚠</span>':'')+'</td>'
   +'<td class="n">'+(p.p==null?'–':n(p.p*p.q))+'</td><td class="sub">'+(K[p.k]||'')+(p.l!=null?' · '+p.l+' annonce(s)':'')+'</td></tr>'
   +(p.sub||[]).map(x=>part(x,ind+1)).join('');
  let pos=false;try{pos=!!localStorage.getItem('supplyPos')}catch(e){}
@@ -482,17 +482,20 @@ function supplyRender(){const box=document.getElementById('sbox');if(!box)return
  box.innerHTML='<div class="toolbar" style="margin:10px 0"><span class="sub">Capture lue le '+d.t.slice(8,10)+'/'+d.t.slice(5,7)+' à '+d.t.slice(11)+' · '+rows.length+' objet(s)</span>'
   +'<label class="tg"><input type="checkbox"'+(pos?' checked':'')+' onchange="try{localStorage.setItem(\'supplyPos\',this.checked?\'1\':\'\')}catch(e){}supplyRender()"> Rentables seulement</label></div>'
   +'<div class="wrap"><table><thead><tr><th>Objet</th><th class="n">Vente /u</th><th class="n" title="Par craft ; pour un objet éclatant, par objet obtenu (plusieurs crafts)">Coût</th><th class="n" title="Objet normal, sans compter le combo">Gain / craft</th><th class="n">Réussite</th><th class="n">Annonces</th><th></th></tr></thead><tbody>'
-  +(shown.length?shown.map(([x,e])=>{const b=e.best,g=e.gain,up=x.ask!=null&&x.med?x.ask/x.med-1:null;
+  +(shown.length?shown.map(([x,e])=>{const b=e.best,g=e.gain,up=x.ask!=null&&x.med?x.ask/x.med-1:null,w=sWarns(x,e);
+   const wt=w.map(o=>o.n+' : '+n(o.v)+' (+'+Math.round(o.u*100)+' % ; médiane 3 j '+n(o.md[0])+', 7 j '+n(o.md[1])+')').join('\n');
    const v=e.rt.lock?['🔒','niveau de métier trop bas pour ce craft']:g==null?['❔','prix manquant']
     :g<=0&&e.avg>0?['🎲','à perte avec l’objet normal ; rentable en moyenne seulement grâce au combo ('+Math.round(e.c*100)+' %) : un pari']
+    :g>0&&w.length?['⚠','rentable, mais prix au-dessus des médianes 3 j et 7 j de plus de '+Math.round(SUPPLY_CFG.warn*100)+' % :\n'+wt]
     :g>0&&x.l<=2?['⚠','rentable, mais '+x.l+' annonce(s) seulement : prix de vente incertain']:g>0?['✅','rentable']:['❌','à perte'];
-   const row='<tr'+(e.rt.lock?' class="locked"':'')+'><td><span class="it"><span title="'+v[1]+'">'+v[0]+'</span> <img src="'+jEsc(x.s)+'" width="30" height="30" style="border-radius:5px" loading="lazy"><span><span class="nm" title="Cliquer pour copier">'+jEsc(x.n)+'</span>'
+   const row='<tr'+(e.rt.lock?' class="locked"':'')+'><td><span class="it"><span title="'+jEsc(v[1])+'">'+v[0]+'</span> <img src="'+jEsc(x.s)+'" width="30" height="30" style="border-radius:5px" loading="lazy"><span><span class="nm" title="Cliquer pour copier">'+jEsc(x.n)+'</span>'
     +'<div class="sub">'+(e.via?'<b>éclatant</b> · combo '+Math.round(e.c*100)+' % de '+jEsc(e.R.n)+' · ':'')+(PROF[x.prof]||x.prof)+' '+lvTxt(Math.max(1,x.m))+(e.cb?' · combo '+Math.round(e.c*100)+' %':'')+'</div></span></span></td>'
     +'<td class="n"><input type="number" min="0" class="search" style="width:115px;display:inline-block;padding:4px 7px;text-align:right" value="'+(e.sell??'')+'" onchange="supplySell('+x.i+',this.value)">'
     +'<div class="sub">'+(e.ov!=null?'saisi · ':e.capped?'<span title="annonce la plus basse anormalement haute : prix réaliste proposé">plafonné · </span>':'')+'min '+n(x.ask)+' · méd. 3 j '+n(x.med)+(up!=null&&up>=0.15?' <span class="badge b-ok">↑ +'+Math.round(up*100)+' %</span>':'')+'</div></td>'
     +'<td class="n">'+(b?n(b.per)+(e.via?'<div class="sub">≈ '+(1/e.c/(lvState().lose?e.rt.r:1)).toFixed(1).replace('.',',')+' crafts / objet</div>':'')+(e.cols.length>1?' <span class="badge b-mut" title="'+(b.k==='A'?'ingrédient éclatant crafté par sa chaîne':'ingrédient éclatant acheté à l’HDV')+'">'+b.k+'</span>':''):'<span class="neg">incomplet</span>')+'</td>'
     +'<td class="n '+(g==null?'':g>0?'pos':'neg')+'"><b>'+(g==null?'–':(g>0?'+':'')+n(g))+'</b>'
-    +(e.cb&&e.avg!=null&&!e.vUnk?'<div class="sub" title="Moyenne sur beaucoup de crafts, combo ('+Math.round(e.c*100)+' %) revendu '+n(e.cb.v)+'">moy. avec combo '+(e.avg>0?'+':'')+n(e.avg)+'</div>':'')+(e.vUnk?'<div class="sub" title="'+jEsc(e.cb.n)+' : aucun prix connu, le combo est compté 0">combo sans prix : compté 0</div>':'')+'</td>'
+    +(e.cb&&e.avg!=null&&!e.vUnk?'<div class="sub" title="Moyenne sur beaucoup de crafts, combo ('+Math.round(e.c*100)+' %) revendu '+n(e.cb.v)+'">moy. avec combo '+(e.avg>0?'+':'')+n(e.avg)+'</div>':'')+(e.vUnk?'<div class="sub" title="'+jEsc(e.cb.n)+' : aucun prix connu, le combo est compté 0">combo sans prix : compté 0</div>':'')
+    +(w.length?'<div><span class="badge b-warn" title="'+jEsc('Prix au-dessus des médianes 3 j et 7 j de plus de '+Math.round(SUPPLY_CFG.warn*100)+' % :\n'+wt)+'">⚠ prix > médiane</span></div>':'')+'</td>'
     +'<td class="n">'+(e.rt.lock?'🔒':e.rt.u?'?':(e.rt.r*100).toFixed(0)+' %')+'</td><td class="n">'+x.l+'</td>'
     +'<td style="white-space:nowrap"><button class="mapbtn" onclick="supplyToggle('+x.i+')">'+(SOPEN.has(x.i)?'▾':'▸')+' détail</button> '
     +'<button class="mapbtn" title="Ouvrir Mes ventes avec cet objet, ce prix et ce coût" onclick="supplyPost('+x.i+')">📦 Poster</button></td></tr>';
@@ -511,6 +514,22 @@ document.addEventListener('DOMContentLoaded',()=>supplyRender());
 // ou s'achete a l'HDV (B) ; reussite selon mes niveaux (🛠️ Mes metiers) ; resultat = objet normal (prix de vente
 // modifiable, par defaut la moins chere des annonces - 1) ou, en combo, la version eclatante.
 const SNET=v=>v==null?null:v*(1-SUPPLY_CFG.tax);
+// prix au-dessus de ses medianes 3 j et 7 j (md) de plus de SUPPLY_CFG.warn (config : alerts.price_vs_median) : ecart a
+// la plus haute des deux (un prix qui monte depuis quelques jours n'est pas signale), sinon null
+function sHigh(v,md){const r=v==null||!md?[]:md.filter(m=>m>0).map(m=>v/m-1);const u=r.length?Math.min(...r):null;
+ return u!=null&&u>SUPPLY_CFG.warn?u:null}
+// prix douteux d'une proposition : vente, ingredients (chaine ou achat, selon l'option retenue), reventes, combo ;
+// un prix saisi a la main n'est pas signale
+function sWarns(x,e){const out=[],seen=new Set(),ov=supplySellGet();
+ const chk=(n,v,md)=>{const u=sHigh(v,md);if(u!=null&&!seen.has(n)){seen.add(n);out.push({n,v,md,u})}};
+ const parts=ps=>(ps||[]).forEach(p=>{chk(p.n,p.p,p.md);parts(p.sub)});
+ const chain=ch=>{parts(ch.parts);if(ov[ch.i]==null)chk(ch.n+' (revente)',ch.plain,ch.pmd);ch.need.forEach(y=>chain(y.chain))};
+ const R=e.R,k=e.best&&e.best.k;
+ if(e.ov==null)chk(x.n+' (vente)',e.sell,x.md);
+ parts(R.parts);R.need.forEach(y=>{if(k!=='B')chain(y.chain);if(k!=='A')chk(y.n,y.buy,y.md)});
+ if(e.via&&ov[R.i]==null)chk(R.n+' (revente)',R.plain,R.pmd);
+ if(e.cb)chk(e.cb.n+' (combo)',e.cb.v,e.cb.md);
+ return out}
 function supplySellGet(){try{return JSON.parse(localStorage.getItem('supplySell')||'{}')}catch(e){return{}}}
 function supplySell(id,v){const o=supplySellGet();if(v===''||!(+v>=0))delete o[id];else o[id]=+v;
  try{localStorage.setItem('supplySell',JSON.stringify(o))}catch(e){}supplyRender()}

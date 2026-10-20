@@ -520,7 +520,7 @@ class Market:
                     thin_list.append(name)
                 lines.append(f"{name} x{best[2]['qty']:g} @{best[3][price]:,.0f}".replace(",", " ")
                              + (f" → transmuté en {best[4]}" if best[4] else "") + (" (1 annonce)" if thin else ""))
-                parts.append(dict(n=name, q=best[2]["qty"], p=best[3][price], k="od" if best[4] else "hdv", via=best[4],
+                parts.append(dict(n=name, i=best[3]["item_id"], q=best[2]["qty"], p=best[3][price], k="od" if best[4] else "hdv", via=best[4],
                                   l=best[3]["listings"]))
                 continue
             o = opts[0]

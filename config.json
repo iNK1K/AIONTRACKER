@@ -49,7 +49,9 @@
     "flip_min_margin": 0.10,
     "flip_min_samples": 12,
     "flip_min_profit_day": 50000,
-    "spike_craft_min_margin": 0.15
+    "spike_craft_min_margin": 0.15,
+    "_price_vs_median": "Ravitaillement : prix utilise dans un craft propose au-dessus de sa mediane 3 j ou 7 j de plus de ce taux -> avertissement",
+    "price_vs_median": 0.50
   },
 
   "news": {
