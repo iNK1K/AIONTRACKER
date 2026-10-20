@@ -1083,6 +1083,12 @@ def supply_tab(ctx, cfg, my):
         return dict(c=combo_cfg if combo_cfg is not None else (r["combo_prob_raw"] or 0) / 10000,
                     n=m.items[cid]["name"], v=rnd(sp["pess"]) if sp else value(cid))
 
+    def plain(r):
+        """Revente de l'objet de base d'une recette a combo, plafonnee a la valeur prudente de sa version eclatante :
+        l'objet normal ne vaut jamais plus (une annonce aberrante seule en vente fausse sa mediane et son prix habituel)."""
+        v, cv = value(r["item_id"]), (combo(r) or {}).get("v")
+        return min(v, cv) if v is not None and cv is not None else v
+
     def needs(r, seen):
         """Ingredients eclatants d'une recette, avec la chaine pour les crafter (toute la chaine) et le prix HDV."""
         out = []
@@ -1100,7 +1106,7 @@ def supply_tab(ctx, cfg, my):
         sub = needs(r, seen)
         c = m.recipe_cost(r, "buy", skip={x["i"] for x in sub})
         return dict(i=r["item_id"], n=m.items[r["item_id"]]["name"], prof=r["profession"], m=r["mastery"] or 0, cv=r.get("rate_curve"),
-                    c=combo(r)["c"], k=rnd(c["cost_r"]) if c["ok"] else None, plain=value(r["item_id"]),
+                    c=combo(r)["c"], k=rnd(c["cost_r"]) if c["ok"] else None, plain=plain(r),
                     parts=[dict(p, p=rnd(p["p"]), sub=[dict(x, p=rnd(x["p"])) for x in p.get("sub") or []]) for p in c["parts"]],
                     need=sub)
 
@@ -1146,7 +1152,7 @@ def supply_tab(ctx, cfg, my):
         it = m.items.get(cid) or {}
         if shown(it):
             bi = r["item_id"]
-            items.append(dict(sale(cid, it), via=dict(craft_info(bi, [r]), i=bi, n=m.items[bi]["name"], plain=value(bi)),
+            items.append(dict(sale(cid, it), via=dict(craft_info(bi, [r]), i=bi, n=m.items[bi]["name"], plain=plain(r)),
                               prof=r["profession"], m=r["mastery"] or 0))
     return ("<h2>Ravitaillement</h2><p class='lead'>Les objets demandés du jour sont recherchés à l’HDV : colle une capture "
             "de ta fenêtre de ravitaillement (<b>Ctrl + V</b> sur cet onglet) pour voir lesquels rapportent à crafter puis "
