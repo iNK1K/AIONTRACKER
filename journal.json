@@ -15,6 +15,6 @@
   {"id":"mvf97g6kj3lwt","objet":"Pièce de bois d'Asvata","src":"achat","qte":22,"prix":17999,"cout":8900,"ev":[{"id":"mvf97g6kxe3s4","t":"2026-10-19 14:51","type":"poste","prix":17999,"qte":22},{"id":"mvf97r54sye8h","t":"2026-10-19 14:52","type":"vendu","prix":17999,"qte":22,"recu":356380}]},
   {"id":"mvfmard17x9oc","objet":"Intention de rage","src":"achat","qte":1,"prix":2099996,"ev":[{"id":"mvfmard1ojzxf","t":"2026-10-19 20:58","type":"poste","prix":2099996,"qte":1},{"id":"mvfqj0097no2f","t":"2026-10-19 22:56","type":"vendu","prix":2099996,"qte":1,"recu":1889996}]},
   {"id":"mvfw0krm7giw3","objet":"Intention de rage","src":"achat","qte":1,"prix":2229999,"ev":[{"id":"mvfw0krnd36x9","t":"2026-10-20 01:30","type":"poste","prix":2229999,"qte":1}]},
-  {"id":"mvfzic8i3x7uu","objet":"Anneau éclatant de saphir de maître","src":"achat","qte":1,"prix":6899999,"ev":[{"id":"mvfzic8i02iv4","t":"2026-10-20 03:08","type":"poste","prix":6899999,"qte":1}]}
+  {"id":"mvfzic8i3x7uu","objet":"Anneau éclatant de saphir de maître","src":"achat","qte":1,"prix":6899999,"ev":[{"id":"mvfzic8i02iv4","t":"2026-10-20 03:08","type":"poste","prix":6899999,"qte":1},{"id":"mvfzitmmrwhg8","t":"2026-10-20 03:08","type":"src","src":"recolte"},{"id":"mvfzitmm5hhl1","t":"2026-10-20 03:08","type":"cout","cout":0}]}
  ]
 }
