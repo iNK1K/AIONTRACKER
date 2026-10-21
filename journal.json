@@ -22,6 +22,6 @@
   {"id":"mvh62pl0aabfv","objet":"Pièce de bois d'Asvata","src":"recolte","qte":69,"prix":13500,"cout":0,"ev":[{"id":"mvh62pl0gssgl","t":"2026-10-20 22:59","type":"poste","prix":13500,"qte":69},{"id":"mvh889e4k49bo","t":"2026-10-21 00:00","type":"vendu","prix":13500,"qte":69,"recu":838350}]},
   {"id":"mvi8sqx7z378d","objet":"Écaille dure de Balaur améliorée","src":"achat","qte":7,"prix":129989,"cout":40400,"ev":[{"id":"mvi8sqx7mew0p","t":"2026-10-21 17:03","type":"poste","prix":129989,"qte":7}]},
   {"id":"mvijxrri8js5b","objet":"Minerai d'orichalque éclatant","src":"brut","qte":4,"prix":214999,"cout":0,"ev":[{"id":"mvijxrrii6l8l","t":"2026-10-21 22:15","type":"poste","prix":214999,"qte":4}]},
-  {"id":"mvijyae92vyuv","objet":"Rubis brut pur","src":"brut","qte":2,"prix":235978,"cout":0,"ev":[{"id":"mvijyae9dc1el","t":"2026-10-21 22:16","type":"poste","prix":235978,"qte":2}]}
+  {"id":"mvijyae92vyuv","objet":"Rubis brut pur","src":"brut","qte":2,"prix":235978,"cout":0,"ev":[{"id":"mvijyae9dc1el","t":"2026-10-21 22:16","type":"poste","prix":235978,"qte":2},{"id":"mvijywrkopozs","t":"2026-10-21 22:16","type":"vendu","prix":235978,"qte":2,"recu":424760}]}
  ]
 }
