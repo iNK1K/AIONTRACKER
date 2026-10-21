@@ -4,6 +4,11 @@ Une tâche par ligne. Claude les traite dans l'ordre et coche `[x]` quand c'est 
 
 
 ## Fait
+- [x] Brut vendable (MaJ du 21/10) : valeur d'une ressource récoltée = le mieux entre vente brute et craft (Récolte, Quoi récolter, Planning, Mon stock)
+- [x] Brut vendable : coupure de l'historique de prix et de ventes du brut au 21/10 (`brut_vendable_depuis`) pour les médianes, prix habituels, Flip, Ravitaillement
+- [x] Brut vendable : le brut revient dans le Flip
+- [x] Brut vendable : origine « 💰 Récolte vendue brute » dans Mes ventes
+- [x] Brut vendable : textes « jamais vendue brute » réécrits, alerte de levée de la restriction retirée
 - [x] Mes ventes : origine « 📦 Ravitaillement » (coût = total du craft de l’onglet Ravitaillement, bilan et filtre par activité)
 - [x] Onglet 📦 Ravitaillement : capture → objets reconnus ; prix de chaque ingrédient et total du craft, annonces, médiane 3 j, prix de vente cible (+20 %, taxe comprise)
 - [x] Discord (salon partagé) : plus d’alertes sur mes annonces ; rapport horaire léger des opportunités sûres (seulement si nouvelles) ; résumé quotidien détaillé + annonces NCSOFT pas encore postées

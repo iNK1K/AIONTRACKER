@@ -49,33 +49,6 @@ def _once(con, key, message):
     return True
 
 
-def unlock_signal(con, result):
-    """Levee probable de la restriction sur le brut : le brut revient en masse et son prix chute (texte, ou None)."""
-    m = result["market"]
-    gather_ids = [i for i, it in m.items.items() if it["is_gather"] and not it["bound"] and i in m.price]
-    now = datetime.now(timezone.utc)
-    drops = []
-    for iid in gather_ids:
-        def window(h0, h1):
-            rows = con.execute("SELECT price, listings FROM quotes WHERE server=? AND item_id=? AND ts>=? AND ts<?",
-                               (result["server"], iid, (now - timedelta(hours=h0)).isoformat()[:19],
-                                (now - timedelta(hours=h1)).isoformat()[:19])).fetchall()
-            return rows
-        recent, before = window(24, 0), window(96, 24)
-        if len(recent) >= 6 and len(before) >= 12:
-            p1 = statistics.median(r["price"] for r in recent)
-            p0 = statistics.median(r["price"] for r in before)
-            l1 = statistics.median(r["listings"] for r in recent)
-            l0 = statistics.median(r["listings"] for r in before)
-            drops.append((p1 / p0 if p0 else 1, l1 / l0 if l0 else 1))
-    if len(drops) >= 10:
-        share = sum(1 for p, l in drops if p <= 0.6 and l >= 1.5) / len(drops)
-        if share >= 0.4:
-            return (f"🔓 **La restriction sur le brut semble levée** : {share:.0%} des ressources ont un prix en baisse "
-                    f"de plus de 40 % et 50 % d'annonces en plus sur 24 h.")
-    return None
-
-
 def opportunities(cfg, result):
     """Bonnes opportunites du moment, seulement au feu vert de l'indice de surete (aucune donnee personnelle) :
     liste de (cle, ligne)."""
@@ -105,10 +78,9 @@ def hourly(con, cfg, result, top=6):
     """Rapport horaire leger : les bonnes opportunites du moment. Rien si aucune, ou si ce sont les memes qu'au
     rapport precedent (pas de repetition d'heure en heure)."""
     ops = opportunities(cfg, result)
-    unlock = unlock_signal(con, result)
-    if not ops and not unlock:
+    if not ops:
         return None
-    sig = "|".join(sorted(k for k, _ in ops[:top])) + ("|unlock" if unlock else "")
+    sig = "|".join(sorted(k for k, _ in ops[:top]))
     last = con.execute("SELECT message FROM alerts_sent WHERE key = 'hourly_last'").fetchone()
     if last and last["message"] == sig:
         return None
@@ -117,8 +89,6 @@ def hourly(con, cfg, result, top=6):
     con.commit()
     srv = con.execute("SELECT name FROM servers WHERE id = ?", (result["server"],)).fetchone()
     lines = [f"⏰ **Opportunités {paris(None, '%Hh%M')}** · {srv['name'] if srv else result['server']}"]
-    if unlock:
-        lines.append(unlock)
     lines += [l for _, l in ops[:top]]
     if len(ops) > top:
         lines.append(f"… et {len(ops) - top} autre(s) sur le site.")
@@ -193,7 +163,14 @@ def digest(con, cfg, result, top=8):
     for i, e in enumerate([e for e in result["harvest"] if not e["flags"]][:top], 1):
         lines.append(f"{i}. {e['objet']} : vends à ~{fmt(e['prix_real'])}, net {fmt(e['net_u'])}/u, "
                      f"~{fmt(e['ma_part_j'])}/j → **{fmt(e['profit_j'])}/j**"
-                     + (f" ({e['nb_lots_j']} annonce(s) de {fmt(e['lot_vente'])})" if e.get("nb_lots_j") else ""))
+                     + (f" ({e['nb_lots_j']} annonce(s) de {fmt(e['lot_vente'])})" if e.get("nb_lots_j") else "")
+                     + (f" ⚠ le brut rapporte {fmt(-e['vs_brut_u'])}/u de plus" if (e.get("vs_brut_u") or 0) < 0 else ""))
+    raw = [e for e in result.get("raw") or [] if not e["flags"] and e["net_u"] > 0]
+    if raw:
+        lines += ["", "**Vente du brut** (ta part des ventes mesurées)"]
+        for e in raw[:5]:
+            lines.append(f"• {e['objet']} : vends à ~{fmt(e['prix_real'])}, net {fmt(e['net_u'])}/u, "
+                         f"~{fmt(e['ma_part_j'])}/j → {fmt(e['profit_j'])}/j")
     buys = [e for e in result["buy"] if not e["flags"] and e["net_u"] > 0]
     lines += ["", "**Achat → craft → revente**"]
     if buys:
@@ -211,7 +188,8 @@ def digest(con, cfg, result, top=8):
     if result["plan"]:
         lines += ["", "**Plan de production pour ta récolte**"]
         for p in result["plan"]:
-            lines.append(f"• {p['quantite_j']} × {p['objet']} à ~{fmt(p['prix_conseille'])} → {fmt(p['kinah_j'])}/j")
+            lines.append(f"• {p['quantite_j']} × {p['objet']}{' (brut)' if p.get('brut') else ''} à "
+                         f"~{fmt(p['prix_conseille'])} → {fmt(p['kinah_j'])}/j")
     ops = opportunities(cfg, result)
     if ops:
         lines += ["", "**Opportunités sûres en ce moment** (feu vert)"] + [f"• {l}" for _, l in ops[:10]]

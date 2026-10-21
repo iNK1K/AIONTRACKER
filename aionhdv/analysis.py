@@ -52,6 +52,9 @@ class Market:
         self._ref = {}
         self._usual = {}
         self._sales = {}
+        self._raw = {}
+        # brut vendable depuis la MaJ du 21/10/2026 : avant, prix et ventes du brut viennent d'un autre regime de marche
+        self.raw_since = cfg.get("brut_vendable_depuis") or ""
         self.ratio = self._activity_ratio()
         srow = con.execute("SELECT faction FROM servers WHERE id = ?", (self.server,)).fetchone()
         self.faction = (srow["faction"] if srow else "").lower()      # 'asmodian' / 'elyos'
@@ -86,9 +89,19 @@ class Market:
             self.price[r["item_id"]] = r["price"]
             self.listings[r["item_id"]] = r["listings"]
 
+    def _since(self, item_id, since):
+        """Debut d'une fenetre de donnees : pour le brut, jamais avant brut_vendable_depuis."""
+        if self.raw_since > since and self.items.get(item_id, {}).get("is_gather"):
+            return self.raw_since
+        return since
+
+    def raw_recent(self, item_id):
+        """Brut dont l'historique est coupe depuis moins de 7 jours : les moyennes de Kaisinel sont d'avant."""
+        return self._since(item_id, (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()[:19]) == self.raw_since
+
     def price_series(self, item_id, days=7):
         """Prix plancher recents [(ts, prix)] : releves horaires (quotes) + historique aion2.exchange."""
-        since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()[:19]
+        since = self._since(item_id, (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()[:19])
         rows = [(r["ts"], r["price"]) for r in self.con.execute(
             "SELECT ts, price FROM quotes WHERE server=? AND item_id=? AND ts>=?", (self.server, item_id, since))]
         srv = self.con.execute("SELECT ax_id FROM servers WHERE id=?", (self.server,)).fetchone()
@@ -208,14 +221,15 @@ class Market:
 
     def flips(self, days=3):
         """Achat-revente sans craft : acheter au bas de la fourchette habituelle (1er quartile des prix plancher sur
-        3 j), revendre au prix median, apres frais. Ecarte le brut (invendable), les items sans volume de reference et
-        ceux dont le prix suit une tendance (mediane des dernieres 24 h a plus de 25-33 % de celle d'avant)."""
+        3 j), revendre au prix median, apres frais. Ecarte les items sans volume de reference et ceux dont le prix suit
+        une tendance (mediane des dernieres 24 h a plus de 25-33 % de celle d'avant). Brut compris (vendable depuis
+        la MaJ du 21/10/2026), sur son historique d'apres cette date."""
         a, fees = self.cfg["alerts"], self.cfg["fees"]
         cut = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()[:19]
         out = []
         for iid, price in self.price.items():
             it = self.items.get(iid) or {}
-            if it.get("bound") or it.get("is_gather"):
+            if it.get("bound"):
                 continue
             rows = self.price_series(iid, days)
             if len(rows) < a["flip_min_samples"]:
@@ -293,7 +307,7 @@ class Market:
         return res
 
     def _drops_per_day(self, server, item_id, days=7):
-        since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()[:19]
+        since = self._since(item_id, (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()[:19])
         r = self.con.execute("SELECT AVG(drops_h) AS d, COUNT(*) AS n FROM activity WHERE server=? AND item_id=? AND ts>=?",
                              (str(server), item_id, since)).fetchone()
         return r["d"] * 24 if r and r["n"] and r["d"] is not None else None
@@ -381,7 +395,7 @@ class Market:
         l'ont ete au prix le plus bas de l'heure precedente (une valeur par annonce disparue). Fenetre : les `hours`
         heures avant `until` (maintenant par defaut)."""
         end = until or datetime.now(timezone.utc)
-        since = (end - timedelta(hours=hours)).isoformat()[:19]
+        since = self._since(item_id, (end - timedelta(hours=hours)).isoformat()[:19])
         stop = end.isoformat()[:19]
         hourly = {}
         srv = self.con.execute("SELECT ax_id FROM servers WHERE id=?", (self.server,)).fetchone()
@@ -419,7 +433,7 @@ class Market:
                     m = statistics.median(dmed.values())
                     kept = [p for d, v in days.items() if dmed[d] <= 1.6 * m for p in v]
                     res = dict(price=statistics.median(kept or [p for _, p in rows]), source="serveur")
-                else:
+                elif not self.raw_recent(item_id):
                     ref = self.ref(item_id)
                     if ref and ref["avg_price"]:
                         res = dict(price=ref["avg_price"], source="Kaisinel")
@@ -582,6 +596,31 @@ class Market:
         vol = sl["units"] if sl else 0
         mine = vol * self.cfg["market_share"]
         res_u = sum(c["gather"].values()) / q
+        flags = self._flags(sl, sp)
+        if c["thin"]:
+            flags.append("ingrédient introuvable en volume : " + ", ".join(sorted(set(c["thin"]))))
+        # recolte : ce que les memes ressources rapporteraient vendues brutes (None si un prix manque)
+        raw = [self.raw_net(k) for k in c["gather"]]
+        brut_u = sum(self.raw_net(k) * v for k, v in c["gather"].items()) / q if c["gather"] and None not in raw else None
+        return dict(
+            mode=mode, recipe_id=recipe["id"], item_id=oid, objet=self.items[oid]["name"],
+            metier=recipe["profession"], maitrise=recipe["mastery"], lot=q,
+            ingredients=c["lines"], ressources={k: v / q for k, v in c["gather"].items()},
+            achats_u=round(cost_u), achats_pess_u=round(cost_pu),
+            prix_affiche=sp["ask"], prix_ref=sp["ref"] and round(sp["ref"]), prix_real=round(sp["real"]),
+            annonces=sp["listings"], net_u=round(net_u), net_pess_u=round(net_pu), ref_source=sp["ref_source"],
+            net_affiche_u=round(sp["ask"] * (1 - fees) - cost_u),
+            marge=round(net_u / cost_u, 3) if cost_u > 0 else None,
+            ressources_u=res_u, net_par_ressource=round(net_u / res_u) if res_u else None,
+            brut_u=round(brut_u) if brut_u is not None else None,
+            vs_brut_u=round(net_u - brut_u) if brut_u is not None else None,
+            vol_serveur_j=round(vol), ma_part_j=round(mine), vol_source=sl and sl["source"],
+            annonces_vendues_j=round(sl["listings"], 1) if sl and sl["listings"] is not None else None,
+            profit_j=round(mine * net_u), profit_pess_j=round(mine * net_pu),
+            capital_j=round(mine * cost_u), flags=flags, **self.sizing(oid, mine))
+
+    def _flags(self, sl, sp):
+        """Doutes sur les ventes (volume) et le prix de vente d'un item."""
         flags = []
         if not sl:
             flags.append("volume de vente inconnu (aucune mesure)")
@@ -595,22 +634,41 @@ class Market:
             flags.append("1 seule annonce en vente")
         if sp["ref"] and sp["ask"] > 5 * sp["ref"]:
             flags.append("prix affiché > 5x le prix habituel")
-        if c["thin"]:
-            flags.append("ingrédient introuvable en volume : " + ", ".join(sorted(set(c["thin"]))))
-        return dict(
-            mode=mode, recipe_id=recipe["id"], item_id=oid, objet=self.items[oid]["name"],
-            metier=recipe["profession"], maitrise=recipe["mastery"], lot=q,
-            ingredients=c["lines"], ressources={k: v / q for k, v in c["gather"].items()},
-            achats_u=round(cost_u), achats_pess_u=round(cost_pu),
-            prix_affiche=sp["ask"], prix_ref=sp["ref"] and round(sp["ref"]), prix_real=round(sp["real"]),
-            annonces=sp["listings"], net_u=round(net_u), net_pess_u=round(net_pu), ref_source=sp["ref_source"],
-            net_affiche_u=round(sp["ask"] * (1 - fees) - cost_u),
-            marge=round(net_u / cost_u, 3) if cost_u > 0 else None,
-            ressources_u=res_u, net_par_ressource=round(net_u / res_u) if res_u else None,
-            vol_serveur_j=round(vol), ma_part_j=round(mine), vol_source=sl and sl["source"],
-            annonces_vendues_j=round(sl["listings"], 1) if sl and sl["listings"] is not None else None,
-            profit_j=round(mine * net_u), profit_pess_j=round(mine * net_pu),
-            capital_j=round(mine * cost_u), flags=flags, **self.sizing(oid, mine))
+        return flags
+
+    def raw_net(self, name):
+        """Ce que rapporte une ressource vendue brute (prix realiste, apres taxe), ou None sans prix."""
+        if name not in self._raw:
+            iid = self.by_base.get(name)
+            sp = self.sell_price(iid) if iid else None
+            self._raw[name] = sp["real"] * (1 - self.cfg["fees"]) if sp else None
+        return self._raw[name]
+
+    def raw_rows(self):
+        """Vente du brut (possible depuis la MaJ du 21/10/2026) : une ligne par ressource de ma faction, au format des
+        lignes recolte -> craft (1 ressource par unite, rien a acheter), pour la comparer aux crafts."""
+        fees, out = self.cfg["fees"], []
+        for name in self.gather_names():
+            iid = self.by_base.get(name)
+            sp = self.sell_price(iid) if iid else None
+            if not sp:
+                continue
+            sl = self.sales(iid)
+            vol = sl["units"] if sl else 0
+            mine = vol * self.cfg["market_share"]
+            net_u, net_pu = sp["real"] * (1 - fees), sp["pess"] * (1 - fees)
+            out.append(dict(
+                mode="raw", brut=True, recipe_id=None, item_id=iid, objet=name, metier=None, maitrise=None, lot=1,
+                ingredients=[], ressources={name: 1}, achats_u=0, achats_pess_u=0,
+                prix_affiche=sp["ask"], prix_ref=sp["ref"] and round(sp["ref"]), prix_real=round(sp["real"]),
+                annonces=sp["listings"], net_u=round(net_u), net_pess_u=round(net_pu), ref_source=sp["ref_source"],
+                net_affiche_u=round(sp["ask"] * (1 - fees)), marge=None, ressources_u=1, net_par_ressource=round(net_u),
+                vol_serveur_j=round(vol), ma_part_j=round(mine), vol_source=sl and sl["source"],
+                annonces_vendues_j=round(sl["listings"], 1) if sl and sl["listings"] is not None else None,
+                profit_j=round(mine * net_u), profit_pess_j=round(mine * net_pu), capital_j=0,
+                vente_net_u=round(net_u), flags=self._flags(sl, sp), **self.sizing(iid, mine)))
+        out.sort(key=lambda e: -e["profit_j"])
+        return out
 
     def spikes(self, buy_rows):
         """Pics de prix : achat -> craft rentable au prix affiche, mais pas au prix habituel (prix en pic depuis peu).
@@ -755,7 +813,8 @@ class Market:
         return sorted(n for n in names if not (other and zones.get(node_name(n)) == {other}))
 
     def gather_targets(self, harvest_rows):
-        """Pour chaque ressource : meilleur usage (net par ressource) et quantite que le marche absorbe."""
+        """Pour chaque ressource : meilleur usage (net par ressource) et quantite que le marche absorbe. Les lignes de
+        vente du brut (raw_rows) sont un usage comme un autre."""
         # toutes les ressources apparaissent ; les usages douteux (drapeaux) ou a perte sont montres apres les fiables
         targets = {}
         for e in harvest_rows:
@@ -766,7 +825,8 @@ class Market:
                 t = targets.setdefault(res, [])
                 t.append(dict(objet=e["objet"], item_id=e["item_id"], net_par_ressource=round(net_res),
                               ressources_j=round(e["ma_part_j"] * per_u), profit_j=e["profit_j"], per_u=per_u,
-                              lot=e.get("lot_vente"), fiable=e["net_u"] > 0 and not e["flags"], flags=e["flags"]))
+                              lot=e.get("lot_vente"), fiable=e["net_u"] > 0 and not e["flags"], flags=e["flags"],
+                              brut=bool(e.get("brut"))))
         for target, src in self.transmute.items():
             sname = self.items.get(src, {}).get("base_name")
             if sname and target in targets:
@@ -783,7 +843,7 @@ class Market:
         return out
 
     def production_plan(self, harvest_rows, harvest):
-        """Repartit la recolte quotidienne entre les crafts (glouton par net/ressource), max N produits."""
+        """Repartit la recolte quotidienne entre les crafts et la vente du brut (glouton par net/ressource), max N produits."""
         stock = {k: float(v) for k, v in (harvest or {}).items()}
         if not stock:
             return []
@@ -801,7 +861,7 @@ class Market:
                 continue
             for res, per in e["ressources"].items():
                 stock[res] -= n * per
-            plan.append(dict(objet=e["objet"], quantite_j=n, prix_conseille=e["prix_real"], net_u=e["net_u"],
+            plan.append(dict(objet=e["objet"], brut=bool(e.get("brut")), quantite_j=n, prix_conseille=e["prix_real"], net_u=e["net_u"],
                              kinah_j=n * e["net_u"], ressources={r: round(n * p) for r, p in e["ressources"].items()},
                              **self.sizing(e["item_id"], n)))
         return plan
@@ -850,10 +910,11 @@ def run_all(con, cfg, server=None):
     buy = m.best_per_item("buy")
     # achat -> craft en deux facons, pour les comparer : ingredients achetes a l'HDV, ou Od achete puis transmute
     buy_direct, buy_trans = m.best_per_item("buy", "off"), m.best_per_item("buy", "force")
-    targets = m.gather_targets(harvest)
-    plan = m.production_plan(harvest, cfg.get("harvest_per_day"))
+    raw = m.raw_rows()
+    targets = m.gather_targets(harvest + raw)
+    plan = m.production_plan(harvest + raw, cfg.get("harvest_per_day"))
     run_ts = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-    for kind, rows in (("harvest", harvest), ("buy", buy)):
+    for kind, rows in (("harvest", harvest), ("buy", buy), ("raw", raw)):
         for e in rows:
             con.execute("INSERT INTO analyses VALUES (?,?,?,?,?,?,?)",
                         (run_ts, server, kind, e["item_id"], e["recipe_id"], e["profit_j"], json.dumps(e, ensure_ascii=False)))
@@ -862,7 +923,7 @@ def run_all(con, cfg, server=None):
     con.execute("INSERT INTO analyses VALUES (?,?,?,?,?,?,?)",
                 (run_ts, server, "plan", None, None, None, json.dumps(plan, ensure_ascii=False)))
     con.commit()
-    return add_safety(con, dict(run_ts=run_ts, server=server, as_of=m.as_of, ratio=m.ratio, harvest=harvest, buy=buy,
+    return add_safety(con, dict(run_ts=run_ts, server=server, as_of=m.as_of, ratio=m.ratio, harvest=harvest, buy=buy, raw=raw,
                 targets=targets, plan=plan, hours=m.hourly_profile(), uniques=m.uniques(),
                 flips=m.flips(), listings=m.my_listings(), gains=m.real_gains() if server == str(cfg["my_server"]) else None, spikes=m.spikes(buy), chains=m.gamble_chains(),
                 buy_direct=buy_direct, buy_trans=buy_trans, market=m))

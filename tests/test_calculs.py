@@ -153,6 +153,37 @@ class VraisGains(unittest.TestCase):
         self.assertEqual(p["marge_u"], -10)                         # 990 recus pour un cout de 1000
 
 
+class Brut(unittest.TestCase):
+    """Brut vendable depuis la MaJ du 21/10/2026 : historique coupe, valeur brute face aux crafts."""
+    def test_historique_du_brut_coupe(self):
+        con = make_db()
+        con.executemany("INSERT INTO quotes VALUES (?,?,?,?,?)",
+                        [(ME, i, ts(30 + h), 500, 10) for i in (BOIS, PLANCHE) for h in range(13)])
+        m = market(con, brut_vendable_depuis=ts(20))
+        self.assertEqual(len(m.price_series(BOIS, 3)), 13)          # releves d'avant la coupure ignores
+        self.assertEqual(len(m.price_series(PLANCHE, 3)), 26)       # pas du brut : tout l'historique
+        self.assertEqual(m.usual_price(BOIS)["price"], 100)
+
+    def test_craft_face_au_brut(self):
+        m = market(make_db())
+        e = m.evaluate(m.recipes_by_item[PLANCHE][0], "harvest")
+        self.assertEqual((e["net_u"], e["brut_u"], e["vs_brut_u"]), (900, 180, 720))   # 2 Bois a 100 - 10 %
+        m = market(make_db({BOIS: 600, OD: 60, PLANCHE: 1000}))
+        e = m.evaluate(m.recipes_by_item[PLANCHE][0], "harvest")
+        self.assertEqual(e["vs_brut_u"], 900 - 1080)                # le brut rapporte plus
+
+    def test_vente_du_brut_est_un_usage(self):
+        m = market(make_db())
+        raw = {e["objet"]: e for e in m.raw_rows()}
+        self.assertEqual((raw["Bois"]["net_u"], raw["Bois"]["ressources"], raw["Bois"]["brut"]), (90, {"Bois": 1}, True))
+        targets = {t["ressource"]: t for t in m.gather_targets(m.best_per_item("harvest") + list(raw.values()))}
+        uses = [(u["objet"], u["net_par_ressource"], u["brut"]) for u in targets["Bois"]["usages"]]
+        self.assertIn(("Bois", 90, True), uses)
+        self.assertIn(("Planche", 450, False), uses)
+        # l'Od se vend brut, ou se transmute en Bois vendu brut
+        self.assertTrue(any(u["brut"] and u.get("via") == "Bois" for u in targets["Od commun"]["usages"]))
+
+
 class Journal(unittest.TestCase):
     LOT = dict(id="a", objet="Planche", src="achat", qte=20, prix=1000, cout=600, ev=[
         dict(id="1", t="2026-10-19 10:00", type="poste", prix=1000, qte=20),

@@ -270,13 +270,13 @@ def core_items(con, limit=60):
 
 
 def top_products(con, server, limit=40):
-    """Produits les mieux classes de la derniere analyse (recolte et achat) : on mesure aussi leur activite,
-    pour connaitre la taille des lots qui se vendent."""
+    """Produits les mieux classes de la derniere analyse (recolte, achat et vente du brut) : on mesure aussi leur
+    activite, pour connaitre la taille des lots qui se vendent."""
     run = con.execute("SELECT MAX(run_ts) AS ts FROM analyses WHERE server=?", (str(server),)).fetchone()["ts"]
     if not run:
         return []
     rows = con.execute("SELECT item_id, MAX(score) AS s FROM analyses WHERE run_ts=? AND server=? "
-                       "AND kind IN ('harvest', 'buy') GROUP BY item_id ORDER BY s DESC LIMIT ?",
+                       "AND kind IN ('harvest', 'buy', 'raw') GROUP BY item_id ORDER BY s DESC LIMIT ?",
                        (run, str(server), limit))
     return [r["item_id"] for r in rows]
 

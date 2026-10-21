@@ -10,6 +10,8 @@
   "_fees": "taxe de l'HDV sur les ventes : 10 % (vérifié sur l'historique des ventes : 810 000 -> 729 000 net)",
   "fees": 0.10,
   "npc_reagent_price": 400,
+  "_brut_vendable_depuis": "le brut est vendable depuis la MaJ du 21/10/2026 : avant cette date, prix et ventes du brut (autre régime de marché) sont ignorés",
+  "brut_vendable_depuis": "2026-10-21",
   "max_listings": 10,
 
   "masteries": {

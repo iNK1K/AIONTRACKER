@@ -249,13 +249,17 @@ def status(e):
         return "".join(f'<span class="badge b-warn">⚠ {esc(f)}</span>' for f in e["flags"])
     if e["net_u"] <= 0:
         return '<span class="badge b-bad">À perte</span>'
+    if (e.get("vs_brut_u") or 0) < 0:
+        return (f'<span class="badge b-warn">💰 Le brut rapporte plus : +{fmt(-e["vs_brut_u"])}/u en vendant '
+                'les ressources brutes</span>')
     if e["net_pess_u"] <= 0:
         return '<span class="badge b-warn">Risqué si les prix baissent</span>'
     return '<span class="badge b-ok">Rentable</span>'
 
 
 def is_good(e):
-    return e["net_u"] > 0 and not e["flags"]
+    """Rentable, sans doute sur les ventes, et (recolte) plus rentable que de vendre les ressources brutes."""
+    return e["net_u"] > 0 and not e["flags"] and (e.get("vs_brut_u") or 0) >= 0
 
 
 def toolbar(tid, extra=""):
@@ -273,7 +277,7 @@ def niveau(m):
 def craft_attrs(e):
     """Donnees pour recalculer la ligne dans le navigateur selon les niveaux de metier."""
     return (f'data-craft="{e["item_id"]}" data-sell="{e.get("vente_net_u", 0)}" data-cost="{e["achats_u"]}" '
-            f'data-day="{e["ma_part_j"]}"')
+            f'data-day="{e["ma_part_j"]}"' + (f' data-brut="{e["brut_u"]}"' if e.get("brut_u") is not None else ""))
 
 
 def planning_tab(cfg, my):
@@ -282,7 +286,7 @@ def planning_tab(cfg, my):
     targets = []
     for t in my["targets"]:
         uses = [dict(o=u["objet"], i=u["item_id"], n=u["net_par_ressource"], cap=u["ressources_j"], per=round(u["per_u"], 4),
-                     v=1 if u.get("via") else 0,
+                     v=1 if u.get("via") else 0, b=1 if u.get("brut") else 0,
                      lot=u.get("lot")) for u in t["usages"] if u["fiable"] and u["ressources_j"]]
         if uses:
             avg = sum(u["n"] * u["cap"] for u in uses) / sum(u["cap"] for u in uses)
@@ -291,7 +295,8 @@ def planning_tab(cfg, my):
     best = f"{hours['best']}h – {(hours['best'] + 3) % 24}h" if hours else "21h – 0h"
     data = json.dumps(dict(targets=targets, chains=my.get("chains") or [], best=best), ensure_ascii=False,
                       separators=(",", ":"))
-    return ("<h2>Planning de la journée</h2><p class='lead'>Deux façons de jouer ta récolte (jamais vendue brute). "
+    return ("<h2>Planning de la journée</h2><p class='lead'>Deux façons de jouer ta récolte (la transformer, ou la vendre "
+            "brute quand le brut rapporte plus). "
             "Les calculs utilisent tes niveaux de métier (🛠️ Mes métiers), ta récolte par heure (🌲 Récolte, "
             "100 par défaut) et ton stock (🧮 Mon stock).</p>"
             "<h3>🛡️ Planning safe : récolter ce qui rapporte et se vend</h3>"
@@ -388,7 +393,9 @@ def table_crafts(ctx, rows, tid, harvest, compare=None):
             _th("Réussite", "Chance de réussite selon tes niveaux (onglet Mes métiers) ; 🔒 = niveau insuffisant", True) +
             _th("Vendre à", "Prix de vente conseillé (réaliste)", True) +
             _th("Net/u", "Bénéfice par unité après la taxe de l’HDV (10 %) (et échecs, selon tes niveaux)", True) +
-            (_th("Net/ressource", "Bénéfice par ressource récoltée utilisée", True) if harvest
+            (_th("Net/ressource", "Bénéfice par ressource récoltée utilisée", True) +
+             _th("vs brut/u", "Net/u − ce que les mêmes ressources rapporteraient vendues brutes (prix réaliste, après "
+                 "taxe ; échecs compris selon tes niveaux) : négatif = vends plutôt le brut", True) if harvest
              else _th("Marge", "Bénéfice / coût", True)) +
             _th("Ventes/j", "Ta part (20 %) des ventes mesurées sur ton serveur : annonces disparues sur 24 h × taille "
                 "habituelle des annonces", True) +
@@ -404,11 +411,12 @@ def table_crafts(ctx, rows, tid, harvest, compare=None):
             _th("Statut") + "</tr>")
     good = [e for e in rows if is_good(e)]
     bad = [e for e in rows if not is_good(e)]
-    ncol = 18 if not harvest else 16
+    ncol = 18 if not harvest else 17
     body = []
     for i, e in enumerate(good + bad, 1):
         if i == len(good) + 1 and bad:
-            body.append(f'<tr class="grp"><td colspan="{ncol}">À vérifier ou à perte ({len(bad)})</td></tr>')
+            body.append(f'<tr class="grp"><td colspan="{ncol}">À vérifier, à perte{" ou moins bien que le brut" if harvest else ""} '
+                        f'({len(bad)})</td></tr>')
         if harvest:
             res = '<div class="chips">' + "".join(
                 f'<span class="chip">{ctx.icon(name=k)}{esc(k)} ×{v:g}{ctx.mapbtn(k)}</span>' for k, v in e["ressources"].items()) + "</div>"
@@ -416,7 +424,7 @@ def table_crafts(ctx, rows, tid, harvest, compare=None):
                 res += '<div class="sub">+ ' + esc("; ".join(x for x in e["ingredients"] if "récolte" not in x)) + "</div>"
         else:
             res = '<div class="ing">' + "".join(f"<div>{esc(x)}</div>" for x in e["ingredients"]) + "</div>"
-        cols = (_num_td(e["net_par_ressource"]) if harvest else
+        cols = (_num_td(e["net_par_ressource"]) + _num_td(e.get("vs_brut_u"), "cvb") if harvest else
                 f'<td class="n {_cls(e["marge"])}" data-v="{e["marge"] or 0}">{(e["marge"] or 0):+.0%}</td>')
         body.append(
             f"<tr class='{'' if is_good(e) else 'dim'} {cmp_class(compare, e)}' {craft_attrs(e)}><td class='n rank'>{i}</td>"
@@ -436,6 +444,13 @@ def table_crafts(ctx, rows, tid, harvest, compare=None):
     return toolbar(tid) + f'<div class="wrap"><table id="{tid}"><thead>{head}</thead><tbody>{"".join(body)}</tbody></table></div>'
 
 
+def use_name(u):
+    """Usage d'une ressource : un craft, ou la vente du brut (apres transmutation de l'Od le cas echeant)."""
+    if u.get("brut"):
+        return "💰 Vendre brut" + (f" (après transmutation en {u['via']})" if u.get("via") else "")
+    return u["objet"]
+
+
 def table_targets(ctx, targets):
     body = []
     for t in targets:
@@ -443,7 +458,7 @@ def table_targets(ctx, targets):
         ok = [u for u in t["usages"] if u["fiable"] and u["ressources_j"]]
         avg = round(sum(u["net_par_ressource"] * u["ressources_j"] for u in ok) / sum(u["ressources_j"] for u in ok)) if ok else 0
         uses = '<div class="uses">' + "".join(
-            f"<div>{esc(u['objet'])} : <b class='{_cls(u['net_par_ressource'])}'>{fmt(u['net_par_ressource'])}</b> / ressource"
+            f"<div>{esc(use_name(u))} : <b class='{_cls(u['net_par_ressource'])}'>{fmt(u['net_par_ressource'])}</b> / ressource"
             + (f" <span class='mut'>· ~{fmt(u['ressources_j'])} ressources/j</span>" if u["fiable"] else "")
             + ("" if u["fiable"] else f" <span class='badge b-warn'>⚠ {esc('; '.join(u['flags']) or 'à perte')}</span>")
             + "</div>" for u in t["usages"]) + "</div>"
@@ -458,12 +473,14 @@ def table_targets(ctx, targets):
                     f"{_num_td(t['prix_brut'], color=False, x=True)}</tr>")
     head = ("<tr>" + _th("Ressource")
             + _th("Récolte / heure", "Ce que tu récoltes en une heure (100 par défaut) : modifiable, enregistré dans ce navigateur")
-            + _th("Kinah / heure", "Récolte par heure × gain moyen par ressource, la récolte étant répartie sur les crafts "
-                  "fiables selon ce que chacun absorbe (après frais)", True)
+            + _th("Kinah / heure", "Récolte par heure × gain moyen par ressource, la récolte étant répartie sur les usages "
+                  "fiables (crafts et vente du brut) selon ce que chacun absorbe (après frais)", True)
             + _th("Heures / jour", "Heures de récolte avant de saturer ce que le marché absorbe par jour", True)
-            + _th("Meilleur net / ressource", "Ce que te rapporte chaque ressource récoltée dans son meilleur craft fiable", True)
-            + _th("Que fabriquer avec") + _th("Utilisable/j", "Ressources que le marché absorbe par jour via les crafts fiables", True)
-            + _th("Prix brut HDV", "Prix du brut en vente (non vendable pour toi : toujours transformer)", True, True)
+            + _th("Meilleur net / ressource", "Ce que te rapporte chaque ressource récoltée dans son meilleur usage fiable "
+                  "(craft ou vente du brut)", True)
+            + _th("Qu’en faire") + _th("Utilisable/j", "Ressources que le marché absorbe par jour (crafts fiables et vente "
+                                        "du brut)", True)
+            + _th("Prix brut HDV", "Prix le plus bas du brut en vente", True, True)
             + "</tr>")
     return (toolbar("targets") + f'<div class="wrap"><table id="targets"><thead>{head}</thead>'
             f'<tbody>{"".join(body)}</tbody></table></div>')
@@ -541,22 +558,22 @@ def stock_calc(ctx, cfg, harvest, names, transmute=None):
     crafts = [e for e in harvest if e["net_u"] > 0 and e["ressources_u"]]
     crafts.sort(key=lambda e: (bool(e["flags"]), -(e["net_u"] / e["ressources_u"])))
     data = [dict(o=e["objet"], i=e["item_id"], s=e.get("vente_net_u"), a=e["achats_u"],
-                 n=e["net_u"], p=e["prix_real"], c=e["ma_part_j"], l=e.get("lot_vente"),
+                 n=e["net_u"], p=e["prix_real"], c=e["ma_part_j"], l=e.get("lot_vente"), b=1 if e.get("brut") else 0,
                  f="; ".join(e["flags"]), r={k: round(v, 4) for k, v in e["ressources"].items()}) for e in crafts]
     names = sorted(set(names) | {k for e in crafts for k in e["ressources"]})
     preset = cfg.get("harvest_per_day") or {}
     inputs = "".join(f'<label class="sk">{ctx.icon(name=n)}<span>{esc(n)}</span><input type="number" min="0" step="1" '
                      f'inputmode="numeric" data-r="{esc(n)}" value="{esc(preset.get(n, ""))}" oninput="calc()"></label>'
                      for n in names)
-    head = (f'<tr>{_th("Craft")}{_th("Quantité", None, True)}{_th("Vendre à", None, True)}{_th("Net/u", None, True)}'
+    head = (f'<tr>{_th("Craft ou vente du brut")}{_th("Quantité", None, True)}{_th("Vendre à", None, True)}{_th("Net/u", None, True)}'
             f'{_th("Kinah", None, True)}{_th("Mettre en vente", "Taille habituelle des lots vendus sur le marché")}'
             f'{_th("Ressources utilisées")}</tr>')
-    return ('<p class="lead">Entre les ressources que tu possèdes : la page choisit les crafts qui rapportent le plus '
-            'par ressource et calcule le gain. Tes quantités restent enregistrées dans ce navigateur.</p>'
+    return ('<p class="lead">Entre les ressources que tu possèdes : la page choisit, pour chaque ressource, le craft ou la '
+            'vente du brut qui rapporte le plus et calcule le gain. Tes quantités restent enregistrées dans ce navigateur.</p>'
             '<div class="toolbar"><label class="tg"><input type="checkbox" id="cap" checked onchange="calc()"> '
             'Ne pas dépasser ce que le marché absorbe en un jour</label>'
             '<label class="tg"><input type="checkbox" id="risky" onchange="calc()"> '
-            'Inclure les crafts douteux (volume inconnu, prix suspect)</label>'
+            'Inclure les usages douteux (volume inconnu, prix suspect)</label>'
             '<button class="mapbtn" onclick="clearStock()">Tout effacer</button></div>'
             '<div class="card" id="sdrop" style="margin:0 0 12px" ondragover="event.preventDefault()" '
             'ondrop="event.preventDefault();scanFile(event.dataTransfer.files[0])"><b>📷 Lire une capture de ta réserve</b>'
@@ -665,7 +682,8 @@ def table_flips(ctx, flips, cfg):
             + _th("Relevés", "Prix relevés sur 3 j", True, True) + "</tr>")
     lead = ("<p class='lead'>Acheter un item quand il passe en bas de sa fourchette de prix habituelle, le revendre "
             "au prix médian, sans rien fabriquer. Calcul sur les 3 derniers jours ; les items dont le prix monte ou "
-            "baisse durablement, le brut (invendable) et les items sans volume de vente connu sont écartés. "
+            "baisse durablement et les items sans volume de vente connu sont écartés. Le brut est compris, sur ses prix "
+            f"depuis le {esc(cfg.get('brut_vendable_depuis') or '?')} (avant, il n’était pas vendable). "
             "🛡️ Sûreté : 🟢 marché fluide, 🟠 prudence, 🔴 stock qui s’accumule (détail au survol). "
             f"Alerte Discord quand un item passe sous son prix d’achat cible (marge ≥ {a['flip_min_margin']:.0%}, "
             f"profit ≥ {fmt(a['flip_min_profit_day'])}/j).</p>")
@@ -701,12 +719,15 @@ def table_uniques(ctx, uniques, cfg):
             + f'<div class="wrap"><table id="uniques"><thead>{head}</thead><tbody>{"".join(body)}</tbody></table></div>')
 
 
+BRUT_BADGE = ' <span class="badge b-mut">💰 vendu brut</span>'
+
+
 def table_plan(plan):
     if not plan:
         return ('<div class="card"><b>Pas encore de plan.</b><span class="mut">Renseigne <code>harvest_per_day</code> dans '
                 '<code>config.json</code>, par exemple <code>{"Bois d\'Asvata": 300, "Azpha": 150}</code>, '
                 'pour obtenir ton plan de production du jour.</span></div>')
-    body = "".join(f"<tr><td>{esc(p['objet'])}</td>{_num_td(p['quantite_j'], color=False)}{_num_td(p['prix_conseille'], color=False)}"
+    body = "".join(f"<tr><td>{esc(p['objet'])}{BRUT_BADGE if p.get('brut') else ''}</td>{_num_td(p['quantite_j'], color=False)}{_num_td(p['prix_conseille'], color=False)}"
                    f"{_num_td(p['net_u'])}{_num_td(p['kinah_j'], 'big', k=True)}<td>{lots_txt(p)}</td><td class='sub'>"
                    f"{esc(', '.join(f'{k} ×{v}' for k, v in p['ressources'].items()))}</td></tr>" for p in plan)
     total = sum(p["kinah_j"] for p in plan)
@@ -842,9 +863,9 @@ def home(con, cfg, ctx, my, sname):
 
     # 2. quoi recolter
     rows = "".join(
-        f"<tr><td>{ctx.label(name=t['ressource'])}</td><td>{esc(t['usages'][0]['objet'])}</td>"
+        f"<tr><td>{ctx.label(name=t['ressource'])}</td><td>{esc(use_name(t['usages'][0]))}</td>"
         f"{_num_td(t['meilleur'], 'big')}{_num_td(t['absorbable_j'], color=False)}</tr>" for t in targets)
-    gather_html = (f'<div class="wrap"><table><thead><tr>{_th("Ressource")}{_th("La transformer en")}'
+    gather_html = (f'<div class="wrap"><table><thead><tr>{_th("Ressource")}{_th("Qu’en faire")}'
                    f'{_th("Gain / ressource", None, True)}{_th("Utilisable/j", "Ressources que le marché absorbe par jour", True)}'
                    f'</tr></thead><tbody>{rows}</tbody></table></div>')
 
@@ -857,9 +878,8 @@ def home(con, cfg, ctx, my, sname):
                     f'{_th("Vendre à", None, True)}{_th("Net/u", None, True)}{_th("Profit/j", None, True)}{_th("Sûreté")}</tr></thead>'
                     f'<tbody>{brow}</tbody></table></div>')
     else:
-        buy_html = ('<div class="card"><span class="mut">Aucun achat → craft → revente n’est sûr aux prix actuels '
-                    '(les prix de la restriction anti-bot rendent les ingrédients trop chers). Tu seras alerté sur Discord '
-                    'dès qu’une opportunité apparaît.</span></div>')
+        buy_html = ('<div class="card"><span class="mut">Aucun achat → craft → revente n’est sûr aux prix actuels. '
+                    'Tu seras alerté sur Discord dès qu’une opportunité apparaît.</span></div>')
 
     spikes = my.get("spikes") or []
     if spikes:
@@ -944,15 +964,15 @@ def journal_html(ctx, cfg, my):
         '</tr></thead><tbody id="jopen"></tbody></table></div>'
         '<div class="card" style="margin-top:10px"><b>📦 J’ai posté</b><div class="toolbar" style="margin:0;flex-wrap:wrap;gap:6px">'
         + '<select id="js" class="search" style="width:auto;display:inline-block" onchange="jCostFill()">'
-        '<option value="recolte">🌲 Récolte → craft</option><option value="achat">🛒 Achat → craft</option>'
-        '<option value="ravit">📦 Ravitaillement</option>'
+        '<option value="recolte">🌲 Récolte → craft</option><option value="brut">💰 Récolte vendue brute</option>'
+        '<option value="achat">🛒 Achat → craft</option><option value="ravit">📦 Ravitaillement</option>'
         '<option value="flip">🔁 Flip</option></select>'
         + inp("jo", "Objet (nom exact)", 260, "text", 'list="jnames" onchange="jCostFill(1)"') + f'<datalist id="jnames">{names}</datalist>'
         + inp("jq", "Quantité", 90) + inp("jp", "Prix /u", 110) + inp("jc", "Coût /u (facultatif)", 150)
         + inp("jn", "Nb d’annonces", 120, extra='value="1" min="1"')
         + '<button class="mapbtn" onclick="jPost()">Ajouter</button></div>'
         '<span class="sub">Origine : proposée selon l’objet (craft de ta récolte ou non), à changer si besoin. Coût /u proposé : '
-        '0 pour ta récolte, l’estimation du site (ingrédients achetés) pour l’achat → craft, le total du craft de l’onglet Ravitaillement pour le ravitaillement, ton prix d’achat à saisir pour '
+        '0 pour ta récolte (craftée ou vendue brute), l’estimation du site (ingrédients achetés) pour l’achat → craft, le total du craft de l’onglet Ravitaillement pour le ravitaillement, ton prix d’achat à saisir pour '
         'un flip. Nb d’annonces : pour poster plusieurs lots identiques d’un coup (ex. 5 annonces de 30).</span></div>'
         '<div class="card" style="margin-top:10px" ondragover="event.preventDefault()" '
         'ondrop="event.preventDefault();jScan(event.dataTransfer.files[0])"><b>📷 Ou colle une capture (Ctrl + V sur cet onglet)</b>'
@@ -965,8 +985,8 @@ def journal_html(ctx, cfg, my):
         'onchange="jRender()"><option value="1">Dernières 24 h</option><option value="7" selected>7 derniers jours</option>'
         '<option value="30">30 derniers jours</option><option value="0">Depuis le début</option></select>'
         '<select id="jsrc" class="search" style="width:auto" onchange="jRender()"><option value="">Toutes les activités</option>'
-        '<option value="recolte">🌲 Récolte → craft</option><option value="achat">🛒 Achat → craft</option>'
-        '<option value="ravit">📦 Ravitaillement</option>'
+        '<option value="recolte">🌲 Récolte → craft</option><option value="brut">💰 Récolte vendue brute</option>'
+        '<option value="achat">🛒 Achat → craft</option><option value="ravit">📦 Ravitaillement</option>'
         '<option value="flip">🔁 Flip</option></select></div>'
         '<div class="wrap" style="margin-bottom:10px"><table><thead><tr>'
         f'{_th("Activité")}{_th("Ventes", None, True)}{_th("Unités", None, True)}{_th("Reçu", "Après taxe", True)}'
@@ -995,7 +1015,8 @@ def journal_html(ctx, cfg, my):
         f'<script>window.JOURNAL={json.dumps(j, ensure_ascii=False)};'
         f'window.JCFG={json.dumps(dict(tax=cfg["fees"], repo=cfg.get("_github_repo")))};'
         f'window.JFLOOR={json.dumps(floor, ensure_ascii=False)};'
-        f'window.HARVEST_ITEMS={json.dumps(sorted({e["objet"] for e in my["harvest"]}), ensure_ascii=False)};</script>')
+        f'window.HARVEST_ITEMS={json.dumps(sorted({e["objet"] for e in my["harvest"]}), ensure_ascii=False)};'
+        f'window.RAW_ITEMS={json.dumps(m.gather_names(), ensure_ascii=False)};</script>')
 
 
 def ingredient_tab(cfg, my):
@@ -1277,8 +1298,9 @@ def build(con, cfg, results):
         sep()
         add("planning", "📅 Planning", planning_tab(cfg, my))
         add("harvest", "🌲 Récolte",
-            "<h2>Récolte → craft → vente</h2><p class='lead'>Ta récolte est gratuite et toujours transformée "
-            "(jamais vendue brute). Deux façons de voir les mêmes calculs.</p>"
+            "<h2>Récolte → craft ou vente du brut</h2><p class='lead'>Ta récolte ne coûte rien, mais chaque ressource vaut "
+            "au moins ce qu’elle rapporte vendue brute : un craft n’est intéressant que s’il fait mieux (colonne "
+            "« vs brut/u »). Deux façons de voir les mêmes calculs.</p>"
             '<div class="seg"><button class="on" data-v="res" onclick="segShow(this,\'hres\')">Par ressource</button>'
             '<button data-v="craft" onclick="segShow(this,\'hcraft\')">Par craft</button></div>'
             "<div id='hres' class='segp'><p class='lead'>Indique ce que tu récoltes par heure pour chaque ressource "
@@ -1304,7 +1326,8 @@ def build(con, cfg, results):
         add("flips", "🔁 Flip", "<h2>Achat → revente (sans craft)</h2>" + table_flips(ctx, my["flips"], cfg))
         add("uniques", "💎 Uniques", "<h2>Équipements Unique : prix bradés</h2>" + table_uniques(ctx, my["uniques"], cfg))
         add("metiersTab", "🛠️ Mes métiers", metiers_tab(con, my))
-        add("plan", "🧮 Mon stock", "<h2>Mon stock → quoi fabriquer</h2>" + stock_calc(ctx, cfg, my["harvest"], my["market"].gather_names(),
+        add("plan", "🧮 Mon stock", "<h2>Mon stock → quoi fabriquer ou vendre brut</h2>"
+            + stock_calc(ctx, cfg, my["harvest"] + (my.get("raw") or []), my["market"].gather_names(),
                          {t: my["market"].items[s]["base_name"] for t, s in my["market"].transmute.items()})
             + ("<h3>Plan quotidien (config)</h3>" + table_plan(my["plan"]) if my["plan"] else ""))
         add("gains", "💰 Mes ventes", gains_tab(ctx, cfg, my))

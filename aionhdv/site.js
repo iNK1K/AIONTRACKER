@@ -36,13 +36,13 @@ function calc(){const box=document.getElementById('stock');if(!box||!window.CRAF
    if(want>0&&T[k]){left[T[k]]-=want;c.trans=(c.trans||0)+want;c.transFrom=T[k]}});tot+=n*c.n;rows.push([c,n])}
  document.getElementById('stot').textContent=rows.length?kf(tot):'–';
  document.querySelector('#splan tbody').innerHTML=rows.length?rows.map(([c,n])=>{const l=c.l?Math.min(c.l,n):0;
-  return `<tr><td><span class="nm" title="Cliquer pour copier">${escH(c.o)}</span>${c.f?`<div><span class="badge b-warn">⚠ ${escH(c.f)}</span></div>`:''}</td><td class="n">${NF.format(n)}</td>`
+  return `<tr><td><span class="nm" title="Cliquer pour copier">${escH(c.o)}</span>${c.b?' <span class="badge b-mut">💰 vendre brut</span>':''}${c.f?`<div><span class="badge b-warn">⚠ ${escH(c.f)}</span></div>`:''}</td><td class="n">${NF.format(n)}</td>`
   +`<td class="n">${NF.format(c.p)}</td><td class="n pos">${NF.format(c.n)}</td><td class="n big pos">${kf(n*c.n)}</td>`
   +`<td>${l?Math.max(1,Math.round(n/l))+' annonce(s) de '+NF.format(l):'–'}</td>`
   +`<td class="sub">${escH(Object.entries(c.r).map(([k,q])=>k+' ×'+NF.format(Math.ceil(n*q))).join(', ')+(c.trans?' (dont '+NF.format(Math.ceil(c.trans))+' '+c.transFrom+' transmuté)':''))}</td></tr>`}).join('')
   :'<tr><td colspan="7" class="mut">Entre tes quantités de ressources ci-dessus.</td></tr>';
  const rest=Object.entries(left).filter(([k,v])=>v>=1).map(([k,v])=>k+' ×'+NF.format(Math.floor(v)));
- document.getElementById('sleft').textContent=rest.length?'Ressources non utilisées (aucun craft rentable ou limite du marché atteinte) : '+rest.join(', '):''}
+ document.getElementById('sleft').textContent=rest.length?'Ressources non utilisées (aucun usage rentable ou limite du marché atteinte) : '+rest.join(', '):''}
 function openChart(id,name){document.getElementById('ctitle').textContent=name;document.getElementById('cmodal').classList.add('on');
  const go=()=>drawChart(String(id));if(window.PRICES)return go();const sc=document.createElement('script');sc.src='prices.js';sc.onload=go;
  sc.onerror=()=>{document.getElementById('cbody').textContent='Historique indisponible.'};document.head.appendChild(sc)}
@@ -166,14 +166,14 @@ function jForget(){try{localStorage.removeItem('ghtoken')}catch(e){}document.get
 // ---------------------------------------------------------------- actions
 const lost=(p,q)=>Math.floor(JC().tax*p*q),net=(p,q)=>Math.floor(p*q*(1-JC().tax));
 function jLot(id){return J.lots.find(l=>l.id===id)}
-// origine d'une annonce : recolte -> craft (cout 0), achat -> craft (cout = ingredients achetes), flip (cout = prix d'achat)
-const JSRC={recolte:'🌲 Récolte → craft',achat:'🛒 Achat → craft',ravit:'📦 Ravitaillement',flip:'🔁 Flip'};
+// origine d'une annonce : recolte -> craft ou vendue brute (cout 0), achat -> craft (cout = ingredients achetes), flip (cout = prix d'achat)
+const JSRC={recolte:'🌲 Récolte → craft',brut:'💰 Récolte vendue brute',achat:'🛒 Achat → craft',ravit:'📦 Ravitaillement',flip:'🔁 Flip'};
 // objets de ma derniere capture de ravitaillement (onglet Ravitaillement) : origine proposee « Ravitaillement »
 function jSupplyNames(){const d=supplyLoad(),by={};if(!d)return [];(window.SUPPLY||[]).forEach(x=>(by[x.s]=by[x.s]||[]).push(x));
  return d.cards.flatMap(c=>c.items.flatMap(s=>(by[s]||[]).map(x=>x.n)))}
-const jSrcDefault=n=>jSupplyNames().includes(n)?'ravit':(window.HARVEST_ITEMS||[]).includes(n)?'recolte':'achat';
+const jSrcDefault=n=>jSupplyNames().includes(n)?'ravit':(window.RAW_ITEMS||[]).includes(n)?'brut':(window.HARVEST_ITEMS||[]).includes(n)?'recolte':'achat';
 // cout propose : ravitaillement = cout du craft de l'onglet Ravitaillement (option la moins chere, echecs compris), sinon comme l'achat -> craft
-const jCostFor=(src,n)=>{if(src==='recolte')return 0;if(src==='flip')return undefined;
+const jCostFor=(src,n)=>{if(src==='recolte'||src==='brut')return 0;if(src==='flip')return undefined;
  const sp=src==='ravit'&&(window.SUPPLY||[]).find(x=>x.n===n),e=sp&&sEval(sp);return e&&e.best?Math.round(e.best.per):(window.COSTS||{})[n]}
 const jSrcOpts=v=>Object.entries(JSRC).map(([k,t])=>'<option value="'+k+'"'+(k===v?' selected':'')+'>'+t+'</option>').join('');
 function jPost(){const g=id=>document.getElementById(id),objet=g('jo').value.trim(),q=+g('jq').value,p=+g('jp').value,n=Math.max(1,+g('jn').value||1);
@@ -251,8 +251,8 @@ function jRender(){if(!J)return;const box=document.getElementById('jopen');if(!b
     +' <span class="sub">corrige une erreur de saisie, sans frais (pour un vrai changement de prix en jeu, utilise 🔁 Relister)</span>'
    :k==='src'?'Origine <select id="jas" class="search" style="width:auto;display:inline-block" onchange="jSrcCost(\''+l.id+'\')">'+jSrcOpts(s.src||jSrcDefault(l.objet))+'</select> '
     +'coût '+inp('c',(()=>{const src=s.src||jSrcDefault(l.objet),c=jCostFor(src,l.objet);   // 0 hors recolte = cout oublie
-      return (s.cout==null||(s.cout===0&&src!=='recolte'))&&c!=null?c:(s.cout??'')})(),110)+' /u '+go
-    +' <span class="sub">le coût suit l’origine choisie : 0 pour ta récolte, ingrédients achetés pour l’achat → craft et le ravitaillement, ton prix d’achat pour un flip</span>'
+      return (s.cout==null||(s.cout===0&&c!==0))&&c!=null?c:(s.cout??'')})(),110)+' /u '+go
+    +' <span class="sub">le coût suit l’origine choisie : 0 pour ta récolte (craftée ou vendue brute), ingrédients achetés pour l’achat → craft et le ravitaillement, ton prix d’achat pour un flip</span>'
    :'Coût de revient '+inp('c',s.cout??'',110)+' /u '+go;
   return row+'<tr><td colspan="9" style="background:var(--card2)">'+f2+'</td></tr>'}).join('')
   :'<tr><td colspan="9" class="mut">Aucune annonce en cours : ajoute-les ci-dessous ou colle une capture de ta fenêtre des ventes.</td></tr>';
@@ -322,7 +322,10 @@ function applyLevels(){const st=lvState();
   const sell=+el.dataset.sell,cost=+el.dataset.cost,day=+el.dataset.day;
   const net=Math.round(sell-(st.lose?cost/info.rate:cost)),cn=el.querySelector('.cnet'),cp=el.querySelector('.cprof');
   if(cn){cn.textContent=NF.format(net);cn.dataset.v=net;cn.classList.toggle('pos',net>0);cn.classList.toggle('neg',net<=0)}
-  if(cp){const pr=net*day;cp.textContent=kf(pr);cp.dataset.v=pr;cp.classList.toggle('pos',pr>0);cp.classList.toggle('neg',pr<=0)}});
+  if(cp){const pr=net*day;cp.textContent=kf(pr);cp.dataset.v=pr;cp.classList.toggle('pos',pr>0);cp.classList.toggle('neg',pr<=0)}
+  // face a la vente du brut : un echec fait aussi perdre les ressources (1 / reussite par craft reussi)
+  const vb=el.querySelector('.cvb');if(vb&&el.dataset.brut!=null){const d=Math.round(net-(st.lose?+el.dataset.brut/info.rate:+el.dataset.brut));
+   vb.textContent=NF.format(d);vb.dataset.v=d;vb.classList.toggle('pos',d>0);vb.classList.toggle('neg',d<=0)}});
  calc();renderMetiers();todoBuys();if(window.PLANDATA){planSafe();planGamble()}if(window.SUPPLY)supplyRender();if(window.INGDATA)ingRender()}
 // « A faire maintenant » : achats -> craft que mes niveaux permettent (metier non renseigne = garde), 2 au plus,
 // avec le taux de reussite quand le niveau est connu
@@ -378,32 +381,32 @@ function planSafe(save){const box=document.getElementById('psafe');if(!box||!win
  let left=+hEl.value||0;const R=rates(),st=lvState(),slots=[];
  PLANDATA.targets.forEach(t=>{const rate=R[t.r]!=null?R[t.r]:100;if(!rate)return;
   t.u.forEach(u=>{const info=craftInfo(u.i);if(info&&!info.ok)return;const p=info&&info.rate?info.rate:1;
-   slots.push({r:t.r,rate:rate,o:u.o,i:u.i,v:u.v,n:u.n*(st.lose?p:1),cap:u.cap,per:u.per/(st.lose?p:1),lot:u.lot})})});
+   slots.push({r:t.r,rate:rate,o:u.o,i:u.i,v:u.v,b:u.b,n:u.n*(st.lose?p:1),cap:u.cap,per:u.per/(st.lose?p:1),lot:u.lot})})});
  // a egalite : la ressource elle-meme avant l'Od transmute
  slots.sort((a,b)=>(b.n*b.rate-a.n*a.rate)||(a.v-b.v));const plan={};let tot=0;
  const used={};                                     // capacite deja prise par craft (partagee Od / ressource)
  for(const s of slots){if(left<=0)break;const room=s.cap-(used[s.i]||0);const h=Math.min(left,room/s.rate);if(h<=0.05)continue;left-=h;
   const res=h*s.rate,units=Math.floor(res/s.per);used[s.i]=(used[s.i]||0)+res;tot+=units*s.per*s.n;
   (plan[s.r]=plan[s.r]||{h:0,res:0,k:0,c:[]});plan[s.r].h+=h;plan[s.r].res+=res;plan[s.r].k+=units*s.per*s.n;
-  plan[s.r].c.push({o:s.o,units:units,lot:s.lot,k:units*s.per*s.n})}
+  plan[s.r].c.push({o:s.o,b:s.b,units:units,lot:s.lot,k:units*s.per*s.n})}
  const rows=Object.entries(plan).sort((a,b)=>b[1].k-a[1].k);
  window.SAFEPLAN={tot:tot,hours:(+hEl.value||0)-left,rows:rows};
  const tp=document.getElementById('todo-plan');
  if(tp){const crafts=rows.flatMap(([r,p])=>p.c.filter(c=>c.units>0));
   tp.innerHTML=rows.length?'🌲 Récolter '+rows.slice(0,2).map(([r,p])=>'<b>'+escH(r)+'</b> '+fmtH(p.h)).join(' puis ')
-   +' → fabriquer '+crafts.slice(0,3).map(c=>'<b>'+NF.format(c.units)+'</b> × '+escH(c.o)).join(', ')
+   +' → '+crafts.slice(0,3).map(c=>(c.b?'vendre brut ':'fabriquer ')+'<b>'+NF.format(c.units)+'</b> × '+escH(c.o)).join(', ')
    +' (~<b class="pos">'+kf(tot)+'</b>). 🕘 Mettre en vente entre <b>'+PLANDATA.best+'</b>'
    +(crafts.some(c=>c.lot)?' : '+crafts.slice(0,3).filter(c=>c.lot).map(c=>Math.max(1,Math.round(c.units/Math.min(c.lot,c.units)))+' annonce(s) de '+NF.format(Math.min(c.lot,c.units))+' '+escH(c.o)).join(', '):'')+'.'
-   :'Plan du jour : aucun craft rentable avec ton temps de jeu (Planning).'}
+   :'Plan du jour : rien de rentable avec ton temps de jeu (Planning).'}
  const kp=document.getElementById('kpot');if(kp){kp.textContent=kf(tot);document.getElementById('kpots').textContent=
   'en '+String(+hEl.value||0).replace('.',',')+' h de jeu (Planning safe, récolte '+(Object.keys(R).length?'saisie':'100/h par défaut')+')'}
- if(!rows.length){box.innerHTML='<p class="mut">Aucun craft rentable à planifier.</p>';return}
+ if(!rows.length){box.innerHTML='<p class="mut">Rien de rentable à planifier.</p>';return}
 
  box.innerHTML='<div class="kpis"><div class="kpi"><div class="l">Gain estimé</div><div class="v pos">'+kf(tot)+'</div><div class="s">kinah, une fois tout vendu</div></div>'
   +'<div class="kpi"><div class="l">Temps utilisé</div><div class="v">'+fmtH((+hEl.value||0)-left)+'</div><div class="s">'+(left>0.05?'au-delà, les marchés sont saturés':'de récolte')+'</div></div>'
   +'<div class="kpi"><div class="l">Mise en vente</div><div class="v" style="font-size:20px">'+PLANDATA.best+'</div><div class="s">meilleur moment pour poster</div></div></div>'
   +'<div class="uses">'+rows.map(([r,p],k)=>`<div class="card" style="padding:12px 16px"><b>${k+1}. Récolter <span class="nm" title="Cliquer pour copier">${escH(r)}</span> pendant ${fmtH(p.h)}</b> <span class="sub">(≈ ${NF.format(Math.round(p.res))} ressources)</span>`
-   +p.c.filter(c=>c.units>0).map(c=>`<div class="row"><span>→ fabriquer <b>${NF.format(c.units)}</b> × <span class="nm" title="Cliquer pour copier">${escH(c.o)}</span>${c.lot?' · '+Math.max(1,Math.round(c.units/Math.min(c.lot,c.units)))+' annonce(s) de '+NF.format(Math.min(c.lot,c.units)):''}</span><b class="pos">${kf(c.k)}</b></div>`).join('')+'</div>').join('')+'</div>'
+   +p.c.filter(c=>c.units>0).map(c=>`<div class="row"><span>→ ${c.b?'vendre brut':'fabriquer'} <b>${NF.format(c.units)}</b> × <span class="nm" title="Cliquer pour copier">${escH(c.o)}</span>${c.lot?' · '+Math.max(1,Math.round(c.units/Math.min(c.lot,c.units)))+' annonce(s) de '+NF.format(Math.min(c.lot,c.units)):''}</span><b class="pos">${kf(c.k)}</b></div>`).join('')+'</div>').join('')+'</div>'
   +(Object.keys(R).length?'':'<p class="sub">Récolte par heure : 100 par défaut pour chaque ressource ; indique tes vraies valeurs dans « 🌲 Récolte ».</p>')}
 function planGamble(save){const box=document.getElementById('pgamble');if(!box||!window.PLANDATA)return;
  const cEl=document.getElementById('pcombo'),oEl=document.getElementById('popp');

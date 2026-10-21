@@ -39,6 +39,7 @@ Python est **portable** (`.runtime\python`) : rien n'est installé sur le systè
 - `news` : tableaux du site officiel suivis (`update_fr` notes de version, `notice_fr` avis), mots exclus, Reddit et ses mots-clés
 - `alerts.unique_ratio`, `unique_min_median`, `unique_min_samples` : seuils de l'alerte « Unique bradé »
 - `market_share`, `fees`, `npc_reagent_price`, seuils `alerts`
+- `brut_vendable_depuis` : date de la levée de la restriction sur le brut (prix et ventes du brut d'avant ignorés)
 
 ## Tâches planifiées (à activer quand tu veux)
 ```powershell
@@ -57,11 +58,12 @@ Python est **portable** (`.runtime\python`) : rien n'est installé sur le systè
 ## Méthode
 - Volume d'un craft sur ton serveur = ventes quotidiennes réelles de Kaisinel × ratio d'activité (ton serveur / Kaisinel, recalculé).
 - Prix réaliste = moyenne (prix affiché, prix de vente moyen de référence) si l'affiché est plus haut.
-- Profit/u = prix × (1 − 12 %) − ingrédients achetés − réactifs PNJ (400 par défaut).
+- Profit/u = prix × (1 − 10 %) − ingrédients achetés − réactifs PNJ (400 par défaut).
+- Brut vendable depuis la MaJ du 21/10/2026 : une ressource récoltée vaut au moins sa vente brute (prix réaliste − 10 %). La vente du brut est un usage comme un craft (Quoi récolter, Planning, Mon stock) ; « vs brut/u » = gain d'un craft face à la vente brute des mêmes ressources, un craft qui fait moins bien n'est plus conseillé. Prix et ventes du brut d'avant `brut_vendable_depuis` sont ignorés (autre régime de marché).
 - Profit/j = profit/u × ta part du marché (20 %).
 - Taille des lots = unités vendues par jour ÷ annonces disparues par jour (Kaisinel). Heures de vente = annonces disparues d'une heure à l'autre, tous items confondus (heure de Paris).
 - Unique bradé = prix actuel ≤ 60 % de la médiane des 7 derniers jours (au moins 12 relevés).
-- Flip = acheter au 1er quartile des prix plancher sur 3 j, revendre au prix médian, marge ≥ 10 % après frais ; brut, items sans volume et prix en tendance écartés.
+- Flip = acheter au 1er quartile des prix plancher sur 3 j, revendre au prix médian, marge ≥ 10 % après frais ; items sans volume et prix en tendance écartés (brut compris, sur son historique depuis le 21/10).
 - Notes de version : items cités surveillés 48 h, alerte si le prix bouge de ±20 %.
 
 ## Structure
