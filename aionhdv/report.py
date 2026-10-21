@@ -211,7 +211,7 @@ class Ctx:
                 f'onclick="openChart({iid},this.dataset.n)" data-n="{esc(name)}">📈</button>')
 
     def label(self, item_id=None, name=None, sub=None):
-        nm = name or (self.items.get(item_id) or {}).get("name") or item_id
+        nm = name or (self.items.get(item_id) or {}).get("name") or str(item_id)      # item pas encore au catalogue
         s = f'<div class="sub">{esc(sub)}</div>' if sub else ""
         return (f'<span class="it">{self.icon(item_id, name)}<span><span class="nm" title="Cliquer pour copier">{esc(nm)}</span>'
                 f'{self.chartbtn(item_id, nm)}{self.mapbtn(nm)}{s}</span></span>')
