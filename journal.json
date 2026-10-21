@@ -19,6 +19,7 @@
   {"id":"mvgozp1pqjjgs","objet":"Pièce de bois d'Asvata","src":"recolte","qte":28,"prix":8500,"cout":0,"ev":[{"id":"mvgozp1pnq1xo","t":"2026-10-20 15:01","type":"poste","prix":8500,"qte":28},{"id":"mvgozxvhix334","t":"2026-10-20 15:01","type":"vendu","prix":8500,"qte":28,"recu":214200}]},
   {"id":"mvh1kvvrh3d2d","objet":"Cuir résistant","src":"achat","qte":33,"prix":24998,"cout":12000,"ev":[{"id":"mvh1kvvrv6gdn","t":"2026-10-20 20:54","type":"poste","prix":24998,"qte":33},{"id":"mvh3qr0t166ty","t":"2026-10-20 21:54","type":"vendu","prix":24998,"qte":33,"recu":742440}]},
   {"id":"mvh43qypn258i","objet":"Cuir résistant","src":"achat","qte":43,"prix":24996,"cout":11250,"ev":[{"id":"mvh43qyp34vmn","t":"2026-10-20 22:04","type":"poste","prix":24996,"qte":43}]},
-  {"id":"mvh62pl0aabfv","objet":"Pièce de bois d'Asvata","src":"recolte","qte":69,"prix":13500,"cout":0,"ev":[{"id":"mvh62pl0gssgl","t":"2026-10-20 22:59","type":"poste","prix":13500,"qte":69},{"id":"mvh889e4k49bo","t":"2026-10-21 00:00","type":"vendu","prix":13500,"qte":69,"recu":838350}]}
+  {"id":"mvh62pl0aabfv","objet":"Pièce de bois d'Asvata","src":"recolte","qte":69,"prix":13500,"cout":0,"ev":[{"id":"mvh62pl0gssgl","t":"2026-10-20 22:59","type":"poste","prix":13500,"qte":69},{"id":"mvh889e4k49bo","t":"2026-10-21 00:00","type":"vendu","prix":13500,"qte":69,"recu":838350}]},
+  {"id":"mvi8sqx7z378d","objet":"Écaille dure de Balaur améliorée","src":"achat","qte":7,"prix":129989,"cout":40400,"ev":[{"id":"mvi8sqx7mew0p","t":"2026-10-21 17:03","type":"poste","prix":129989,"qte":7}]}
  ]
 }
