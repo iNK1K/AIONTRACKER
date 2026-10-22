@@ -9,7 +9,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from aionhdv.analysis import Market
+from aionhdv.analysis import Market, elyos_equivalent
 from aionhdv.config import from_journal, lot_state
 from aionhdv.db import SCHEMA
 
@@ -182,6 +182,17 @@ class Brut(unittest.TestCase):
         self.assertIn(("Planche", 450, False), uses)
         # l'Od se vend brut, ou se transmute en Bois vendu brut
         self.assertTrue(any(u["brut"] and u.get("via") == "Bois" for u in targets["Od commun"]["usages"]))
+
+
+class NouvelItem(unittest.TestCase):
+    def test_item_sans_nom(self):
+        """Item ajoute par aion2.exchange sans nom (nouvel objet) : ignore, sans planter l'analyse."""
+        con = make_db()
+        con.execute("INSERT INTO items (id, on_market) VALUES (99, 1)")
+        con.executemany("INSERT INTO quotes VALUES (?,?,?,?,?)", [(ME, 99, ts(h), 700, 3) for h in range(13)])
+        self.assertIsNone(elyos_equivalent(con, 99))
+        m = market(con)
+        m.sales(99)
 
 
 class Journal(unittest.TestCase):

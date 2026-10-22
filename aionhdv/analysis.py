@@ -25,7 +25,7 @@ def _dt(s):
 
 def elyos_equivalent(con, item_id):
     it = con.execute("SELECT base_name FROM items WHERE id = ?", (item_id,)).fetchone()
-    if not it:
+    if not it or not it["base_name"]:                   # item ajoute par aion2.exchange sans nom
         return None
     name = it["base_name"]
     for a, b in ELYOS_EQ:
