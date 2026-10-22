@@ -284,32 +284,39 @@ def opportunities_tab(cfg, my):
     """🎯 Opportunites : recolte (ressources blanches), achat -> craft et flip dans une seule liste. Chaque objet occupe
     une annonce (relistee a chaque vente) : le navigateur garde les meilleures selon les annonces libres (limite du jeu
     moins mes annonces en cours), les kinah disponibles et le temps de recolte (calcul dans site.js, oppRender)."""
+    m, share = my["market"], cfg["market_share"]
     rows = []
+
+    def row(e, t, **kw):
+        """ql : ma part des annonces vendues par jour ; lot : taille estimee (modifiable dans la page) ; dh : annonces
+        vendues par heure sur le marche, nl : annonces en vente (delai de vente) ; s, f : surete."""
+        sl, s = m.sales(e["item_id"]) or {}, e.get("surete") or {}
+        dh = (sl.get("listings") or 0) / 24
+        rows.append(dict(t=t, o=e["objet"], i=e["item_id"], n=e["net_u"], ql=round((sl.get("listings") or 0) * share, 2),
+                         lot=e.get("lot_vente") or 1, dh=round(dh, 3), nl=m.listings.get(e["item_id"], 0),
+                         s=s.get("score"), f=s.get("feu"), **kw))
     for e in my["harvest"] + (my.get("raw") or []):
         if e.get("rang") or not is_good(e) or not e["ma_part_j"]:
             continue                                   # procs non planifies ; usages douteux, a perte ou sans ventes
-        rows.append(dict(t="r", o=e["objet"], i=e["item_id"], n=e["net_u"], q=e["ma_part_j"], k=0, b=1 if e.get("brut") else 0,
-                         res={k: round(v, 3) for k, v in e["ressources"].items()}, p=e["prix_real"]))
+        row(e, "r", k=0, b=1 if e.get("brut") else 0, res={k: round(v, 3) for k, v in e["ressources"].items()},
+            p=e["prix_real"])
     for e in my["buy"]:
-        if not is_good(e) or not e["ma_part_j"]:
-            continue
-        s = e.get("surete") or {}
-        rows.append(dict(t="c", o=e["objet"], i=e["item_id"], n=e["net_u"], q=e["ma_part_j"], k=e["achats_u"],
-                         p=e["prix_real"], s=s.get("score"), f=s.get("feu"), ing=e["ingredients"][:4]))
+        if is_good(e) and e["ma_part_j"]:
+            row(e, "c", k=e["achats_u"], p=e["prix_real"], ing=e["ingredients"][:4])
     for f in my["flips"]:
-        if not f["ma_part_j"]:
-            continue
-        s = f.get("surete") or {}
-        rows.append(dict(t="f", o=f["objet"], i=f["item_id"], n=f["net_u"], q=f["ma_part_j"], k=f["achat_cible"],
-                         p=f["revente_cible"], s=s.get("score"), f=s.get("feu"), now=1 if f["acheter"] else 0))
+        if f["ma_part_j"]:
+            row(f, "f", k=f["achat_cible"], p=f["revente_cible"], now=1 if f["acheter"] else 0)
     data = json.dumps(dict(rows=rows, slots=cfg.get("max_listings", 10)), ensure_ascii=False, separators=(",", ":"))
     inp = ('style="width:{w}px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;background:var(--bg2);'
            'color:var(--txt);font:inherit"')
     return ("<h2>Opportunités du jour</h2><p class='lead'>Récolte, achat → craft et flip dans une seule liste. Une "
             "opportunité occupe <b>une annonce</b>, relistée à chaque vente : la page garde les meilleures selon tes "
             "annonces libres (limite du jeu moins tes annonces en cours du journal 💰), tes kinah disponibles et ton temps "
-            "de récolte. Kinah/annonce/j = ce que rapporte cette annonce en une journée (ta part des ventes mesurées, une "
-            "vente par annonce disparue). La réussite des crafts suit tes niveaux (🛠️ Mes métiers).</p>"
+            "de récolte. Ventes/j = ta part des annonces vendues × <b>taille d’annonce</b> (estimée par type d’objet : "
+            "corrige-la dans la colonne Lot si tu vois autre chose en jeu, c’est gardé dans ce navigateur). Délai de vente : "
+            "<b>devant</b> = tu postes au prix le plus bas, ton annonce part avec la prochaine vente ; <b>à la file</b> = "
+            "toutes les annonces déjà en vente partent avant la tienne. La réussite des crafts suit tes niveaux "
+            "(🛠️ Mes métiers).</p>"
             '<div class="toolbar">'
             f'<label class="tg">Kinah disponibles : <input type="number" id="obudget" min="0" step="100000" placeholder="illimité" '
             f'{inp.format(w=130)} oninput="oppRender(true)"></label>'
@@ -429,8 +436,8 @@ def table_crafts(ctx, rows, tid, harvest, compare=None):
              _th("vs brut/u", "Net/u − ce que les mêmes ressources rapporteraient vendues brutes (prix réaliste, après "
                  "taxe ; échecs compris selon tes niveaux) : négatif = vends plutôt le brut", True) if harvest
              else _th("Marge", "Bénéfice / coût", True)) +
-            _th("Ventes/j", "Ta part (20 %) des ventes mesurées sur ton serveur : annonces disparues sur 24 h (une vente "
-                "par annonce)", True) +
+            _th("Ventes/j", "Ta part (20 %) des ventes sur ton serveur, en unités : annonces disparues sur 24 h × taille "
+                "estimée des annonces (type d’objet, config lots)", True) +
             _th("Profit/j", "Ventes/j × Net/u", True) +
             _th("Annonces vendues/j", "Annonces disparues sur 24 h sur ton serveur (achats ; une annonce retirée compte aussi)",
                 True, True) +
@@ -1187,7 +1194,7 @@ def gains_tab(ctx, cfg, my):
                 f'<div class="s">l’outil suppose {pct(g["part_supposee"])}</div></div>'
                 f'<div class="kpi"><div class="l">Ventes réelles / prévues</div>'
                 f'<div class="v">{"×" + format(g["ratio"], ".2f").replace(".", ",") if g["ratio"] else "–"}</div>'
-                f'<div class="s">ventes par jour, objets vendus 3 fois ou plus</div></div></div>')
+                f'<div class="s">unités par jour, objets vendus 3 fois ou plus</div></div></div>')
         notes = []
         if g["n_cal"]:
             n = g["n_cal"]
@@ -1211,7 +1218,7 @@ def gains_tab(ctx, cfg, my):
             f"{_num_td(x['lots'], color=False)}{_num_td(x['unites'], color=False)}{_num_td(x['recu'], color=False, k=True)}"
             f"{_num_td(round(x['prix_u']), color=False)}{_num_td(round(x['prix_marche']) if x['prix_marche'] else None, color=False)}"
             f"{_num_td(round(x['marge_u']) if x['marge_u'] is not None else None)}"
-            f"{_num_td(round(x['achats_j'], 1) if x['achats_j'] else None, color=False)}"
+            f"{_num_td(round(x['unites_j'], 1) if x['unites_j'] else None, color=False)}"
             f"{_num_td(round(x['estime_unites_j'], 1) if x['estime_unites_j'] else None, color=False)}"
             f"<td class='n'>{pct(x['part']) if x['part'] else '–'}</td>"
             f"{_num_td(round(x['achat_moyen'], 1), color=False)}</tr>"
@@ -1221,9 +1228,9 @@ def gains_tab(ctx, cfg, my):
                  f'{_th("Prix obtenu /u", "Prix de vente moyen par unité", True)}'
                  f'{_th("Prix du marché /u", "Médiane des ventes observées sur le marché pendant la même période", True)}'
                  f'{_th("Marge /u", "Reçu par unité − coût de revient noté dans le journal", True)}'
-                 f'{_th("Ventes /j réel", "À partir de 3 ventes : (n − 1) achats entre le premier et le dernier", True)}'
-                 f'{_th("Ventes /j prévu", "Annonces vendues par jour sur le serveur × ta part supposée", True)}'
-                 f'{_th("Part réelle", "Mes ventes / annonces vendues sur le marché", True)}'
+                 f'{_th("Unités /j réel", "À partir de 3 ventes : (n − 1) achats entre le premier et le dernier", True)}'
+                 f'{_th("Unités /j prévu", "Annonces vendues par jour sur le serveur × taille estimée des annonces × ta part supposée", True)}'
+                 f'{_th("Part réelle", "Mes unités vendues / unités vendues sur le marché", True)}'
                  f'{_th("Achat moyen", "Unités par achat", True)}'
                  f'</tr></thead><tbody>{rows}</tbody></table></div>')
         body = kpis + "<div class='card' style='margin:12px 0'>" + "".join(f"<div>{n}</div>" for n in notes) + "</div>" + table

@@ -152,17 +152,16 @@ class Market:
             if it["lots"] >= 3 and span >= 0.5:
                 k = (it["lots"] - 1) / it["lots"] / span        # rythme sans biais : n - 1 intervalles sur la periode
                 it.update(unites_j=it["unites"] * k, achats_j=it["lots"] * k, recu_j=it["recu"] * k)
-            # estimations de l'outil sur la meme periode (marche mesure : annonces disparues, 1 vente par annonce)
+            # estimations de l'outil sur la meme periode (marche mesure : annonces disparues x taille estimee des annonces)
             mk = None
             if iid:
                 r = self.con.execute("SELECT AVG(drops_h) AS d, COUNT(*) AS n FROM activity WHERE server=? AND item_id=? "
                                      "AND ts>=? AND ts<=?", (self.server, iid, a.isoformat()[:19],
                                                              (b + timedelta(hours=24)).isoformat()[:19])).fetchone()
-                mk = r["d"] * 24 if r and r["n"] and r["d"] else None
+                mk = r["d"] * 24 * self.lot_size(iid) if r and r["n"] and r["d"] else None
             it["marche_unites_j"] = mk
             it["estime_unites_j"] = it["marche_unites_j"] * share if it["marche_unites_j"] else None
-            # le marche est mesure en annonces disparues : on le compare a mes achats (un achat ~ une annonce)
-            it["part"] = it["achats_j"] / it["marche_unites_j"] if it["achats_j"] and it["marche_unites_j"] else None
+            it["part"] = it["unites_j"] / it["marche_unites_j"] if it["unites_j"] and it["marche_unites_j"] else None
             # prix : ce que le marche payait pendant la periode (ventes observees sur les releves horaires)
             seen = self.sale_prices(iid, (b - a).total_seconds() / 3600 + 24, until=b + timedelta(hours=1)) if iid else []
             it["prix_marche"] = statistics.median(seen) if len(seen) >= 3 else None
@@ -174,7 +173,7 @@ class Market:
         out.sort(key=lambda x: -x["recu"])
         # calibrage, sur les objets vendus au moins 3 fois
         cal = [x for x in out if x["unites_j"]]
-        ratio = [x["achats_j"] / x["estime_unites_j"] for x in cal if x["estime_unites_j"]]
+        ratio = [x["unites_j"] / x["estime_unites_j"] for x in cal if x["estime_unites_j"]]
         parts = [x["part"] for x in cal if x["part"]]
         prix = [x["prix_u"] / x["prix_marche"] for x in cal if x["prix_marche"]]
         return dict(items=out, debut=start, fin=end, jours=days, ventes=len(sales), recu=sum(x["recu"] for x in out),
@@ -220,7 +219,7 @@ class Market:
             out.append(dict(item_id=iid, objet=it["name"], prix=price, achat_cible=round(q1), revente_cible=round(med),
                             net_u=round(net_u), marge=round(net_u / q1, 3), ma_part_j=round(mine),
                             profit_j=round(mine * net_u), capital_j=round(mine * q1), annonces=self.listings.get(iid, 0),
-                            acheter=price <= q1, releves=len(rows)))
+                            acheter=price <= q1, releves=len(rows), **self.sizing(iid, mine)))
         out.sort(key=lambda f: -f["profit_j"])
         return out
 
@@ -251,13 +250,24 @@ class Market:
                              (str(server), item_id, since)).fetchone()
         return r["d"] * 24 if r and r["n"] and r["d"] is not None else None
 
+    def lot_size(self, item_id):
+        """Taille d'une annonce vendue (unites), estimee par type d'objet : le jeu ne publie que le nombre d'annonces.
+        Objet non empilable (pile max 0 ou 1) et equipement : 1 ; sinon config lots (recolte, materiau, consommable)."""
+        it = self.items.get(item_id) or {}
+        lots = self.cfg.get("lots") or {}
+        if (it.get("max_stack") is not None and it["max_stack"] <= 1) or it.get("category") == "Equip":
+            return 1
+        if it.get("is_gather"):
+            return lots.get("recolte", 1)
+        return lots.get("consommable" if it.get("category") == "Usable" else "materiau", 1)
+
     def sales(self, item_id):
-        """Ventes par jour sur MON serveur, mesurees : annonces disparues sur 24 h, une vente par annonce (la taille des
-        annonces n'est pas publiee pour ce serveur)."""
+        """Ventes par jour sur MON serveur : annonces disparues sur 24 h (mesurees) x taille estimee des annonces."""
         if item_id in self._sales:
             return self._sales[item_id]
         drops = self._drops_per_day(self.server, item_id, days=1.25)
-        res = dict(units=drops, listings=drops, source="serveur") if drops is not None else None
+        lot = self.lot_size(item_id)
+        res = dict(units=drops * lot, listings=drops, lot=lot, source="serveur") if drops is not None else None
         self._sales[item_id] = res
         return res
 
@@ -524,7 +534,7 @@ class Market:
             vol_serveur_j=round(vol), ma_part_j=round(mine), vol_source=sl and sl["source"],
             annonces_vendues_j=round(sl["listings"], 1) if sl and sl["listings"] is not None else None,
             profit_j=round(mine * net_u), profit_pess_j=round(mine * net_pu),
-            capital_j=round(mine * cost_u), flags=flags)
+            capital_j=round(mine * cost_u), flags=flags, **self.sizing(oid, mine))
 
     def _flags(self, sl, sp):
         """Doutes sur les ventes (volume) et le prix de vente d'un item."""
@@ -579,7 +589,7 @@ class Market:
                 vol_serveur_j=round(vol), ma_part_j=round(mine), vol_source=sl and sl["source"],
                 annonces_vendues_j=round(sl["listings"], 1) if sl and sl["listings"] is not None else None,
                 profit_j=round(mine * net_u), profit_pess_j=round(mine * net_pu), capital_j=0,
-                vente_net_u=round(net_u), flags=self._flags(sl, sp)))
+                vente_net_u=round(net_u), flags=self._flags(sl, sp), **self.sizing(iid, mine)))
         out.sort(key=lambda e: -e["profit_j"])
         return out
 
@@ -620,7 +630,7 @@ class Market:
                     score -= pen
                     why.append(f"~{sell_h:.0f} h avant que les {listings} annonces devant toi soient vendues")
                     break
-            qmax = 2 * act["drops_h"]                             # ~2 h de ventes du marche
+            qmax = 2 * act["drops_h"] * (e.get("lot_vente") or 1)  # ~2 h de ventes du marche, en unites
         else:
             score -= 25
             sell_h = None
@@ -641,6 +651,11 @@ class Market:
         return dict(score=score, feu="vert" if score >= 70 else "orange" if score >= 40 else "rouge", raisons=why,
                     qte_max=qmax, prix_plancher=math.ceil(cost / (1 - self.cfg["fees"])) if cost else None,
                     ecoulement_h=round(sell_h, 1) if sell_h is not None else None)
+
+    def sizing(self, item_id, per_day):
+        """Taille d'annonce estimee et nombre d'annonces pour ecouler ma part du jour."""
+        lot = self.lot_size(item_id)
+        return dict(lot_vente=lot, nb_lots_j=max(1, math.ceil(per_day / lot)) if per_day >= 1 else None)
 
     def best_per_item(self, mode, trans="auto"):
         out = []
@@ -757,10 +772,15 @@ def add_safety(con, res, acts=None):
             e["surete"] = m.safety(e, act(e["item_id"]), e["achats_u"], usual)
     for f in res["flips"]:
         f["surete"] = m.safety(f, act(f["item_id"]), f["achat_cible"], f["net_u"])
+    for e in res["harvest"] + res.get("raw", []):                 # recolte (ressources blanches) : rien a avancer
+        if not e.get("rang") and e["net_u"] > 0 and not e["flags"] and "surete" not in e:
+            usual = round(e["prix_ref"] * (1 - fees)) if e["prix_ref"] else None
+            e["surete"] = m.safety(e, act(e["item_id"]), None, usual)
     for l in res["listings"]:
         a = act(l["item_id"]) if l["item_id"] else None
         if a and l.get("quantite"):
-            l["ecoulement_h"] = round((l["annonces"] + 1) / max(a["drops_h"], 0.05), 1)
+            lot = m.lot_size(l["item_id"])
+            l["ecoulement_h"] = round((l["annonces"] + l["quantite"] / lot) / max(a["drops_h"], 0.05), 1)
     return res
 
 

@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS items (
     icon_url TEXT,                 -- image distante (a2-tracker)
     icon_file TEXT,                -- image locale (data/icons/...)
     on_market INTEGER DEFAULT 0,   -- deja vu en vente sur un serveur suivi
-    name_check TEXT                -- ok / non traduit / provisoire / different questlog
+    name_check TEXT,               -- ok / non traduit / provisoire / different questlog
+    max_stack INTEGER              -- pile maximale (0 ou 1 : objet non empilable, vendu a l'unite)
 );
 CREATE INDEX IF NOT EXISTS ix_items_base ON items(base_name);
 CREATE TABLE IF NOT EXISTS map_worlds (
@@ -99,4 +100,6 @@ def connect():
     for col, typ in (("rate_curve", "INTEGER"), ("fail_gauge", "INTEGER")):
         if col not in cols:
             con.execute(f"ALTER TABLE recipes ADD COLUMN {col} {typ}")
+    if "max_stack" not in {r["name"] for r in con.execute("PRAGMA table_info(items)")}:
+        con.execute("ALTER TABLE items ADD COLUMN max_stack INTEGER")
     return con

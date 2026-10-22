@@ -60,7 +60,8 @@ Python est **portable** (`.runtime\python`) : rien n'est installé sur le systè
 | reddit.com/r/aion2 | posts dont le titre contient un mot-clé (au mieux : Reddit limite souvent les serveurs) |
 
 ## Méthode
-- Ventes d'un item sur ton serveur = annonces disparues sur 24 h (une vente par annonce : la taille des annonces vendues n'est pas publiée pour Zemurru).
+- Ventes d'un item sur ton serveur = annonces disparues sur 24 h × taille estimée des annonces (le jeu ne publie pas les quantités) : 1 pour un objet non empilable (pile max 0 ou 1) ou un équipement, sinon `lots` dans config.json (récolte 100, matériau 10, consommable 10). Modifiable par objet dans l'onglet Opportunités (gardé dans le navigateur).
+- Délai de vente (Opportunités) : devant = 1 ÷ annonces vendues par heure (tu postes au prix le plus bas) ; à la file = annonces en vente ÷ annonces vendues par heure.
 - Prix réaliste = moyenne (prix affiché, prix habituel des ventes observées sur ton serveur) si l'affiché est plus haut.
 - Profit/u = prix × (1 − 10 %) − ingrédients achetés − réactifs PNJ (400 par défaut).
 - Brut vendable depuis la MaJ du 21/10/2026 : une ressource récoltée vaut au moins sa vente brute (prix réaliste − 10 %). La vente du brut est un usage comme un craft (Quoi récolter, Planning, Mon stock) ; « vs brut/u » = gain d'un craft face à la vente brute des mêmes ressources, un craft qui fait moins bien n'est plus conseillé. Prix et ventes du brut d'avant `brut_vendable_depuis` sont ignorés (autre régime de marché).

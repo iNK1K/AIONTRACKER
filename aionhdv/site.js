@@ -409,6 +409,8 @@ function planSafe(save){const box=document.getElementById('psafe');if(!box||!win
 // Glouton par kinah/annonce/j, dans la limite des annonces libres, des kinah disponibles et du temps de recolte.
 // Un meme objet n'est retenu qu'une fois (meme marche, meme part des ventes).
 const OTYPE={r:['🌲','Récolte'],c:['🛒','Achat → craft'],f:['🔁','Flip']};
+const delai=c=>c.dh>0?'~'+fmtH(1/c.dh)+' devant<div class="sub">~'+fmtH(c.nl/c.dh)+' à la file</div>':'–';
+function lotSet(inp){const L=pget('lots',{}),v=Math.round(+inp.value);if(v>=1)L[inp.dataset.i]=v;else delete L[inp.dataset.i];pset('lots',L);oppRender()}
 function oppRender(save){const box=document.getElementById('obox');if(!box||!window.OPPDATA)return;
  const bEl=document.getElementById('obudget'),hEl=document.getElementById('ohours');
  if(save){pset('obudget',bEl.value===''?null:+bEl.value);pset('ohours',+hEl.value)}
@@ -416,13 +418,13 @@ function oppRender(save){const box=document.getElementById('obox');if(!box||!win
  const open=J?J.lots.filter(l=>!l.del&&jState(l).reste>0).length:0;
  let slots=Math.max(0,OPPDATA.slots-open),budget=bEl.value===''?Infinity:+bEl.value,hours=+hEl.value||0;
  document.getElementById('oslots').textContent=slots+' / '+OPPDATA.slots;
- const R=rates(),st=lvState();
- const cands=OPPDATA.rows.map(r=>{let n=r.n,p=1;
+ const R=rates(),st=lvState(),LOTS=pget('lots',{});
+ const cands=OPPDATA.rows.map(r0=>{const lot=LOTS[r0.i]||r0.lot,r={...r0,lot:lot,q:Math.round(r0.ql*lot)};if(r.q<1)return null;let n=r.n,p=1;
   if(r.t!=='f'){const info=craftInfo(r.i);if(info&&!info.ok)return null;p=info&&info.rate?info.rate:1}
   if(r.t==='c'&&st.lose)n=r.n+r.k-r.k/p;            // echecs : les ingredients achetes sont perdus
   let resH=0;if(r.t==='r')for(const[res,per]of Object.entries(r.res)){const rate=R[res]!=null?R[res]:100;if(!rate)return null;
    resH+=per/rate/(st.lose?p:1)}
-  return n>0?{...r,n:n,resH:resH,day:r.q*n}:null}).filter(Boolean).sort((a,b)=>b.day-a.day);
+  return n>0?{...r,n:n,resH:resH,day:r.q*n,own:LOTS[r0.i]!=null}:null}).filter(Boolean).sort((a,b)=>b.day-a.day);
  const picks=[],taken=new Set(),rest=[];let tot=0,cap=0,used=0;
  for(const c of cands){if(taken.has(c.i))continue;
   let u=c.q;if(c.k>0&&budget<Infinity)u=Math.min(u,Math.floor(budget/c.k));if(c.resH>0)u=Math.min(u,Math.floor(hours/c.resH));
@@ -433,9 +435,11 @@ function oppRender(save){const box=document.getElementById('obox');if(!box||!win
   :'acheter à ≤ <b>'+NF.format(c.k)+'</b>, revendre à '+NF.format(c.p)+(c.now?' <span class="badge b-ok">achetable maintenant</span>':'');
  const feu=c=>c.f?'<span class="badge '+({vert:'b-ok',orange:'b-warn',rouge:'b-bad'}[c.f])+'">'+({vert:'🟢',orange:'🟠',rouge:'🔴'}[c.f])+' '+c.s+'</span>':'';
  const row=(c,k,u)=>'<tr><td class="n">'+k+'</td><td>'+OTYPE[c.t][0]+' '+OTYPE[c.t][1]+'</td><td><b class="nm" title="Cliquer pour copier">'+escH(c.o)+'</b><div class="sub">'+what(c)+'</div></td>'
-  +'<td class="n">'+NF.format(u)+'</td><td class="n">'+(c.k?kf(u*c.k):'–')+'</td><td class="n">'+(c.resH?fmtH(u*c.resH):'–')+'</td>'
-  +'<td class="n big pos">'+kf(u*c.n)+'</td><td>'+feu(c)+'</td></tr>';
- const head='<thead><tr><th class="n">#</th><th>Type</th><th>Quoi faire</th><th class="n">Ventes/j</th><th class="n">Capital</th><th class="n">Récolte</th><th class="n">Kinah / annonce / j</th><th>Sûreté</th></tr></thead>';
+  +'<td class="n">'+NF.format(u)+'</td><td class="n"><input type="number" min="1" value="'+c.lot+'" data-i="'+c.i+'" title="Unités par annonce'+(c.own?' (ta valeur)':' (estimée par type d’objet)')+'" '
+  +'style="width:64px;padding:3px 6px;border:1px solid '+(c.own?'var(--acc)':'var(--line)')+';border-radius:6px;background:var(--bg2);color:var(--txt);font:inherit;text-align:right" onchange="lotSet(this)"></td>'
+  +'<td class="n">'+(c.k?kf(u*c.k):'–')+'</td><td class="n">'+(c.resH?fmtH(u*c.resH):'–')+'</td>'
+  +'<td class="n">'+delai(c)+'</td><td class="n big pos">'+kf(u*c.n)+'</td><td>'+feu(c)+'</td></tr>';
+ const head='<thead><tr><th class="n">#</th><th>Type</th><th>Quoi faire</th><th class="n">Ventes/j</th><th class="n">Lot</th><th class="n">Capital</th><th class="n">Récolte</th><th class="n" title="Devant : tu postes au prix le plus bas. À la file : les annonces déjà en vente partent avant la tienne">Délai de vente</th><th class="n">Kinah / annonce / j</th><th>Sûreté</th></tr></thead>';
  box.innerHTML='<div class="kpis"><div class="kpi"><div class="l">Gain du jour</div><div class="v pos">'+kf(tot)+'</div><div class="s">'+picks.length+' annonce(s), une fois tout vendu</div></div>'
   +'<div class="kpi"><div class="l">Capital engagé</div><div class="v">'+kf(cap)+'</div><div class="s">'+(budget===Infinity?'budget non limité':'reste '+kf(budget))+'</div></div>'
   +'<div class="kpi"><div class="l">Temps de récolte</div><div class="v">'+fmtH(used)+'</div><div class="s">récolte/heure de 🌲 Récolte (100 par défaut)</div></div></div>'

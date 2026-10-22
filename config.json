@@ -12,6 +12,8 @@
   "_brut_vendable_depuis": "le brut est vendable depuis la MaJ du 21/10/2026 : avant cette date, prix et ventes du brut (autre régime de marché) sont ignorés",
   "brut_vendable_depuis": "2026-10-21",
   "max_listings": 10,
+  "_lots": "taille d'une annonce vendue (unites), estimee par type d'objet : on ne connait que le nombre d'annonces disparues. Objet non empilable (pile max 0 ou 1) et equipement : 1. Modifiable par objet dans l'onglet Opportunites",
+  "lots": {"recolte": 100, "materiau": 10, "consommable": 10},
 
   "masteries": {
     "Alchemy": 999,

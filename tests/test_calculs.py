@@ -97,6 +97,16 @@ class Ventes(unittest.TestCase):
         s = market(con).sales(PLANCHE)
         self.assertEqual((s["source"], s["listings"], s["units"]), ("serveur", 48, 48))
 
+    def test_taille_des_lots_par_type(self):
+        con = make_db()
+        con.executemany("INSERT INTO items (id, name, grade, category, bound, base_name, max_stack) VALUES (?,?,'Common',?,0,?,?)",
+                        [(40, "Épée", "Equip", "Épée", None), (41, "Potion", "Usable", "Potion", 100),
+                         (42, "Ticket", "Misc", "Ticket", 1)])
+        con.execute("INSERT INTO activity VALUES (?,?,?,24,2.0,1.0,0.5,100,100)", (ME, BOIS, ts(1)))
+        m = market(con, lots={"recolte": 100, "materiau": 10, "consommable": 5})
+        self.assertEqual([m.lot_size(i) for i in (BOIS, PLANCHE, 40, 41, 42)], [100, 10, 1, 5, 1])
+        self.assertEqual(m.sales(BOIS)["units"], 48 * 100)        # annonces disparues x taille estimee
+
     def test_pas_de_mesure(self):
         self.assertIsNone(market(make_db()).sales(PLANCHE))
 

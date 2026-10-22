@@ -86,7 +86,8 @@ def snapshot_market(con, server):
         ts = datetime.fromisoformat(obs).astimezone(timezone.utc).isoformat()[:19] if obs else fallback_ts
         con.execute("INSERT OR REPLACE INTO quotes VALUES (?,?,?,?,?)",
                     (str(server), int(it["itemId"]), ts, price, int(num(it.get("listings")) or 0)))
-        con.execute("UPDATE items SET on_market = 1 WHERE id = ?", (int(it["itemId"]),))
+        con.execute("UPDATE items SET on_market = 1, max_stack = COALESCE(?, max_stack) WHERE id = ?",
+                    (it.get("maxStack"), int(it["itemId"])))
         n += 1
     con.commit()
     return n
