@@ -28,6 +28,6 @@
   {"id":"mvjjvhst7x1f1","objet":"Mijoté de pujery de maître","src":"recolte","qte":17,"prix":20997,"cout":0,"ev":[{"id":"mvjjvhstz6sv9","t":"2026-10-22 15:01","type":"poste","prix":20997,"qte":17},{"id":"mvjjxg4ksrryh","t":"2026-10-22 15:03","type":"vendu","prix":20997,"qte":17,"recu":321254}]},
   {"id":"mvjjvhstqw1x0","objet":"Diamant brut pur","src":"brut","qte":8,"prix":54997,"cout":0,"ev":[{"id":"mvjjvhsti0feo","t":"2026-10-22 15:01","type":"poste","prix":54997,"qte":8}]},
   {"id":"mvjjwkhws9odw","objet":"Égo de rage","src":"achat","qte":8,"prix":1438991,"cout":1000000,"ev":[{"id":"mvjjwkhwh9rhi","t":"2026-10-22 15:02","type":"poste","prix":1438991,"qte":8}]},
-  {"id":"mvjjxa9gz78es","objet":"Cuir résistant","src":"recolte","qte":28,"prix":9843,"cout":0,"ev":[{"id":"mvjjxa9g5sc1j","t":"2026-10-22 15:03","type":"poste","prix":9843,"qte":28}]}
+  {"id":"mvjjxa9gz78es","objet":"Cuir résistant","src":"recolte","qte":28,"prix":9843,"cout":0,"ev":[{"id":"mvjjxa9g5sc1j","t":"2026-10-22 15:03","type":"poste","prix":9843,"qte":28},{"id":"mvjjxqjvmwzx1","t":"2026-10-22 15:03","type":"retire","qte":28,"frais":27560}]}
  ]
 }
