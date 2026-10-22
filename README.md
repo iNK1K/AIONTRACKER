@@ -1,6 +1,6 @@
 # AION HDV — outil personnel
 
-Objectif : générer un maximum de kinah via l'hôtel des ventes d'Aion 2 (serveur suivi : Hadala, comparaison : Zemurru).
+Objectif : générer un maximum de kinah via l'hôtel des ventes d'Aion 2 (serveur suivi : Zemurru, comparaison : Hadala).
 
 ## Lancer
 ```powershell

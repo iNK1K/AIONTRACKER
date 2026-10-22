@@ -1,6 +1,6 @@
 # AION HDV
 
-Outil personnel de suivi de l'hôtel des ventes d'Aion 2 (serveur Hadala) : voir README.md.
+Outil personnel de suivi de l'hôtel des ventes d'Aion 2 (serveur Zemurru, Hadala avant le transfert du 22/10/2026) : voir README.md.
 
 - Les tâches en attente sont dans `TODO.md`. Quand on te demande « fais la TODO », traite-les dans l'ordre, puis coche-les et déplace-les dans « Fait ».
 - Réponds en français.

@@ -1,6 +1,6 @@
 {
-  "my_server": "2310",
-  "watch_servers": ["2310", "2315"],
+  "my_server": "2315",
+  "watch_servers": ["2315", "2310"],
   "reference_server": "1304",
   "locale": "fr-FR",
 
