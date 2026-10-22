@@ -31,7 +31,7 @@
   {"id":"mvjjxa9gz78es","objet":"Cuir résistant","src":"recolte","qte":28,"prix":9843,"cout":0,"ev":[{"id":"mvjjxa9g5sc1j","t":"2026-10-22 15:03","type":"poste","prix":9843,"qte":28},{"id":"mvjjxqjvmwzx1","t":"2026-10-22 15:03","type":"retire","qte":28,"frais":27560}]},
   {"id":"mvjjy6elayto8","objet":"Mijoté de pujery de maître","src":"recolte","qte":17,"prix":20997,"cout":0,"ev":[{"id":"mvjjy6elzb6sr","t":"2026-10-22 15:03","type":"poste","prix":20997,"qte":17}]},
   {"id":"mvjrc3svs1w7i","objet":"Parchemin de courage supérieur","src":"achat","qte":20,"prix":13597,"cout":4865,"ev":[{"id":"mvjrc3svscwme","t":"2026-10-22 18:30","type":"poste","prix":13597,"qte":20},{"id":"mvjva8yjnwyrf","t":"2026-10-22 20:21","type":"vendu","prix":13597,"qte":20,"recu":244746}]},
-  {"id":"mvjrcebll35o4","objet":"Parchemin de courage supérieur","src":"achat","qte":20,"prix":13597,"cout":4865,"ev":[{"id":"mvjrcebleg5e8","t":"2026-10-22 18:30","type":"poste","prix":13597,"qte":20}]},
+  {"id":"mvjrcebll35o4","objet":"Parchemin de courage supérieur","src":"achat","qte":20,"prix":13597,"cout":4865,"ev":[{"id":"mvjrcebleg5e8","t":"2026-10-22 18:30","type":"poste","prix":13597,"qte":20},{"id":"mvjvaca10i02n","t":"2026-10-22 20:21","type":"vendu","prix":13597,"qte":20,"recu":244746}]},
   {"id":"mvjrcm6j0ttbr","objet":"Parchemin de courage supérieur","src":"achat","qte":20,"prix":13597,"cout":4865,"ev":[{"id":"mvjrcm6jyy3s5","t":"2026-10-22 18:30","type":"poste","prix":13597,"qte":20}]},
   {"id":"mvjrcm6j0bij0","objet":"Parchemin de courage supérieur","src":"achat","qte":20,"prix":13597,"cout":4865,"ev":[{"id":"mvjrcm6jcblmu","t":"2026-10-22 18:30","type":"poste","prix":13597,"qte":20}]}
  ]
