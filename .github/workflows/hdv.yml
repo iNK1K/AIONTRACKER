@@ -63,6 +63,14 @@ jobs:
         run: |
           job="${{ inputs.job }}"
           [ -n "$job" ] || job=hourly
+          # filet de securite : si le daily n'a pas tourne depuis 26 h (declencheur externe en panne), ce passage le fait
+          if [ "$job" = hourly ] && python -c "
+          import sqlite3, sys; from datetime import datetime, timedelta, timezone
+          r = sqlite3.connect('data/aion.db').execute(\"SELECT MAX(ts) FROM runs WHERE job='daily' AND status != 'error'\").fetchone()[0]
+          sys.exit(0 if not r or datetime.fromisoformat(r) < datetime.now(timezone.utc) - timedelta(hours=26) else 1)"; then
+            echo "::warning::pas de passage daily depuis plus de 26 h : ce passage fait le daily"
+            job=daily
+          fi
           echo "name=$job" >> "$GITHUB_OUTPUT"
 
       - name: Passage ${{ steps.job.outputs.name }}

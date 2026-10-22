@@ -187,6 +187,7 @@ def main(argv):
                 last = con.execute("SELECT MAX(registered) AS r FROM ref_volume").fetchone()["r"]
                 stale = not last or last < (datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%dT%H:%M:%S")
                 step("recettes", lambda: log(f"recettes : {collect.sync_recipes(con, cfg['locale'])}"), errors)
+                step("marche", lambda: cmd_snapshot(con, cfg), errors)    # le daily peut remplacer un passage horaire
                 if stale:
                     step("volumes de reference", lambda: cmd_refvolume(con, cfg), errors)
                 step("activite", lambda: cmd_activity(con, cfg), errors)
