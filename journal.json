@@ -33,6 +33,6 @@
   {"id":"mvjrc3svs1w7i","objet":"Parchemin de courage supérieur","src":"achat","qte":20,"prix":13597,"cout":4865,"ev":[{"id":"mvjrc3svscwme","t":"2026-10-22 18:30","type":"poste","prix":13597,"qte":20},{"id":"mvjva8yjnwyrf","t":"2026-10-22 20:21","type":"vendu","prix":13597,"qte":20,"recu":244746}]},
   {"id":"mvjrcebll35o4","objet":"Parchemin de courage supérieur","src":"achat","qte":20,"prix":13597,"cout":4865,"ev":[{"id":"mvjrcebleg5e8","t":"2026-10-22 18:30","type":"poste","prix":13597,"qte":20},{"id":"mvjvaca10i02n","t":"2026-10-22 20:21","type":"vendu","prix":13597,"qte":20,"recu":244746}]},
   {"id":"mvjrcm6j0ttbr","objet":"Parchemin de courage supérieur","src":"achat","qte":20,"prix":13597,"cout":4865,"ev":[{"id":"mvjrcm6jyy3s5","t":"2026-10-22 18:30","type":"poste","prix":13597,"qte":20},{"id":"mvjvaf98390iw","t":"2026-10-22 20:21","type":"vendu","prix":13597,"qte":20,"recu":244746}]},
-  {"id":"mvjrcm6j0bij0","objet":"Parchemin de courage supérieur","src":"achat","qte":20,"prix":13597,"cout":4865,"ev":[{"id":"mvjrcm6jcblmu","t":"2026-10-22 18:30","type":"poste","prix":13597,"qte":20}]}
+  {"id":"mvjrcm6j0bij0","objet":"Parchemin de courage supérieur","src":"achat","qte":20,"prix":13597,"cout":4865,"ev":[{"id":"mvjrcm6jcblmu","t":"2026-10-22 18:30","type":"poste","prix":13597,"qte":20},{"id":"mvjvahhim8mzh","t":"2026-10-22 20:21","type":"vendu","prix":13597,"qte":20,"recu":244746}]}
  ]
 }
