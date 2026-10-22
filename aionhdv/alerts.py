@@ -121,7 +121,7 @@ def weekly(con, cfg, result, top=5):
     moves = []
     for iid in m.price:
         it = m.items.get(iid) or {}
-        if it.get("bound") or m.listings.get(iid, 0) < 2 or not m.ref(iid):    # 1 seule annonce : prix peu fiable
+        if it.get("bound") or m.listings.get(iid, 0) < 2 or not m.sales(iid):    # 1 seule annonce : prix peu fiable
             continue
         rows = m.price_series(iid, 8)
         new, old = [p for t, p in rows if t >= cut1], [p for t, p in rows if t < cut6]

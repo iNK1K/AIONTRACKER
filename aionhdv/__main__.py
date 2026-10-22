@@ -4,14 +4,13 @@ Commandes :
   init        serveurs, recettes, catalogue complet (FR/EN), carte questlog, controle des noms
   icons       telecharge les images des items vus sur le marche ou dans les recettes
   snapshot    prix de tout le marche des serveurs suivis (toutes les heures)
-  activity    mouvements d'annonces sur 24 h (serveur suivi + reference)
-  refvolume   unites vendues du serveur de reference (aion2.exchange, une fois par jour)
+  activity    mouvements d'annonces sur 24 h (serveur suivi)
   backfill    historique de prix aion2.exchange depuis le 5 octobre
-  servers     instantane de tous les serveurs launch asmodiens EU (comparaison)
+  purge       retire de la base les serveurs non suivis et les vieilles analyses
   analyze     calculs + rapport HTML
   news        annonces officielles (site officiel, Reddit) -> Discord
   hourly      snapshot + analyze + alertes + annonces officielles
-  daily       refvolume + activity + historique + servers + resume du jour (+ tendances le dimanche)
+  daily       marche + activity + purge + resume du jour (+ tendances le dimanche)
   report      regenere seulement le rapport HTML
 
 Option :
@@ -55,22 +54,15 @@ def cmd_snapshot(con, cfg):
 
 
 def cmd_activity(con, cfg):
-    """Annonces disparues sur 24 h pour TOUS les produits compares (et les ressources) : c'est la mesure des ventes
-    sur chaque serveur. Le serveur de reference sert a mesurer la taille des annonces vendues."""
+    """Annonces disparues sur 24 h pour TOUS les produits compares (et les ressources) : c'est la mesure des ventes."""
     core = collect.core_items(con, 60)
-    per_server = {str(s): list(dict.fromkeys(core + collect.top_products(con, s, 1000)))
-                  for s in dict.fromkeys([cfg["my_server"], *cfg["watch_servers"]])}
-    items = list(dict.fromkeys(i for ids in per_server.values() for i in ids))
-    # le serveur de reference est elyseen : on y suit les equivalents des produits asmodiens
-    ref_items = list(dict.fromkeys(items + [e for e in (analysis.elyos_equivalent(con, i) for i in items) if e]))
-    for s in dict.fromkeys([cfg["my_server"], *cfg["watch_servers"], cfg["reference_server"]]):
-        ids = ref_items if str(s) == str(cfg["reference_server"]) else per_server.get(str(s), items)
+    for s in servers(cfg):
+        ids = list(dict.fromkeys(core + collect.top_products(con, s, 1000)))
         log(f"activite {s} : {collect.collect_activity(con, s, ids)} items")
 
 
-def cmd_refvolume(con, cfg):
-    ax = ax_of(con, cfg["reference_server"])
-    log(f"volumes de reference ({ax}) : {collect.collect_ref_volume(con, ax, collect.ref_item_ids(con))} lignes")
+def servers(cfg):
+    return list(dict.fromkeys(str(s) for s in [cfg["my_server"], *cfg["watch_servers"]]))
 
 
 def cmd_backfill(con, cfg, since="2026-10-05T00:00:00Z", servers=None):
@@ -81,19 +73,12 @@ def cmd_backfill(con, cfg, since="2026-10-05T00:00:00Z", servers=None):
             log(f"historique {s} : {collect.collect_ax_prices(con, ax, items, since)} points")
 
 
-def cmd_servers(con, cfg):
-    rows = con.execute("SELECT id FROM servers WHERE region='eu' AND faction=(SELECT faction FROM servers WHERE id=?) "
-                       "AND env=(SELECT env FROM servers WHERE id=?)", (cfg["my_server"], cfg["my_server"])).fetchall()
-    for r in rows:
-        log(f"marche {r['id']} : {catalog.snapshot_market(con, r['id'])} items cotes")
-
-
 def cmd_analyze(con, cfg, send_alerts=False, send_digest=False):
     results = []
     for s in cfg["watch_servers"]:
         res = analysis.run_all(con, cfg, s)
         results.append(res)
-        log(f"analyse {s} : {len(res['harvest'])} crafts recolte, {len(res['buy'])} achat-craft, ratio {res['ratio']:.2f}")
+        log(f"analyse {s} : {len(res['harvest'])} crafts recolte, {len(res['buy'])} achat-craft")
         if send_alerts and str(s) == str(cfg["my_server"]):
             watch = analysis.watched_items(res)
             analysis.add_safety(con, res, collect.recent_activity(con, s, watch))
@@ -159,12 +144,10 @@ def main(argv):
             cmd_snapshot(con, cfg)
         elif cmd == "activity":
             cmd_activity(con, cfg)
-        elif cmd == "refvolume":
-            cmd_refvolume(con, cfg)
         elif cmd == "backfill":
             cmd_backfill(con, cfg, *(argv[2:3]))
-        elif cmd == "servers":
-            cmd_servers(con, cfg)
+        elif cmd == "purge":
+            log(f"purge : {collect.purge(con, servers(cfg))} lignes")
         elif cmd == "analyze":
             cmd_analyze(con, cfg)
         elif cmd == "report":
@@ -181,17 +164,10 @@ def main(argv):
                 step("analyse", lambda: cmd_analyze(con, cfg, send_alerts=True), errors)
                 step("annonces", lambda: cmd_news(con, cfg), errors)
             else:
-                # aion2.exchange est lent (5-10 s par requete) : on s'en sert le moins possible. Les volumes de
-                # Kaisinel (taille des annonces vendues, qui evolue lentement) sont recharges s'ils ont plus de 3 jours ;
-                # l'historique horaire n'est plus telecharge (nos releves horaires du marche le remplacent).
-                last = con.execute("SELECT MAX(registered) AS r FROM ref_volume").fetchone()["r"]
-                stale = not last or last < (datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%dT%H:%M:%S")
                 step("recettes", lambda: log(f"recettes : {collect.sync_recipes(con, cfg['locale'])}"), errors)
                 step("marche", lambda: cmd_snapshot(con, cfg), errors)    # le daily peut remplacer un passage horaire
-                if stale:
-                    step("volumes de reference", lambda: cmd_refvolume(con, cfg), errors)
                 step("activite", lambda: cmd_activity(con, cfg), errors)
-                step("serveurs", lambda: cmd_servers(con, cfg), errors)
+                step("purge", lambda: (log(f"purge : {collect.purge(con, servers(cfg))} lignes"), con.execute("VACUUM")), errors)
                 step("images", lambda: catalog.download_icons(con), errors)
                 step("analyse", lambda: cmd_analyze(con, cfg, send_alerts=True, send_digest=True), errors)
             if "analyse" in errors:

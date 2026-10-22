@@ -1,12 +1,12 @@
 # AION HDV — outil personnel
 
-Objectif : générer un maximum de kinah via l'hôtel des ventes d'Aion 2 (serveur suivi : Zemurru, comparaison : Hadala).
+Objectif : générer un maximum de kinah via l'hôtel des ventes d'Aion 2 (serveur suivi : Zemurru, seul serveur relevé).
 
 ## Lancer
 ```powershell
 .\run.ps1 help        # liste des commandes
 .\run.ps1 hourly      # prix de tout le marché + analyses + alertes + annonces officielles + rapport
-.\run.ps1 daily       # volumes de référence, activité, historique, comparaison serveurs, résumé
+.\run.ps1 daily       # prix, activité, purge de la base, résumé
 ```
 Rapport : ouvrir `reports\index.html` dans le navigateur (onglets, filtres, tri, bouton **MAP** sur les ressources, bouton **📈** pour la courbe de prix, clic sur un nom pour le copier).
 
@@ -27,7 +27,7 @@ Mode test : ajouter `--dry-run` (ex. `python -m aionhdv hourly --dry-run`) pour 
 Python est **portable** (`.runtime\python`) : rien n'est installé sur le système. Supprimer le dossier suffit.
 
 ## Réglages : `config.json`
-- `my_server` / `watch_servers` : ids a2-tracker (2310 Hadala, 2315 Zemurru, 2318 Baba…)
+- `my_server` / `watch_servers` : ids a2-tracker (2315 Zemurru, 2310 Hadala, 2318 Baba…)
 - `masteries` : ta maîtrise par métier (filtre les recettes)
 - `journal.json` : mes annonces et mes ventes (rempli depuis l’onglet Mes ventes, ne pas modifier à la main) → alertes « Tu es battu », sous le seuil, etc.
 - `github_repo` : dépôt où le site enregistre le journal
@@ -50,18 +50,18 @@ Python est **portable** (`.runtime\python`) : rien n'est installé sur le systè
 | Source | Utilisation |
 |---|---|
 | a2-tracker.com | catalogue complet FR/EN + images, recettes, prix plancher de tout le marché, mouvements d'annonces 24 h |
-| aion2.exchange | unités vendues publiées par le jeu (Kaisinel, serveur de référence), historique de prix horaire |
+| aion2.exchange | complément des prix (items qu'a2-tracker ne voit pas), historique de prix horaire |
 | questlog.gg | points de récolte (noms FR) et fonds de carte |
 | aion2.plaync.com | notes de version et avis officiels (API publique du tableau d'annonces) |
 | reddit.com/r/aion2 | posts dont le titre contient un mot-clé (au mieux : Reddit limite souvent les serveurs) |
 
 ## Méthode
-- Volume d'un craft sur ton serveur = ventes quotidiennes réelles de Kaisinel × ratio d'activité (ton serveur / Kaisinel, recalculé).
-- Prix réaliste = moyenne (prix affiché, prix de vente moyen de référence) si l'affiché est plus haut.
+- Ventes d'un item sur ton serveur = annonces disparues sur 24 h (une vente par annonce : la taille des annonces vendues n'est pas publiée pour Zemurru).
+- Prix réaliste = moyenne (prix affiché, prix habituel des ventes observées sur ton serveur) si l'affiché est plus haut.
 - Profit/u = prix × (1 − 10 %) − ingrédients achetés − réactifs PNJ (400 par défaut).
 - Brut vendable depuis la MaJ du 21/10/2026 : une ressource récoltée vaut au moins sa vente brute (prix réaliste − 10 %). La vente du brut est un usage comme un craft (Quoi récolter, Planning, Mon stock) ; « vs brut/u » = gain d'un craft face à la vente brute des mêmes ressources, un craft qui fait moins bien n'est plus conseillé. Prix et ventes du brut d'avant `brut_vendable_depuis` sont ignorés (autre régime de marché).
 - Profit/j = profit/u × ta part du marché (20 %).
-- Taille des lots = unités vendues par jour ÷ annonces disparues par jour (Kaisinel). Heures de vente = annonces disparues d'une heure à l'autre, tous items confondus (heure de Paris).
+- Heures de vente = annonces disparues d'une heure à l'autre, tous items confondus (heure de Paris).
 - Unique bradé = prix actuel ≤ 60 % de la médiane des 7 derniers jours (au moins 12 relevés).
 - Flip = acheter au 1er quartile des prix plancher sur 3 j, revendre au prix médian, marge ≥ 10 % après frais ; items sans volume et prix en tendance écartés (brut compris, sur son historique depuis le 21/10).
 - Notes de version : items cités surveillés 48 h, alerte si le prix bouge de ±20 %.
@@ -78,11 +78,11 @@ logs/           run.log, alerts.log
 
 Le workflow `.github/workflows/hdv.yml` tourne sur GitHub. Il est déclenché par **cron-job.org** (les créneaux planifiés de GitHub prenaient des heures de retard) :
 - tâche « HDV hourly », toutes les heures : relevé des prix, analyses, alertes Discord, annonces officielles, mise à jour du site ;
-- tâche « HDV daily », chaque jour à 17h40 : recettes, volumes de référence, activité, résumé Discord (+ tendances le dimanche), sauvegarde de la base.
+- tâche « HDV daily », chaque jour à 17h40 : recettes, prix, activité, purge de la base, résumé Discord (+ tendances le dimanche), sauvegarde de la base.
 
 Chaque tâche appelle `POST https://api.github.com/repos/<pseudo>/<depot>/actions/workflows/hdv.yml/dispatches` avec les en-têtes `Accept: application/vnd.github+json`, `Authorization: Bearer <token>` (token fine-grained, permission Actions : lecture et écriture) et `X-GitHub-Api-Version: 2022-11-28`, et le corps `{"ref":"main","inputs":{"job":"hourly"}}` (ou `daily`).
 
-La base est conservée dans le cache d'Actions. Chaque passage daily la sauvegarde aussi dans la release GitHub `db-backup` : si le cache est vidé, elle est restaurée depuis cette sauvegarde, et à défaut depuis `seed/aion.db.gz` (à régénérer avec `scripts/seed_db.py`).
+La base est conservée dans le cache d'Actions. Un passage horaire fait le daily si celui-ci n'a pas tourné depuis 26 h. Chaque passage daily la sauvegarde aussi dans la release GitHub `db-backup` : si le cache est vidé, elle est restaurée depuis cette sauvegarde, et à défaut depuis `seed/aion.db.gz` (à régénérer avec `scripts/seed_db.py`).
 
 Le site est publié sur GitHub Pages (branche `gh-pages`). La page principale est chiffrée par mot de passe avec StatiCrypt.
 
@@ -103,7 +103,7 @@ Les secrets (mot de passe du site, webhook Discord) ne sont pas dans le dépôt 
 1. Bouton **Fork** en haut du dépôt.
 2. Dans le fork, onglet **Actions** > *I understand my workflows, go ahead and enable them* (GitHub désactive les tâches planifiées des forks).
 3. Settings > Secrets and variables > Actions : créer `SITE_PASSWORD` (obligatoire) et `DISCORD_WEBHOOK_URL` (facultatif).
-4. Dans `config.json`, choisir son serveur : `my_server` et `watch_servers` (ids a2-tracker : 2310 Hadala, 2315 Zemurru, 2318 Baba…).
+4. Dans `config.json`, choisir son serveur : `my_server` et `watch_servers` (ids a2-tracker : 2315 Zemurru, 2310 Hadala, 2318 Baba…).
 5. Remplacer le sel de `.staticrypt.json` par une valeur à soi (`openssl rand -hex 16`), puis commit.
 6. Actions > HDV Aion 2 > **Run workflow** une première fois, puis Settings > Pages : *Deploy from a branch*, `gh-pages`, `/ (root)`.
 7. Créer les deux tâches cron-job.org (voir « Serveur gratuit » ci-dessus) avec son propre token.

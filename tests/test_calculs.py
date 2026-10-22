@@ -9,12 +9,12 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from aionhdv.analysis import Market, elyos_equivalent
+from aionhdv.analysis import Market
 from aionhdv.config import from_journal, lot_state
 from aionhdv.db import SCHEMA
 
 ROOT = Path(__file__).resolve().parent.parent
-ME, REF = "2310", "1304"
+ME = "2315"
 BOIS, OD, PLANCHE, PLANCHE_ECL, MEUBLE, MEUBLE_ECL = 1, 2, 10, 11, 20, 21
 
 
@@ -32,7 +32,7 @@ def make_db(prices=None):
     con.execute("ALTER TABLE recipes ADD COLUMN rate_curve INTEGER")
     con.execute("ALTER TABLE recipes ADD COLUMN fail_gauge INTEGER")
     con.executemany("INSERT INTO servers VALUES (?,?,?,?,?,?)",
-                    [(ME, "Hadala", "EU", "Asmodian", "live", 12310), (REF, "Kaisinel", "EU", "Elyos", "live", 11304)])
+                    [(ME, "Zemurru", "EU", "Asmodian", "live", 12315)])
     items = [(BOIS, "Bois", 1), (OD, "Od commun", 1), (PLANCHE, "Planche", 0), (PLANCHE_ECL, "Planche éclatante", 0),
              (MEUBLE, "Meuble", 0), (MEUBLE_ECL, "Meuble éclatant", 0)]
     con.executemany("INSERT INTO items (id, name, grade, is_gather, bound, base_name, on_market) VALUES (?,?,?,?,0,?,1)",
@@ -50,7 +50,7 @@ def make_db(prices=None):
     return con
 
 
-CFG = dict(my_server=ME, reference_server=REF, market_share=0.20, fees=0.10, npc_reagent_price=50, combo_rate=None)
+CFG = dict(my_server=ME, market_share=0.20, fees=0.10, npc_reagent_price=50, combo_rate=None)
 
 
 def market(con, **cfg):
@@ -84,7 +84,7 @@ class Ventes(unittest.TestCase):
         con = make_db()
         con.execute("INSERT INTO activity VALUES (?,?,?,24,2.0,1.0,0.5,100,100)", (ME, PLANCHE, ts(1)))
         s = market(con).sales(PLANCHE)
-        self.assertEqual((s["source"], s["listings"], s["units"], s["lot"]), ("serveur", 48, 48, None))
+        self.assertEqual((s["source"], s["listings"], s["units"]), ("serveur", 48, 48))
 
     def test_pas_de_mesure(self):
         self.assertIsNone(market(make_db()).sales(PLANCHE))
@@ -123,20 +123,6 @@ class Surete(unittest.TestCase):
         s = self.m.safety(self.e, None, cost=None, net_usual=None, since=ts(10))
         self.assertEqual(s["score"], 100 - 25 - 10)
         self.assertEqual(s["qte_max"], 1)                          # pendant un pic : ma part / 3
-
-
-class Chaines(unittest.TestCase):
-    def test_chaine_planche_meuble(self):
-        chains = market(make_db()).gamble_chains()
-        self.assertEqual([c["name"] for c in chains], ["Planche"])
-        a, b = chains[0]["steps"]
-        self.assertEqual((a["cost"], a["res"], a["c"]), (0, {"Bois": 2}, 25))
-        self.assertEqual((a["plain"]["v"], a["ecl"]["v"]), (900, 2700))      # prix habituel - taxe 10 %
-        # etape 2 : la Planche eclatante est deja en main, seule la recolte reste a fournir
-        self.assertEqual((b["inp"], b["res"], b["ecl"]["v"]), ("Planche éclatante", {"Bois": 1}, 18000))
-
-    def test_taux_de_combo_de_la_config(self):
-        self.assertEqual(market(make_db(), combo_rate=24).gamble_chains()[0]["steps"][0]["c"], 24)
 
 
 class VraisGains(unittest.TestCase):
@@ -186,11 +172,10 @@ class Brut(unittest.TestCase):
 
 class NouvelItem(unittest.TestCase):
     def test_item_sans_nom(self):
-        """Item ajoute par aion2.exchange sans nom (nouvel objet) : ignore, sans planter l'analyse."""
+        """Item ajoute par aion2.exchange sans nom (nouvel objet) : l'analyse ne plante pas."""
         con = make_db()
         con.execute("INSERT INTO items (id, on_market) VALUES (99, 1)")
         con.executemany("INSERT INTO quotes VALUES (?,?,?,?,?)", [(ME, 99, ts(h), 700, 3) for h in range(13)])
-        self.assertIsNone(elyos_equivalent(con, 99))
         m = market(con)
         m.sales(99)
 

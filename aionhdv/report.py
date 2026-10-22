@@ -293,7 +293,7 @@ def planning_tab(cfg, my):
             targets.append(dict(r=t["ressource"], u=uses, avg=round(avg)))
     hours = my.get("hours")
     best = f"{hours['best']}h – {(hours['best'] + 3) % 24}h" if hours else "21h – 0h"
-    data = json.dumps(dict(targets=targets, chains=my.get("chains") or [], best=best), ensure_ascii=False,
+    data = json.dumps(dict(targets=targets, best=best), ensure_ascii=False,
                       separators=(",", ":"))
     return ("<h2>Planning de la journée</h2><p class='lead'>Deux façons de jouer ta récolte (la transformer, ou la vendre "
             "brute quand le brut rapporte plus). "
@@ -304,17 +304,6 @@ def planning_tab(cfg, my):
             'step="0.5" value="3" style="width:70px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;'
             'background:var(--bg2);color:var(--txt);font:inherit" oninput="planSafe(true)"> h</label></div>'
             '<div id="psafe"></div>'
-            "<h3>🎲 Planning gamble : blanc → vert → bleu → unique</h3>"
-            "<p class='lead'>À chaque craft d’une chaîne, si la fabrication réussit, le <b>combo</b> donne la version "
-            "<b>éclatante</b> (grade supérieur), seule à pouvoir servir à l’étape suivante ; sinon tu obtiens l’objet normal. "
-            "Un échec fait perdre les matières <b>et</b> l’objet éclatant mis dedans. À chaque palier, le calcul compare "
-            "« vendre l’éclatant » et « le risquer plus haut ». Prix = prix habituel sur ton serveur, après la taxe de 10 %.</p>"
-            '<div class="toolbar"><label class="tg">Chance de combo : <input type="number" id="pcombo" min="1" max="100" '
-            'step="1" style="width:64px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;background:var(--bg2);'
-            'color:var(--txt);font:inherit" oninput="planGamble(true)"> %</label>'
-            '<label class="tg"><input type="checkbox" id="popp" checked onchange="planGamble(true)"> Compter mes ressources à '
-            'ce qu’elles rapportent en safe (coût d’opportunité)</label></div>'
-            '<div id="pgamble"></div>'
             f"<script>window.PLANDATA={data};</script>")
 
 
@@ -404,7 +393,7 @@ def table_crafts(ctx, rows, tid, harvest, compare=None):
             _th("Annonces vendues/j", "Annonces disparues sur 24 h sur ton serveur (achats ; une annonce retirée compte aussi)",
                 True, True) +
             _th("Prix affiché", "Prix le plus bas actuellement en vente", True, True) +
-            _th("Prix habituel", "Prix plancher médian sur ton serveur (3 j) ; à défaut, prix de vente moyen sur Kaisinel", True, True) +
+            _th("Prix habituel", "Prix des ventes observées sur ton serveur (médiane 48 h) ; à défaut, prix plancher médian sur 7 j", True, True) +
             _th("Net pess./u", "Bénéfice si on vend au prix le plus bas", True, True) +
             _th("Profit pess./j", None, True, True) +
             ("" if harvest else _th("Capital/j", "Kinah à avancer par jour", True, True)) +
@@ -738,30 +727,6 @@ def table_plan(plan):
             f'{_th("Ressources utilisées")}</tr></thead><tbody>{body}</tbody></table></div>')
 
 
-def table_market(con, ctx, cfg):
-    servers = [str(s) for s in cfg["watch_servers"]]
-    names = {r["id"]: r["name"] for r in con.execute("SELECT id, name FROM servers")}
-    latest = {}
-    for s in servers:
-        for r in con.execute("""SELECT item_id, price, listings FROM quotes q WHERE server=? AND ts=(SELECT MAX(ts)
-                                FROM quotes q2 WHERE q2.server=q.server AND q2.item_id=q.item_id)""", (s,)):
-            latest.setdefault(r["item_id"], {})[s] = (r["price"], r["listings"])
-    head = ("<tr>" + _th("Item") + _th("Catégorie") + "".join(
-        _th(f"{names.get(s, s)} prix", None, True) + _th("annonces", None, True) for s in servers)
-        + _th("Nom anglais", None, False, True) + _th("Contrôle du nom", None, False, True) + "</tr>")
-    body = []
-    for iid, per in sorted(latest.items(), key=lambda kv: (ctx.items.get(kv[0]) or {}).get("name") or ""):
-        it = ctx.items.get(iid) or {}
-        cells = "".join(_num_td(per.get(s, (None, None))[0], color=False) + _num_td(per.get(s, (None, None))[1], "mut", color=False)
-                        for s in servers)
-        chk = it.get("name_check") or ""
-        body.append(f"<tr><td>{ctx.label(iid)}</td><td class='sub'>{esc(it.get('auction_category') or it.get('sub_category'))}</td>"
-                    f"{cells}<td class='sub x'>{esc(it.get('name_en'))}</td>"
-                    f"<td class='x'><span class='badge {'b-ok' if chk == 'ok' else 'b-warn'}'>{esc(chk)}</span></td></tr>")
-    return (toolbar("market", f'<span class="mut">{len(latest)} items en vente sur les serveurs suivis</span>')
-            + f'<div class="wrap"><table id="market"><thead>{head}</thead><tbody>{"".join(body)}</tbody></table></div>')
-
-
 def write_price_data(con, cfg, days=7):
     """Historique horaire du serveur suivi (prix plancher, annonces) pour les courbes, charge a la demande (prices.js).
     Releves horaires a2-tracker, completes par l'historique horaire aion2.exchange."""
@@ -1019,60 +984,6 @@ def journal_html(ctx, cfg, my):
         f'window.RAW_ITEMS={json.dumps(m.gather_names(), ensure_ascii=False)};</script>')
 
 
-def ingredient_tab(cfg, my):
-    """🧪 Par ingredient : je choisis un ingredient (ex. Essence de Balaur), la page compare sa vente telle quelle a
-    chaque craft qui l'utilise (valeur d'une unite dans le craft, reussite selon mes niveaux). Donnees par recette :
-    cout des autres ingredients (prix realiste), prix de vente realiste du produit, ventes mesurees."""
-    m = my["market"]
-    rnd = lambda v: round(v) if v is not None else None
-    ings, groups = {}, {}
-
-    def ing(iid):
-        if iid not in ings:
-            bp, u = m.buy_price(iid), m.usual_price(iid)
-            ings[iid] = dict(n=m.items[iid]["name"], ask=rnd(bp and bp["ask"]), u=rnd(u and u["price"]),
-                             l=bp["listings"] if bp else 0)
-        return iid
-    for oi, recs in m.recipes_by_item.items():
-        it = m.items.get(oi) or {}
-        sp = m.sell_price(oi)
-        if it.get("bound") or not sp:
-            continue
-        sl = m.sales(oi)
-        for r in recs:
-            if r["unresolved"]:
-                continue
-            x = {}
-            for opts in m.ingredients.get(r["id"], {}).values():
-                for o in opts:
-                    oit = m.items.get(o["item_id"]) or {}
-                    if oit.get("bound") or o["item_id"] in x:
-                        continue                               # ingredient lie : jamais a vendre tel quel
-                    c = m.recipe_cost(r, "buy", skip={o["item_id"]})
-                    x[ing(o["item_id"])] = [o["qty"], rnd(c["cost_r"]) if c["ok"] else None,
-                                            int(any(p["k"] == "pnj" for p in c["parts"]))]
-            if not x:
-                continue
-            key = (oi, json.dumps(sorted(x.items())))
-            g = groups.get(key)
-            if g:
-                g["a"].append([r["profession"], r["mastery"] or 0, r.get("rate_curve")])
-                continue
-            groups[key] = dict(o=it["name"], oi=oi, q=r["output_qty"] or 1, sell=rnd(sp["real"]), ask=rnd(sp["ask"]),
-                               l=sp["listings"], vj=round(sl["units"], 1) if sl else None,
-                               a=[[r["profession"], r["mastery"] or 0, r.get("rate_curve")]], x=x)
-    data = dict(ing=ings, rec=list(groups.values()), tax=cfg["fees"])
-    return ("<h2>Que faire de… ?</h2><p class='lead'>Choisis un ingrédient que tu as (récupéré en jeu, pas récolté) : "
-            "sa vente telle quelle face à chaque craft qui l’utilise. <b>Valeur d’1 unité</b> = (vente du produit après "
-            f"taxe ({cfg['fees']:.0%}) × réussite − autres ingrédients au prix réaliste) ÷ unités utilisées ; meilleure "
-            "que la vente directe = le craft rapporte plus. Réussite et 🔒 selon tes niveaux (🛠️ Mes métiers).</p>"
-            '<div class="toolbar"><input id="ingq" class="search" list="ingnames" placeholder="Ingrédient (nom exact)" '
-            'style="width:320px" onchange="ingRender(this.value)"><datalist id="ingnames"></datalist>'
-            '<label class="tg"><input type="checkbox" id="ingok" onchange="ingRender()"> Seulement ce que je peux crafter</label></div>'
-            '<div id="ingbox"></div>'
-            f'<script>window.INGDATA={json.dumps(data, ensure_ascii=False, separators=(",", ":"))};</script>')
-
-
 def supply_tab(ctx, cfg, my):
     """📦 Ravitaillement : capture de la fenetre des ravitaillements (objets demandes chaque jour, donc recherches a
     l'HDV) -> pour chaque objet, de quoi calculer dans le navigateur le gain a le crafter pour le revendre : ingredients
@@ -1220,7 +1131,7 @@ def gains_tab(ctx, cfg, my):
                 f'<div class="s">l’outil suppose {pct(g["part_supposee"])}</div></div>'
                 f'<div class="kpi"><div class="l">Ventes réelles / prévues</div>'
                 f'<div class="v">{"×" + format(g["ratio"], ".2f").replace(".", ",") if g["ratio"] else "–"}</div>'
-                f'<div class="s">unités par jour, objets vendus 3 fois ou plus</div></div></div>')
+                f'<div class="s">ventes par jour, objets vendus 3 fois ou plus</div></div></div>')
         notes = []
         if g["n_cal"]:
             n = g["n_cal"]
@@ -1230,9 +1141,6 @@ def gains_tab(ctx, cfg, my):
             if g["prix_ratio"]:
                 notes.append(f"Prix obtenu = <b>{g['prix_ratio']:.2f}".replace(".", ",") + "×</b> le prix des ventes "
                              "observées sur le marché pendant la même période.")
-            if g["achat"]:
-                notes.append(f"Tes acheteurs prennent en moyenne <b>{g['achat']:.1f}".replace(".", ",") + "×</b> la taille "
-                             "d’annonce que l’outil utilise (mesurée sur Kaisinel).")
             notes.append(f"Calcul sur {n} objet{'s' if n > 1 else ''} vendu{'s' if n > 1 else ''} au moins 3 fois : "
                          + ("attends d’en avoir au moins 3 avant de changer les hypothèses de l’outil." if n < 3 else
                             "assez pour ajuster les hypothèses (part de marché dans config.json)."))
@@ -1247,20 +1155,20 @@ def gains_tab(ctx, cfg, my):
             f"{_num_td(x['lots'], color=False)}{_num_td(x['unites'], color=False)}{_num_td(x['recu'], color=False, k=True)}"
             f"{_num_td(round(x['prix_u']), color=False)}{_num_td(round(x['prix_marche']) if x['prix_marche'] else None, color=False)}"
             f"{_num_td(round(x['marge_u']) if x['marge_u'] is not None else None)}"
-            f"{_num_td(round(x['unites_j'], 1) if x['unites_j'] else None, color=False)}"
+            f"{_num_td(round(x['achats_j'], 1) if x['achats_j'] else None, color=False)}"
             f"{_num_td(round(x['estime_unites_j'], 1) if x['estime_unites_j'] else None, color=False)}"
             f"<td class='n'>{pct(x['part']) if x['part'] else '–'}</td>"
-            f"{_num_td(round(x['achat_moyen'], 1), color=False)}{_num_td(x['lot_outil'], color=False)}</tr>"
+            f"{_num_td(round(x['achat_moyen'], 1), color=False)}</tr>"
             for x in g["items"])
         table = (f'<div class="wrap"><table><thead><tr>{_th("Objet")}{_th("Ventes", "Achats (lignes de l’historique)", True)}'
                  f'{_th("Unités", None, True)}{_th("Reçu", "Après la taxe de 10 %", True)}'
                  f'{_th("Prix obtenu /u", "Prix de vente moyen par unité", True)}'
                  f'{_th("Prix du marché /u", "Médiane des ventes observées sur le marché pendant la même période", True)}'
                  f'{_th("Marge /u", "Reçu par unité − coût de revient noté dans le journal", True)}'
-                 f'{_th("Unités /j réel", "À partir de 3 ventes : (n − 1) achats entre le premier et le dernier", True)}'
-                 f'{_th("Unités /j prévu", "Ventes mesurées sur le serveur × ta part supposée", True)}'
-                 f'{_th("Part réelle", "Mes unités vendues / unités vendues sur le marché", True)}'
-                 f'{_th("Achat moyen", "Unités par achat", True)}{_th("Taille d’annonce outil", None, True)}'
+                 f'{_th("Ventes /j réel", "À partir de 3 ventes : (n − 1) achats entre le premier et le dernier", True)}'
+                 f'{_th("Ventes /j prévu", "Annonces vendues par jour sur le serveur × ta part supposée", True)}'
+                 f'{_th("Part réelle", "Mes ventes / annonces vendues sur le marché", True)}'
+                 f'{_th("Achat moyen", "Unités par achat", True)}'
                  f'</tr></thead><tbody>{rows}</tbody></table></div>')
         body = kpis + "<div class='card' style='margin:12px 0'>" + "".join(f"<div>{n}</div>" for n in notes) + "</div>" + table
     else:
@@ -1322,7 +1230,6 @@ def build(con, cfg, results):
             "<div id='bdir' class='segp'>" + table_crafts(ctx, direct, "tb", False, compare_ways(direct, trans, "via Od"))
             + "</div><div id='btr' class='segp' style='display:none'>"
             + table_crafts(ctx, trans, "tbt", False, compare_ways(trans, direct, "l’achat à l’HDV")) + "</div>")
-        add("ingr", "🧪 Par ingrédient", ingredient_tab(cfg, my))
         add("flips", "🔁 Flip", "<h2>Achat → revente (sans craft)</h2>" + table_flips(ctx, my["flips"], cfg))
         add("uniques", "💎 Uniques", "<h2>Équipements Unique : prix bradés</h2>" + table_uniques(ctx, my["uniques"], cfg))
         add("metiersTab", "🛠️ Mes métiers", metiers_tab(con, my))
@@ -1333,15 +1240,6 @@ def build(con, cfg, results):
         add("gains", "💰 Mes ventes", gains_tab(ctx, cfg, my))
         add("supply", "📦 Ravitaillement", supply_tab(ctx, cfg, my))
         sep()
-    others = [r for r in results if r is not my]
-    if others:
-        parts = []
-        for r in others:
-            on = names.get(r["server"], r["server"])
-            parts.append(f"<h2>{esc(on)}</h2><p class='lead'>Ventes mesurées sur ce serveur.</p>"
-                         + table_crafts(ctx, r["harvest"], f"th_{r['server']}", True))
-        add("compare", "Autres serveurs", "".join(parts))
-    add("market", "Marché", "<h2>Tous les items en vente</h2>" + table_market(con, ctx, cfg))
     gathers = sorted(ctx.gather_names)
     cards = "".join(f'<div class="card" style="flex-direction:row;align-items:center;justify-content:space-between">'
                     f'{ctx.label(name=g, sub=f"{ctx.gather_counts.get(g, 0)} points")}</div>' for g in gathers)

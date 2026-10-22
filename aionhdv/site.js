@@ -326,7 +326,7 @@ function applyLevels(){const st=lvState();
   // face a la vente du brut : un echec fait aussi perdre les ressources (1 / reussite par craft reussi)
   const vb=el.querySelector('.cvb');if(vb&&el.dataset.brut!=null){const d=Math.round(net-(st.lose?+el.dataset.brut/info.rate:+el.dataset.brut));
    vb.textContent=NF.format(d);vb.dataset.v=d;vb.classList.toggle('pos',d>0);vb.classList.toggle('neg',d<=0)}});
- calc();renderMetiers();todoBuys();if(window.PLANDATA){planSafe();planGamble()}if(window.SUPPLY)supplyRender();if(window.INGDATA)ingRender()}
+ calc();renderMetiers();todoBuys();if(window.PLANDATA)planSafe();if(window.SUPPLY)supplyRender()}
 // « A faire maintenant » : achats -> craft que mes niveaux permettent (metier non renseigne = garde), 2 au plus,
 // avec le taux de reussite quand le niveau est connu
 function todoBuys(){let n=0;
@@ -372,9 +372,6 @@ function rateCalc(inp){const R=rates();if(inp){const r=inp.closest('tr').dataset
 // ---------------- Planning
 function pget(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}}
 function pset(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
-function stepRate(st,s){const lv=st.lv[s.prof],c=s.cv!=null&&window.CRAFTDATA&&CRAFTDATA.curves[s.cv];
- if(lv==null||lv==='')return{p:c?c[0]/1e8:1,known:false};if(lv<s.m)return{p:0,known:true,locked:true};
- return{p:c?c[Math.min(lv-s.m,c.length-1)]/1e8:1,known:true}}
 const fmtH=h=>h<1?Math.round(h*60)+' min':h.toFixed(1).replace('.',',')+' h';
 function planSafe(save){const box=document.getElementById('psafe');if(!box||!window.PLANDATA)return;
  const hEl=document.getElementById('phours');if(save)pset('phours',+hEl.value);else hEl.value=pget('phours',3);
@@ -408,44 +405,6 @@ function planSafe(save){const box=document.getElementById('psafe');if(!box||!win
   +'<div class="uses">'+rows.map(([r,p],k)=>`<div class="card" style="padding:12px 16px"><b>${k+1}. Récolter <span class="nm" title="Cliquer pour copier">${escH(r)}</span> pendant ${fmtH(p.h)}</b> <span class="sub">(≈ ${NF.format(Math.round(p.res))} ressources)</span>`
    +p.c.filter(c=>c.units>0).map(c=>`<div class="row"><span>→ ${c.b?'vendre brut':'fabriquer'} <b>${NF.format(c.units)}</b> × <span class="nm" title="Cliquer pour copier">${escH(c.o)}</span>${c.lot?' · '+Math.max(1,Math.round(c.units/Math.min(c.lot,c.units)))+' annonce(s) de '+NF.format(Math.min(c.lot,c.units)):''}</span><b class="pos">${kf(c.k)}</b></div>`).join('')+'</div>').join('')+'</div>'
   +(Object.keys(R).length?'':'<p class="sub">Récolte par heure : 100 par défaut pour chaque ressource ; indique tes vraies valeurs dans « 🌲 Récolte ».</p>')}
-function planGamble(save){const box=document.getElementById('pgamble');if(!box||!window.PLANDATA)return;
- const cEl=document.getElementById('pcombo'),oEl=document.getElementById('popp');
- const def=PLANDATA.chains.length?Math.round(PLANDATA.chains[0].steps[0].c*100):25;
- if(save){pset('pcombo2',+cEl.value);pset('popp',oEl.checked)}else{cEl.value=pget('pcombo2',def);oEl.checked=pget('popp',true)}
- const c=(+cEl.value||0)/100,st=lvState(),safe={};PLANDATA.targets.forEach(t=>safe[t.r]=t.avg);
- const stock=pget('stock',{}),opp=s=>oEl.checked?Object.entries(s.res).reduce((a,[r,q])=>a+q*(safe[r]||0),0):0;
- const out=PLANDATA.chains.map(ch=>{const S=[];
-  for(const s of ch.steps){if(s.plain.v==null||s.ecl.v==null||!s.ok)break;const r=stepRate(st,s);S.push({...s,p:r.p,known:r.known,locked:r.locked,cost:s.cost+opp(s)})}
-  if(S.length<2)return null;                       // une seule etape : pas une chaine a jouer
-  const weird=S.some(s=>s.plain.v>s.ecl.v);         // objet normal plus cher que sa version eclatante : prix douteux
-  // valeur de garder l'eclatant de l'etape k (H) et decision : vendre ou tenter l'etape suivante
-  for(let k=S.length-1;k>=0;k--){const s=S[k],nx=S[k+1];const sell=s.ecl.v==null?0:s.ecl.v;
-   const cont=nx&&!nx.locked?nx.p*(1-c)*nx.plain.v+nx.p*c*nx.H-nx.cost:-Infinity;
-   s.H=Math.max(sell,cont);s.go=cont>sell;s.cont=cont}
-  const s0=S[0],ev=s0.locked?null:s0.p*(1-c)*s0.plain.v+s0.p*c*s0.H-s0.cost;
-  let pj=1,cj=0;S.forEach(s=>{pj*=s.p*c;cj+=s.cost});const last=S[S.length-1],lockAt=S.find(s=>s.locked);
-  const n0=Object.keys(s0.res).length?Math.min(...Object.entries(s0.res).map(([r,q])=>Math.floor((stock[r]||0)/q))):0;
-  return{ch:ch,S:S,ev:ev,pj:pj,jack:(last.ecl.v||0)-cj,n0:n0,weird:weird,lockAt:lockAt}}).filter(Boolean);
- out.sort((a,b)=>(a.weird-b.weird)||((b.ev??-1e18)-(a.ev??-1e18)));
- const pct=x=>(x*100).toFixed(x<0.01?2:1).replace('.',',')+' %',sg=x=>(x>=0?'+':'')+kf(x);
- box.innerHTML=out.map(o=>{const s0=o.S[0];
-  return `<details class="card" style="margin:0 0 10px"><summary style="cursor:pointer;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap">`
-   +`<b>${escH(o.ch.name)} <span class="sub">→ ${escH(o.S[o.S.length-1].ecl.n)}</span></b>`
-   +`<span>${o.ev==null?'<span class="badge b-mut">🔒 '+PROF[s0.prof]+' '+lvTxt(s0.m)+'</span>':'Espérance par essai : <b class="'+(o.ev>0?'pos':'neg')+'">'+sg(o.ev)+'</b>'}`
-   +` · ${o.lockAt?'jackpot 🔒 '+PROF[o.lockAt.prof]+' '+lvTxt(o.lockAt.m):'jackpot '+pct(o.pj)+' → <b>'+kf(o.jack)+'</b>'}${o.n0?' · ton stock : '+o.n0+' essai(s)':''}`
-   +`${o.weird?' <span class="badge b-warn" title="Un objet normal est plus cher que sa version éclatante : prix habituel probablement faussé par une annonce aberrante">⚠ prix douteux</span>':''}</span></summary>`
-   +'<div class="wrap" style="max-height:none;margin-top:8px"><table><thead><tr><th>Étape</th><th class="n">Réussite</th><th class="n">Coût de l’essai</th>'
-   +'<th>Si échec</th><th>Si réussite sans combo</th><th>Si le combo procque</th><th>Conseil</th></tr></thead><tbody>'
-   +o.S.map((s,k)=>{const prev=k?o.S[k-1]:null,lose=s.cost+(prev?(prev.ecl.v||0):0);
-    return `<tr${s.locked?' class="locked"':''}><td><b>${k+1}.</b> ${PROF[s.prof]} ${lvTxt(s.m)}${s.inp?'<div class="sub">avec '+escH(s.inp)+'</div>':''}</td>`
-     +`<td class="n">${s.locked?'🔒':pct(s.p)}${s.known?'':'<div class="sub">niveau non renseigné</div>'}</td>`
-     +`<td class="n">${kf(s.cost)}<div class="sub">${escH((s.lines||[]).filter(l=>!l.includes('récolte')).slice(0,3).join(' · '))}</div></td>`
-     +`<td><span class="neg">${pct(1-s.p)}</span> : tu perds ${kf(lose)}</td>`
-     +`<td>${pct(s.p*(1-c))} : ${escH(s.plain.n)} <b>${kf(s.plain.v)}</b><div class="sub">${s.plain.ls!=null?NF.format(s.plain.ls)+' annonce(s) vendue(s)/j':'ventes non mesurées'}</div></td>`
-     +`<td>${pct(s.p*c)} : ${escH(s.ecl.n)} <b class="pos">${s.ecl.v==null?'prix inconnu':kf(s.ecl.v)}</b><div class="sub">gain du proc : ${s.ecl.v==null?'?':sg(s.ecl.v-s.plain.v)}${s.ecl.ls!=null?' · '+NF.format(s.ecl.ls)+' ann. vendue(s)/j':' · ventes non mesurées'}</div></td>`
-     +`<td>${k===o.S.length-1?'Vendre':(s.go?'<span class="badge b-ok">Tenter l’étape '+(k+2)+'</span><div class="sub">espérance '+sg(s.cont)+' contre vente '+kf(s.ecl.v)+'</div>':'<span class="badge b-warn">Vendre l’éclatant</span><div class="sub">tenter plus haut : '+(s.cont===-Infinity?'impossible (niveau)':sg(s.cont))+'</div>')}</td></tr>`}).join('')
-   +'</tbody></table></div><p class="sub" style="margin-top:6px">Espérance = gain moyen par essai de l’étape 1 en suivant les conseils. Jackpot = chance de passer toutes les étapes avec combo, et gain si ça arrive (valeur finale − coûts de tous les essais).</p></details>'}).join('')
-  ||'<p class="mut">Aucune chaîne avec des prix connus.</p>'}
 function segShow(btn,id){const seg=btn.parentNode;seg.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===btn));
  const sec=seg.closest('section');sec.querySelectorAll('.segp').forEach(p=>p.style.display=p.id===id?'':'none')}
 function resCrafts(name){const sec=document.getElementById('harvest');segShow(sec.querySelectorAll('.seg button')[1],'hcraft');
@@ -455,7 +414,7 @@ document.addEventListener('DOMContentLoaded',()=>{let t='home';try{t=localStorag
  if(localStorage.getItem('detail')){document.body.classList.add('detail');document.querySelectorAll('input.dt').forEach(x=>x.checked=true)}}catch(e){}
  if(!document.getElementById(t))t='home';show(t);
  try{const s=JSON.parse(localStorage.getItem('stock')||'null');if(s)document.querySelectorAll('#stock input[data-r]').forEach(i=>i.value=s[i.dataset.r]||'')}catch(e){}
- importLevelsFromHash();applyLevels();jInit();rateCalc();planSafe();planGamble();document.querySelectorAll('th').forEach(th=>th.onclick=()=>sortT(th))});
+ importLevelsFromHash();applyLevels();jInit();rateCalc();planSafe();document.querySelectorAll('th').forEach(th=>th.onclick=()=>sortT(th))});
 
 // ======================================================================== ravitaillement
 // Objets lus sur la capture (icone de chaque objet), gardes dans ce navigateur ; prix du dernier passage (SUPPLY) :
@@ -607,46 +566,3 @@ function supplyCalc(x,e,part){const n=v=>v==null?'–':NF.format(Math.round(v)),
   +(cb?tr('Résultat moyen avec combo <span class="sub">('+Math.round((1-c)*100)+' % objet normal, '+Math.round(c*100)+' % '+jEsc(cb.n)+' à '+n(cb.v)+' → '+n(V)+' net)</span>',o=>o.res)
    +tr('Gain moyen avec combo <span class="sub">(sur beaucoup de crafts : un pari)</span>',o=>o.gain,pn):'');
  return h+'</tbody></table></div>'}
-
-// ======================================================================== par ingredient
-// « Que faire de… ? » : vente directe d'un ingredient face a chaque craft qui l'utilise (INGDATA). Valeur d'1 unite
-// dans un craft = (vente du produit apres taxe x reussite - autres ingredients) / unites utilisees ; sans perte des
-// materiaux en cas d'echec (Mes metiers), la reussite ne compte pas.
-function ingRate(alts){let best=null,unk=false,need=null;
- alts.forEach(([p,m,cv])=>{const rt=sRate(p,m,cv);if(rt.u){unk=true;return}if(rt.lock){if(!need||m<need.m)need={p,m};return}
-  if(!best||rt.r>best.r)best={r:rt.r,p,m}});
- return best?best:unk?{r:1,u:true}:{r:1,lock:true,need}}
-function ingRender(name){const D=window.INGDATA,box=document.getElementById('ingbox');if(!D||!box)return;
- const q=document.getElementById('ingq'),dl=document.getElementById('ingnames');
- if(dl&&!dl.options.length)dl.innerHTML=Object.values(D.ing).map(x=>x.n).sort((a,b)=>a.localeCompare(b,'fr')).map(n=>'<option value="'+jEsc(n)+'">').join('');
- if(name==null){try{name=q.value||localStorage.getItem('ingSel')||'Essence de Balaur'}catch(e){name=q.value||'Essence de Balaur'}}
- const id=Object.keys(D.ing).find(k=>D.ing[k].n.toLowerCase()===String(name).trim().toLowerCase());
- if(!id){box.innerHTML='<p class="mut">Ingrédient inconnu ou utilisé dans aucun craft vendable : choisis-le dans la liste.</p>';return}
- const I=D.ing[id],n=v=>v==null?'–':NF.format(Math.round(v)),net=v=>v==null?null:v*(1-D.tax),lose=lvState().lose;
- q.value=I.n;try{localStorage.setItem('ingSel',I.n)}catch(e){}
- const flat=I.ask==null?I.u:I.u&&I.ask>I.u?(I.ask+I.u)/2:I.ask,fn=net(flat),only=document.getElementById('ingok').checked;
- let pnj=false;
- const rows=D.rec.filter(r=>r.x[id]).map(r=>{const [qx,other,e]=r.x[id],rt=ingRate(r.a),pn=net(r.sell)*r.q;if(e)pnj=true;
-   const v=other==null?null:((lose?rt.r:1)*pn-other)/qx;return{r,qx,other,e,rt,pn,v,d:v==null||fn==null?null:v-fn}})
-  .filter(o=>!only||!o.rt.lock).sort((a,b)=>(!!a.rt.lock-!!b.rt.lock)||((b.v??-Infinity)-(a.v??-Infinity)));
- const best=rows.find(o=>!o.rt.lock&&o.v!=null);
- box.innerHTML='<div class="card" style="margin:10px 0"><b>Vente directe de '+jEsc(I.n)+'</b><span class="mut">plus bas en vente '+n(I.ask)+' · habituel '+n(I.u)+' · '+I.l+' annonce(s) → <b>≈ '+n(fn)+' net / unité</b></span>'
-  +(best&&fn!=null?'<span>'+(best.v>fn?'✅ Le mieux : <b>'+jEsc(best.r.o)+'</b>, '+n(best.v)+' par unité (<span class="pos">+'+n(best.v-fn)+'</span> par rapport à la vente directe)'+(best.rt.u?' <span class="sub">· niveau non renseigné dans Mes métiers</span>':'')
-   :'❌ Aucun craft que tu peux faire ne rapporte plus que la vente directe.')+'</span>':'')
-  +(fn!=null?(()=>{const w=rows.filter(o=>!o.rt.lock&&o.d!=null&&o.d<=0).map(o=>o.r.o);
-    return w.length?'<span class="neg">💰 Vendre brut plutôt que crafter : '+w.map(jEsc).join(', ')+'</span>':''})():'')+'</div>'
-  +'<div class="wrap"><table><thead><tr><th>Produit</th><th>Métier</th><th class="n">Réussite</th><th class="n">Utilise</th><th class="n">Autres ingrédients</th>'
-  +'<th class="n">Vente du produit</th><th class="n">Valeur d’1 unité</th><th>Brut ou craft ? <span class="sub">(par craft)</span></th><th class="n">Vendus/j (serveur)</th></tr></thead><tbody>'
-  +(rows.length?rows.map(o=>{const r=o.r,rt=o.rt,lk=rt.lock;
-   const met=r.a.map(([p,m])=>(PROF[p]||p)+' '+lvTxt(Math.max(1,m))).join(' ou ');
-   return '<tr'+(lk?' class="locked"':'')+'><td><span class="nm" title="Cliquer pour copier">'+jEsc(r.o)+'</span>'+(r.q>1?' <span class="sub">×'+r.q+'</span>':'')+'</td><td class="sub">'+met+'</td>'
-    +'<td class="n">'+(lk?'🔒':rt.u?'?':(rt.r*100).toFixed(1).replace('.',',')+' %')+'</td><td class="n">'+NF.format(o.qx)+'</td>'
-    +'<td class="n">'+n(o.other)+(o.e?' <span class="sub" title="Comprend un outil lié compté au prix PNJ estimé">*</span>':'')+'</td>'
-    +'<td class="n">'+n(r.sell)+'<div class="sub">'+n(o.pn)+' net · '+(r.l||0)+' ann.</div></td>'
-    +'<td class="n"><b>'+n(o.v)+'</b></td><td>'+(o.d==null?'–':(o.d>0?'<b class="pos">🔨 Crafter</b>':'<b class="neg">💰 Vendre brut</b>')
-     +' <span class="sub">'+NF.format(o.qx)+' brut '+n(fn*o.qx)+' · craft '+n(o.v*o.qx)+' → '+(o.d>0?'+'+n(o.d*o.qx)+' en craftant':n(-o.d*o.qx)+' de plus en vendant brut')+'</span>')+'</td>'
-    +'<td class="n">'+(r.vj==null?'–':NF.format(r.vj))+'</td></tr>'}).join('')
-   :'<tr><td colspan="9" class="mut">Aucun craft '+(only?'que tu peux faire ':'')+'avec cet ingrédient.</td></tr>')
-  +'</tbody></table></div>'
-  +(pnj?'<p class="sub">* comprend un outil lié (Marteau, Durcisseur, Assouplissant…) compté au prix PNJ estimé du réglage <code>npc_reagent_price</code> : vérifie son vrai prix en jeu.</p>':'')}
-document.addEventListener('DOMContentLoaded',()=>ingRender());

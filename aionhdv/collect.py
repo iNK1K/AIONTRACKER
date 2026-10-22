@@ -194,20 +194,6 @@ def collect_activity(con, server, item_ids):
 
 # ---------------------------------------------------------------- aion2.exchange
 
-def collect_ref_volume(con, ax_server, item_ids):
-    n = 0
-    vols = fetch_all(lambda iid: aion2exchange.volume(iid, ax_server), item_ids, workers=2)   # source lente : menagee
-    for iid, v in vols.items():
-        for d in (v or {}).get("days", []):
-            con.execute("INSERT OR REPLACE INTO ref_volume VALUES (?,?,?,?,?,?,?,?,?,?)",
-                        (ax_server, iid, d["registered"], num(d.get("units_sold")), num(d.get("units_delta")),
-                         num(d.get("days_since_previous")), num(d.get("avg_price")), num(d.get("min_price")),
-                         num(d.get("max_price")), d.get("window_from")))
-            n += 1
-    con.commit()
-    return n
-
-
 def collect_ax_prices(con, ax_server, item_ids, since_iso):
     n = 0
     prices = fetch_all(lambda iid: aion2exchange.prices(iid, ax_server, since_iso), item_ids, workers=2)
@@ -281,12 +267,19 @@ def top_products(con, server, limit=40):
     return [r["item_id"] for r in rows]
 
 
-def ref_item_ids(con):
-    """Items suivis + equivalents elyseens (pour le volume de reference de Kaisinel)."""
-    from .analysis import elyos_equivalent
-    ids = set(tracked_items(con))
-    for iid in list(ids):
-        e = elyos_equivalent(con, iid)
-        if e:
-            ids.add(e)
-    return sorted(ids)
+
+def purge(con, servers, keep_days=8):
+    """Ne garde que les serveurs suivis (prix, activite, historique, analyses) et 8 jours d'analyses : la base reste
+    legere dans le cache d'Actions. Les volumes de Kaisinel (ancien serveur de reference) ne servent plus."""
+    servers = [str(s) for s in servers]
+    marks = ",".join("?" * len(servers))
+    ax = [r["ax_id"] for r in con.execute(f"SELECT ax_id FROM servers WHERE id IN ({marks})", servers) if r["ax_id"]]
+    cut = (datetime.now(timezone.utc) - timedelta(days=keep_days)).isoformat()[:19]
+    n = 0
+    for table in ("quotes", "activity", "analyses"):
+        n += con.execute(f"DELETE FROM {table} WHERE server NOT IN ({marks})", servers).rowcount
+    n += con.execute(f"DELETE FROM ax_prices WHERE ax_server NOT IN ({','.join('?' * len(ax)) or 'NULL'})", ax).rowcount
+    n += con.execute("DELETE FROM ref_volume").rowcount
+    n += con.execute("DELETE FROM analyses WHERE run_ts < ?", (cut,)).rowcount
+    con.commit()
+    return n

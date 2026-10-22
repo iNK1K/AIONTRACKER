@@ -14,34 +14,13 @@ EQUIP_TYPES = {"Sword": "Épée", "Greatsword": "Espadon", "Dagger": "Dague", "B
                "Necklace": "Collier", "Earring": "Boucle d'oreille", "Ring": "Anneau", "Bracelet": "Bracelet",
                "Belt": "Ceinture", "Amulet": "Amulette"}
 
-# equivalences Asmodiens -> Elyseens (Kaisinel, serveur de reference, est elyseen)
-ELYOS_EQ = [("Asvata", "Yggdrasil"), ("conide", "l'inina"), ("pujery", "cypri"), ("d'ohkra", "de kukuru"),
-            ("dragon noir", "dragon blanc")]
-
-
 def _dt(s):
     return datetime.fromisoformat(s.replace("Z", "+00:00"))
-
-
-def elyos_equivalent(con, item_id):
-    it = con.execute("SELECT base_name FROM items WHERE id = ?", (item_id,)).fetchone()
-    if not it or not it["base_name"]:                   # item ajoute par aion2.exchange sans nom
-        return None
-    name = it["base_name"]
-    for a, b in ELYOS_EQ:
-        name = name.replace(a, b)
-    name = name.replace("Pâtes de l'inina", "Pâtes à l'inina")
-    if name == it["base_name"]:
-        return None
-    r = con.execute("SELECT id FROM items WHERE name = ? AND bound = 0", (name,)).fetchone()
-    return r["id"] if r else None
 
 
 class Market:
     def __init__(self, con, cfg, server):
         self.con, self.cfg, self.server = con, cfg, str(server)
-        ref = con.execute("SELECT ax_id FROM servers WHERE id = ?", (cfg["reference_server"],)).fetchone()
-        self.ref_ax = ref["ax_id"] if ref else 11304
         self.items = {r["id"]: dict(r) for r in con.execute("SELECT * FROM items")}
         # nom -> item echangeable ; plusieurs objets peuvent porter le meme nom : on prefere celui vu en vente
         self.by_base = {}
@@ -49,13 +28,11 @@ class Market:
             if not it["bound"]:
                 self.by_base.setdefault(it["base_name"], it["id"])
         self._load_prices()
-        self._ref = {}
         self._usual = {}
         self._sales = {}
         self._raw = {}
         # brut vendable depuis la MaJ du 21/10/2026 : avant, prix et ventes du brut viennent d'un autre regime de marche
         self.raw_since = cfg.get("brut_vendable_depuis") or ""
-        self.ratio = self._activity_ratio()
         srow = con.execute("SELECT faction FROM servers WHERE id = ?", (self.server,)).fetchone()
         self.faction = (srow["faction"] if srow else "").lower()      # 'asmodian' / 'elyos'
         self.recipes_by_item = {}
@@ -94,10 +71,6 @@ class Market:
         if self.raw_since > since and self.items.get(item_id, {}).get("is_gather"):
             return self.raw_since
         return since
-
-    def raw_recent(self, item_id):
-        """Brut dont l'historique est coupe depuis moins de 7 jours : les moyennes de Kaisinel sont d'avant."""
-        return self._since(item_id, (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()[:19]) == self.raw_since
 
     def price_series(self, item_id, days=7):
         """Prix plancher recents [(ts, prix)] : releves horaires (quotes) + historique aion2.exchange."""
@@ -175,18 +148,17 @@ class Market:
             if it["lots"] >= 3 and span >= 0.5:
                 k = (it["lots"] - 1) / it["lots"] / span        # rythme sans biais : n - 1 intervalles sur la periode
                 it.update(unites_j=it["unites"] * k, achats_j=it["lots"] * k, recu_j=it["recu"] * k)
-            # estimations de l'outil sur la meme periode (marche mesure : annonces disparues x taille des annonces)
-            mk = lot = None
+            # estimations de l'outil sur la meme periode (marche mesure : annonces disparues, 1 vente par annonce)
+            mk = None
             if iid:
                 r = self.con.execute("SELECT AVG(drops_h) AS d, COUNT(*) AS n FROM activity WHERE server=? AND item_id=? "
                                      "AND ts>=? AND ts<=?", (self.server, iid, a.isoformat()[:19],
                                                              (b + timedelta(hours=24)).isoformat()[:19])).fetchone()
                 mk = r["d"] * 24 if r and r["n"] and r["d"] else None
-                lot = self.lot_size(iid)
-            it["lot_outil"] = lot
-            it["marche_unites_j"] = mk * (lot or 1) if mk else None      # comme sales() : 1 par annonce sans taille connue
+            it["marche_unites_j"] = mk
             it["estime_unites_j"] = it["marche_unites_j"] * share if it["marche_unites_j"] else None
-            it["part"] = it["unites_j"] / it["marche_unites_j"] if it["unites_j"] and it["marche_unites_j"] else None
+            # le marche est mesure en annonces disparues : on le compare a mes achats (un achat ~ une annonce)
+            it["part"] = it["achats_j"] / it["marche_unites_j"] if it["achats_j"] and it["marche_unites_j"] else None
             # prix : ce que le marche payait pendant la periode (ventes observees sur les releves horaires)
             seen = self.sale_prices(iid, (b - a).total_seconds() / 3600 + 24, until=b + timedelta(hours=1)) if iid else []
             it["prix_marche"] = statistics.median(seen) if len(seen) >= 3 else None
@@ -198,16 +170,14 @@ class Market:
         out.sort(key=lambda x: -x["recu"])
         # calibrage, sur les objets vendus au moins 3 fois
         cal = [x for x in out if x["unites_j"]]
-        ratio = [x["unites_j"] / x["estime_unites_j"] for x in cal if x["estime_unites_j"]]
+        ratio = [x["achats_j"] / x["estime_unites_j"] for x in cal if x["estime_unites_j"]]
         parts = [x["part"] for x in cal if x["part"]]
         prix = [x["prix_u"] / x["prix_marche"] for x in cal if x["prix_marche"]]
-        achat = [(x["achat_moyen"], x["lot_outil"]) for x in cal if x["lot_outil"]]
         return dict(items=out, debut=start, fin=end, jours=days, ventes=len(sales), recu=sum(x["recu"] for x in out),
                     recu_j=sum(x["recu"] for x in out) / days, part_supposee=share,
                     part=statistics.median(parts) if parts else None,
                     ratio=statistics.median(ratio) if ratio else None,
-                    prix_ratio=statistics.median(prix) if prix else None,
-                    achat=statistics.median(a / l for a, l in achat) if achat else None, n_cal=len(cal))
+                    prix_ratio=statistics.median(prix) if prix else None, n_cal=len(cal))
 
     def price_drop(self, item_id, hours=3):
         """Chute en cours : prix actuel compare au plus haut des dernieres heures (None si pas de chute nette)."""
@@ -246,7 +216,7 @@ class Market:
             out.append(dict(item_id=iid, objet=it["name"], prix=price, achat_cible=round(q1), revente_cible=round(med),
                             net_u=round(net_u), marge=round(net_u / q1, 3), ma_part_j=round(mine),
                             profit_j=round(mine * net_u), capital_j=round(mine * q1), annonces=self.listings.get(iid, 0),
-                            acheter=price <= q1, releves=len(rows), **self.sizing(iid, mine)))
+                            acheter=price <= q1, releves=len(rows)))
         out.sort(key=lambda f: -f["profit_j"])
         return out
 
@@ -271,71 +241,19 @@ class Market:
         out.sort(key=lambda u: u["ratio"])
         return out
 
-    def ref(self, item_id):
-        """Volume quotidien et prix moyen de vente sur le serveur de reference."""
-        if item_id in self._ref:
-            return self._ref[item_id]
-        res = None
-        for iid in (item_id, elyos_equivalent(self.con, item_id)):
-            if not iid:
-                continue
-            rows = [dict(r) for r in self.con.execute(
-                "SELECT * FROM ref_volume WHERE ax_server=? AND item_id=? ORDER BY registered", (self.ref_ax, iid))]
-            rows = [r for r in rows if r["units_sold"] is not None]
-            if not rows or not rows[-1]["units_sold"]:
-                continue
-            last = rows[-1]
-            first = next(r for r in rows if r["units_sold"])
-            eff_days = min(28.0, (_dt(last["registered"]) - _dt(first["registered"])).days + 1.0)
-            recent = [r for r in rows if _dt(r["registered"]) > _dt(last["registered"]) - timedelta(days=7)
-                      and r["units_delta"] is not None and r["days_since_previous"]]
-            if eff_days < 28 and len(recent) >= 3:
-                daily = sum(r["units_delta"] for r in recent) / sum(r["days_since_previous"] for r in recent)
-            else:
-                daily = last["units_sold"] / eff_days
-            # prix moyen sur ~7 jours, deduit des moyennes glissantes
-            avg = last["avg_price"]
-            old = [r for r in rows if _dt(r["registered"]) <= _dt(last["registered"]) - timedelta(days=7)]
-            if old and old[-1]["units_sold"] and last["units_sold"] > old[-1]["units_sold"] and old[-1]["avg_price"]:
-                o = old[-1]
-                w = (last["avg_price"] * last["units_sold"] - o["avg_price"] * o["units_sold"]) / (last["units_sold"] - o["units_sold"])
-                if w > 0:
-                    avg = w
-            res = dict(daily=max(daily, 0.0), avg_price=avg, ref_item=iid, as_of=last["registered"])
-            break
-        self._ref[item_id] = res
-        return res
-
     def _drops_per_day(self, server, item_id, days=7):
         since = self._since(item_id, (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()[:19])
         r = self.con.execute("SELECT AVG(drops_h) AS d, COUNT(*) AS n FROM activity WHERE server=? AND item_id=? AND ts>=?",
                              (str(server), item_id, since)).fetchone()
         return r["d"] * 24 if r and r["n"] and r["d"] is not None else None
 
-    def lot_size(self, item_id):
-        """Taille moyenne d'une annonce vendue = unites vendues par jour / annonces disparues par jour, les deux mesures
-        sur le serveur de reference (seul serveur dont le jeu publie les unites vendues). C'est une habitude des
-        vendeurs (taille des piles mises en vente), pas une demande : elle se transpose d'un serveur a l'autre."""
-        ref = self.ref(item_id)
-        if not ref or not ref["daily"]:
-            return None
-        drops = self._drops_per_day(self.cfg["reference_server"], ref["ref_item"])
-        return max(1, round(ref["daily"] / drops)) if drops and drops >= 3 else None
-
     def sales(self, item_id):
-        """Ventes par jour sur MON serveur, mesurees : annonces disparues sur 24 h x taille des annonces.
-        A defaut de mesure sur mon serveur : ventes de Kaisinel x activite relative (extrapolation, signalee)."""
+        """Ventes par jour sur MON serveur, mesurees : annonces disparues sur 24 h, une vente par annonce (la taille des
+        annonces n'est pas publiee pour ce serveur)."""
         if item_id in self._sales:
             return self._sales[item_id]
-        res = None
         drops = self._drops_per_day(self.server, item_id, days=1.25)
-        if drops is not None:
-            lot = self.lot_size(item_id)
-            res = dict(units=drops * (lot or 1), listings=drops, lot=lot, source="serveur")
-        else:
-            ref = self.ref(item_id)
-            if ref and ref["daily"]:
-                res = dict(units=ref["daily"] * self.ratio, listings=None, lot=None, source="Kaisinel")
+        res = dict(units=drops, listings=drops, source="serveur") if drops is not None else None
         self._sales[item_id] = res
         return res
 
@@ -373,22 +291,6 @@ class Market:
         return dict(share=share, best=window(True), low=window(False), sold=round(total), days=days,
                     tz="Paris" if PARIS else "UTC")
 
-    def _activity_ratio(self):
-        ref_server = str(self.cfg["reference_server"])
-        since = (datetime.now(timezone.utc) - timedelta(hours=30)).isoformat()[:19]
-
-        def latest(server):
-            out = {}
-            for r in self.con.execute("SELECT item_id, drops_h, ts FROM activity WHERE server=? AND ts>=? ORDER BY ts",
-                                      (server, since)):
-                out[r["item_id"]] = r["drops_h"]
-            return out
-        a, b = latest(self.server), latest(ref_server)
-        ratios = [a[i] / b[i] for i in a if i in b and b[i] >= 0.5]
-        if len(ratios) >= 8:
-            return max(0.05, min(3.0, statistics.median(ratios)))
-        return 0.40
-
     # ------------------------------------------------------------ prix d'achat / de vente
     def sale_prices(self, item_id, hours, until=None):
         """Prix des ventes observees : quand le nombre d'annonces baisse d'une heure a l'autre, les annonces parties
@@ -415,7 +317,7 @@ class Market:
     def usual_price(self, item_id):
         """Prix habituel sur MON serveur = prix auquel l'item se vend vraiment : mediane des prix des ventes observees
         sur 48 h (au moins 5), sinon 7 jours. Un pic ou l'on n'achete pas compte peu ; un vrai changement de niveau est
-        suivi. A defaut : mediane des prix plancher sur 7 jours hors jours en pic, puis prix moyen de Kaisinel."""
+        suivi. A defaut : mediane des prix plancher sur 7 jours hors jours en pic."""
         if item_id not in self._usual:
             res = None
             for hours in (48, 168):
@@ -433,10 +335,6 @@ class Market:
                     m = statistics.median(dmed.values())
                     kept = [p for d, v in days.items() if dmed[d] <= 1.6 * m for p in v]
                     res = dict(price=statistics.median(kept or [p for _, p in rows]), source="serveur")
-                elif not self.raw_recent(item_id):
-                    ref = self.ref(item_id)
-                    if ref and ref["avg_price"]:
-                        res = dict(price=ref["avg_price"], source="Kaisinel")
             self._usual[item_id] = res
         return self._usual[item_id]
 
@@ -577,7 +475,6 @@ class Market:
     def evaluate(self, recipe, mode, trans="auto"):
         oid = recipe["item_id"]
         sp = self.sell_price(oid)
-        ref = self.ref(oid)
         if not sp:
             return None
         masteries = self.cfg.get("masteries", {})
@@ -591,7 +488,7 @@ class Market:
         cost_u, cost_pu = c["cost_r"] / q, c["cost_p"] / q
         net_u = sp["real"] * (1 - fees) - cost_u
         net_pu = sp["pess"] * (1 - fees) - cost_pu
-        # ventes mesurees sur mon serveur ; extrapolation depuis Kaisinel seulement a defaut (signalee)
+        # ventes mesurees sur mon serveur
         sl = self.sales(oid)
         vol = sl["units"] if sl else 0
         mine = vol * self.cfg["market_share"]
@@ -617,17 +514,13 @@ class Market:
             vol_serveur_j=round(vol), ma_part_j=round(mine), vol_source=sl and sl["source"],
             annonces_vendues_j=round(sl["listings"], 1) if sl and sl["listings"] is not None else None,
             profit_j=round(mine * net_u), profit_pess_j=round(mine * net_pu),
-            capital_j=round(mine * cost_u), flags=flags, **self.sizing(oid, mine))
+            capital_j=round(mine * cost_u), flags=flags)
 
     def _flags(self, sl, sp):
         """Doutes sur les ventes (volume) et le prix de vente d'un item."""
         flags = []
         if not sl:
             flags.append("volume de vente inconnu (aucune mesure)")
-        elif sl["source"] == "Kaisinel":
-            flags.append("ventes non mesurées sur ton serveur (extrapolées de Kaisinel)")
-        elif sl["lot"] is None and sl["listings"]:
-            flags.append("taille des annonces inconnue (comptée 1 par annonce)")
         if sp["stale"]:
             flags.append(f"pas en vente en ce moment (dernier prix connu le {paris(sp['stale'], '%d/%m %H:%M')})")
         elif sp["listings"] <= 1:
@@ -666,7 +559,7 @@ class Market:
                 vol_serveur_j=round(vol), ma_part_j=round(mine), vol_source=sl and sl["source"],
                 annonces_vendues_j=round(sl["listings"], 1) if sl and sl["listings"] is not None else None,
                 profit_j=round(mine * net_u), profit_pess_j=round(mine * net_pu), capital_j=0,
-                vente_net_u=round(net_u), flags=self._flags(sl, sp), **self.sizing(iid, mine)))
+                vente_net_u=round(net_u), flags=self._flags(sl, sp)))
         out.sort(key=lambda e: -e["profit_j"])
         return out
 
@@ -693,7 +586,6 @@ class Market:
         act : activite recente de l'item vendu (nouvelles annonces/h, annonces disparues/h)."""
         score, why = 100, []
         listings = self.listings.get(e["item_id"], 0)
-        lot = e.get("lot_vente") or 1
         if act:
             pressure = act["adds_h"] / max(act["drops_h"], 0.1)
             sell_h = listings / max(act["drops_h"], 0.05)
@@ -708,7 +600,7 @@ class Market:
                     score -= pen
                     why.append(f"~{sell_h:.0f} h avant que les {listings} annonces devant toi soient vendues")
                     break
-            qmax = 2 * act["drops_h"] * lot                       # ~2 h de ventes du marche
+            qmax = 2 * act["drops_h"]                             # ~2 h de ventes du marche
         else:
             score -= 25
             sell_h = None
@@ -729,55 +621,6 @@ class Market:
         return dict(score=score, feu="vert" if score >= 70 else "orange" if score >= 40 else "rouge", raisons=why,
                     qte_max=qmax, prix_plancher=math.ceil(cost / (1 - self.cfg["fees"])) if cost else None,
                     ecoulement_h=round(sell_h, 1) if sell_h is not None else None)
-
-    def gamble_chains(self):
-        """Chaines d'amelioration (blanc -> vert -> bleu -> unique) : a chaque etape, le combo donne la version
-        « eclatante », seule a pouvoir servir a l'etape suivante. Donnees par etape pour le calcul dans le navigateur
-        (reussite selon les niveaux du joueur) : cout des matieres achetees, ressources recoltees, valeur nette de
-        vente du resultat normal et du resultat combo, ventes mesurees."""
-        fees = self.cfg["fees"]
-        combo_cfg = self.cfg.get("combo_rate")
-        recs = [r for rs in self.recipes_by_item.values() for r in rs if r["combo_item_id"] and not r["unresolved"]]
-        combos = {r["combo_item_id"] for r in recs}
-        by_input = {}
-        for r in recs:
-            for opts in self.ingredients.get(r["id"], {}).values():
-                for o in opts:
-                    by_input.setdefault(o["item_id"], []).append(r)
-
-        def value(iid):
-            u = self.usual_price(iid)
-            sl = self.sales(iid)
-            return dict(n=self.items[iid]["name"], v=round(u["price"] * (1 - fees)) if u else None,
-                        ls=round(sl["listings"], 1) if sl and sl["listings"] is not None else None)
-        chains = []
-        for r in recs:
-            if any(o["item_id"] in combos for opts in self.ingredients.get(r["id"], {}).values() for o in opts):
-                continue                                   # pas un debut de chaine
-            steps, cur, inp = [], r, None
-            while cur and len(steps) < 6:
-                c = self.recipe_cost(cur, "harvest", skip={inp} if inp else ())
-                plain, ecl = value(cur["item_id"]), value(cur["combo_item_id"])
-                steps.append(dict(prof=cur["profession"], m=cur["mastery"] or 0, cv=cur.get("rate_curve"),
-                                  c=combo_cfg if combo_cfg is not None else (cur["combo_prob_raw"] or 0) / 10000,
-                                  cost=round(c["cost_r"]), res={k: round(v, 2) for k, v in c["gather"].items()},
-                                  ok=c["ok"], inp=self.items[inp]["name"] if inp else None, plain=plain, ecl=ecl,
-                                  lines=c["lines"]))
-                if ecl["v"] is None:
-                    break                                  # plus de prix connu : on s'arrete la
-                inp = cur["combo_item_id"]
-                cur = next((x for x in by_input.get(inp, []) if x["combo_item_id"]), None)
-            if len(steps) >= 2 and steps[0]["plain"]["v"] is not None:
-                chains.append(dict(name=self.items[r["item_id"]]["name"], steps=steps))
-        return chains
-
-    def sizing(self, item_id, per_day):
-        """Combien d'annonces poster et de quelle taille, pour ecouler ma part du jour."""
-        lot = self.lot_size(item_id)
-        if not lot or per_day < 1:
-            return dict(lot_vente=lot, nb_lots_j=None)
-        lot = min(lot, max(1, round(per_day)))
-        return dict(lot_vente=lot, nb_lots_j=max(1, round(per_day / lot)))
 
     def best_per_item(self, mode, trans="auto"):
         out = []
@@ -862,8 +705,7 @@ class Market:
             for res, per in e["ressources"].items():
                 stock[res] -= n * per
             plan.append(dict(objet=e["objet"], brut=bool(e.get("brut")), quantite_j=n, prix_conseille=e["prix_real"], net_u=e["net_u"],
-                             kinah_j=n * e["net_u"], ressources={r: round(n * p) for r, p in e["ressources"].items()},
-                             **self.sizing(e["item_id"], n)))
+                             kinah_j=n * e["net_u"], ressources={r: round(n * p) for r, p in e["ressources"].items()}))
         return plan
 
 
@@ -898,8 +740,7 @@ def add_safety(con, res, acts=None):
     for l in res["listings"]:
         a = act(l["item_id"]) if l["item_id"] else None
         if a and l.get("quantite"):
-            lot = m.lot_size(l["item_id"]) or 1
-            l["ecoulement_h"] = round((l["annonces"] + l["quantite"] / lot) / max(a["drops_h"], 0.05), 1)
+            l["ecoulement_h"] = round((l["annonces"] + 1) / max(a["drops_h"], 0.05), 1)
     return res
 
 
@@ -923,7 +764,7 @@ def run_all(con, cfg, server=None):
     con.execute("INSERT INTO analyses VALUES (?,?,?,?,?,?,?)",
                 (run_ts, server, "plan", None, None, None, json.dumps(plan, ensure_ascii=False)))
     con.commit()
-    return add_safety(con, dict(run_ts=run_ts, server=server, as_of=m.as_of, ratio=m.ratio, harvest=harvest, buy=buy, raw=raw,
+    return add_safety(con, dict(run_ts=run_ts, server=server, as_of=m.as_of, harvest=harvest, buy=buy, raw=raw,
                 targets=targets, plan=plan, hours=m.hourly_profile(), uniques=m.uniques(),
-                flips=m.flips(), listings=m.my_listings(), gains=m.real_gains() if server == str(cfg["my_server"]) else None, spikes=m.spikes(buy), chains=m.gamble_chains(),
+                flips=m.flips(), listings=m.my_listings(), gains=m.real_gains() if server == str(cfg["my_server"]) else None, spikes=m.spikes(buy),
                 buy_direct=buy_direct, buy_trans=buy_trans, market=m))
