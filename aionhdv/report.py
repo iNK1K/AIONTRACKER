@@ -892,72 +892,21 @@ def _md(s):
 
 def home(con, cfg, ctx, my, sname):
     """Page d'accueil : uniquement ce qui sert a faire du profit aujourd'hui."""
-    m = my["market"]
-    good = [e for e in my["harvest"] if is_good(e)]
-    top = good[:12]
-    buys = [e for e in my["buy"] if is_good(e) and e["net_pess_u"] > 0]
-    targets = [t for t in my["targets"] if t["meilleur"] and not t.get("rang")][:6]
-
     kpis = (f'<div class="kpis">'
-            '<div class="kpi"><div class="l">Potentiel du jour</div><div class="v pos" id="kpot">–</div>'
-            '<div class="s" id="kpots">selon le Planning safe</div></div>'
-            f'<div class="kpi"><div class="l">Meilleur craft</div><div class="v" style="font-size:19px">'
-            f'{esc(top[0]["objet"]) if top else "–"}</div><div class="s">{kfmt(top[0]["profit_j"]) + " /j" if top else ""}</div></div>'
-            f'<div class="kpi"><div class="l">Achat → craft</div><div class="v {"pos" if buys else "mut"}">{len(buys)}</div>'
-            f'<div class="s">{"opportunité(s) sûre(s)" if buys else "rien de sûr aujourd’hui"}</div></div>'
+            '<div class="kpi"><div class="l">Gain du jour</div><div class="v pos" id="kopp">–</div>'
+            '<div class="s" id="kopps">selon 🎯 Opportunités</div></div>'
+            '<div class="kpi"><div class="l">Annonces libres</div><div class="v" id="kslots">–</div>'
+            '<div class="s">limite du jeu moins tes annonces en cours</div></div>'
             f'<div class="kpi"><div class="l">Ventes mesurées sur {esc(sname)}</div>'
             f'<div class="v">{sum(1 for e in my["harvest"] if e.get("vol_source") == "serveur")} / {len(my["harvest"])}</div>'
             f'<div class="s">crafts comparés (annonces disparues sur 24 h)</div></div></div>')
 
-    # 1. fabriquer et vendre
-    cards = []
-    for e in top:
-        med = m.median_price(e["item_id"], 3)
-        r = e["prix_affiche"] / med if med else 1
-        if r >= cfg["alerts"]["spike_ratio"]:
-            tip = '<span class="badge b-ok">📈 Prix haut : vends maintenant</span>'
-        elif r <= cfg["alerts"]["dump_ratio"]:
-            tip = '<span class="badge b-bad">📉 Prix bas : garde ton stock</span>'
-        else:
-            tip = '<span class="badge b-mut">Prix stable</span>'
-        res = "".join(f'<span class="chip">{ctx.icon(name=k)}<span class="nm" title="Cliquer pour copier">{esc(k)}</span> ×{v:g}{ctx.mapbtn(k)}</span>'
-                      for k, v in e["ressources"].items())
-        cards.append(
-            f'<div class="card" {craft_attrs(e)}>{ctx.label(e["item_id"], sub=f"{METIERS.get(e["metier"], e["metier"])} {niveau(e["maitrise"])} · lot ×{e["lot"]:g}")}'
-            f'<div class="chips">{res}</div>'
-            f'<div class="row"><span>Vendre à</span><b>{fmt(e["prix_real"])}</b></div>'
-            f'<div class="row"><span>Réussite</span><b class="csr">–</b></div>'
-            f'<div class="row"><span>Net par unité</span><b class="pos cnet">{fmt(e["net_u"])}</b></div>'
-            f'<div class="row"><span>À vendre par jour</span><b>~{fmt(e["ma_part_j"])}</b></div>'
-            f'<div class="row"><span>Mettre en vente</span><b>{lots_txt(e)}</b></div>'
-            f'<div class="row"><span>Profit/j</span><span class="big cprof">{kfmt(e["profit_j"])}</span></div>{tip}</div>')
-    craft_html = (f'<div class="cards">{"".join(cards)}</div>' if cards else '<p class="mut">Aucun craft rentable.</p>')
-    craft_html += (f'<p class="mut" style="margin-top:8px">{len(good)} crafts rentables au total, {len(my["harvest"])} comparés : '
-                   '<a href="#" onclick="show(\'harvest\');return false" style="color:var(--acc)">voir la liste complète</a>.</p>')
-
-    # 2. quoi recolter
-    rows = "".join(
-        f"<tr><td>{ctx.label(name=t['ressource'])}</td><td>{esc(use_name(t['usages'][0]))}</td>"
-        f"{_num_td(t['meilleur'], 'big')}{_num_td(t['absorbable_j'], color=False)}</tr>" for t in targets)
-    gather_html = (f'<div class="wrap"><table><thead><tr>{_th("Ressource")}{_th("Qu’en faire")}'
-                   f'{_th("Gain / ressource", None, True)}{_th("Utilisable/j", "Ressources que le marché absorbe par jour", True)}'
-                   f'</tr></thead><tbody>{rows}</tbody></table></div>')
-
-    # 3. achat -> craft
-    if buys:
-        brow = "".join(f"<tr><td>{ctx.label(e['item_id'])}</td><td class='ing'>{'<br>'.join(esc(x) for x in e['ingredients'])}</td>"
-                       f"{_num_td(e['achats_u'], color=False)}{_num_td(e['prix_real'], color=False)}{_num_td(e['net_u'])}"
-                       f"{_num_td(e['profit_j'], 'big', k=True)}<td>{surete_html(e)}</td></tr>" for e in buys[:5])
-        buy_html = (f'<div class="wrap"><table><thead><tr>{_th("Craft")}{_th("Acheter")}{_th("Coût/u", None, True)}'
-                    f'{_th("Vendre à", None, True)}{_th("Net/u", None, True)}{_th("Profit/j", None, True)}{_th("Sûreté")}</tr></thead>'
-                    f'<tbody>{brow}</tbody></table></div>')
-    else:
-        buy_html = ('<div class="card"><span class="mut">Aucun achat → craft → revente n’est sûr aux prix actuels. '
-                    'Tu seras alerté sur Discord dès qu’une opportunité apparaît.</span></div>')
-
+    # 1. opportunites du jour : meme calcul que l'onglet 🎯 (site.js, oppRender), 5 premieres
+    opp_html = ('<div id="hopps"></div><p class="mut" style="margin-top:8px">Liste complète, budget et temps de récolte : '
+                '<a href="#" onclick="show(\'opps\');return false" style="color:var(--acc)">onglet 🎯 Opportunités</a>.</p>')
     spikes = my.get("spikes") or []
     if spikes:
-        buy_html += (f'<div class="card" style="margin-top:10px;border-color:var(--warn)"><span>⚡ <b>{len(spikes)} pic(s) de prix</b> '
+        opp_html += (f'<div class="card" style="margin-top:10px;border-color:var(--warn)"><span>⚡ <b>{len(spikes)} pic(s) de prix</b> '
                      f'en cours ({esc(", ".join(e["objet"] for e in spikes[:3]))}) : rentable seulement en vendant vite. '
                      f'<a href="#" onclick="show(\'buy\');return false" style="color:var(--acc)">Voir l’onglet Achat → craft</a></span></div>')
 
@@ -1004,12 +953,10 @@ def home(con, cfg, ctx, my, sname):
 
     return (f"<h2>Aujourd’hui sur {esc(sname)}</h2><p class='lead'>Ce qu’il faut faire aujourd’hui pour gagner un maximum de kinah. "
             "Les tableaux complets sont dans les autres onglets.</p>" + kpis + todo_html(con, my)
-            + "<h3>① Fabriquer et vendre</h3>" + hours_html(my.get("hours")) + "<br>" + craft_html
-            + "<h3>② Quoi récolter</h3>" + gather_html
-            + "<h3>③ Acheter → fabriquer → revendre</h3>" + buy_html
-            + "<h3>④ Mes annonces</h3>" + mine_html
-            + "<h3>⑤ Alertes du jour</h3>" + alert_html
-            + "<h3>⑥ Annonces officielles</h3>" + news_html)
+            + "<h3>① Opportunités du jour</h3>" + hours_html(my.get("hours")) + "<br>" + opp_html
+            + "<h3>② Mes annonces</h3>" + mine_html
+            + "<h3>③ Alertes du jour</h3>" + alert_html
+            + "<h3>④ Annonces officielles</h3>" + news_html)
 
 
 def journal_html(ctx, cfg, my):

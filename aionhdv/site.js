@@ -442,7 +442,13 @@ function oppRender(save){const box=document.getElementById('obox');if(!box||!win
   +(picks.length?'<div class="wrap"><table>'+head+'<tbody>'+picks.map((c,k)=>row(c,k+1,c.u)).join('')+'</tbody></table></div>'
    :'<p class="mut">'+(slots?'Aucune opportunité ne tient dans ton budget et ton temps de récolte.':'Plus d’annonce libre : tes annonces en cours occupent toutes les places.')+'</p>')
   +(rest.length?'<details style="margin-top:10px"><summary class="mut" style="cursor:pointer">Opportunités suivantes ('+Math.min(rest.length,15)+')</summary><div class="wrap"><table>'+head+'<tbody>'
-   +rest.slice(0,15).map((c,k)=>row(c,picks.length+k+1,c.q)).join('')+'</tbody></table></div></details>':'')}
+   +rest.slice(0,15).map((c,k)=>row(c,picks.length+k+1,c.q)).join('')+'</tbody></table></div></details>':'')
+ // accueil : 5 premieres et indicateurs
+ const g=id=>document.getElementById(id);
+ if(g('kopp')){g('kopp').textContent=kf(tot);g('kopps').textContent=picks.length+' annonce(s), '+(cap?kf(cap)+' de capital':'sans capital')}
+ if(g('kslots'))g('kslots').textContent=document.getElementById('oslots').textContent;
+ if(g('hopps'))g('hopps').innerHTML=picks.length?'<div class="wrap"><table>'+head+'<tbody>'+picks.slice(0,5).map((c,k)=>row(c,k+1,c.u)).join('')+'</tbody></table></div>'
+  :'<p class="mut">Aucune opportunité avec tes annonces libres, ton budget et ton temps de récolte.</p>'}
 // ---------------- Mes procs de recolte (PROCS : ressource blanche -> [[grade, proc, valeur nette]]), gardes dans ce navigateur
 function procAdd(){const g=id=>document.getElementById(id),r=g('pres').value,n=+g('pn').value||0;if(!r||n<=0){toast('Indique le nombre de blancs récoltés');return}
  const P=pget('procs',{}),x=P[r]||{n:0,g1:0,g2:0,g3:0};x.n+=n;['g1','g2','g3'].forEach(k=>{x[k]+=+g('p'+k).value||0;g('p'+k).value=''});g('pn').value='';
