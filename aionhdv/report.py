@@ -285,6 +285,8 @@ def planning_tab(cfg, my):
     avec combo). Calcul dans le navigateur : niveaux de metier, recolte par heure et stock du joueur."""
     targets = []
     for t in my["targets"]:
+        if t.get("rang"):
+            continue                                   # procs (vert, bleu, eclatant) : pas planifies
         uses = [dict(o=u["objet"], i=u["item_id"], n=u["net_par_ressource"], cap=u["ressources_j"], per=round(u["per_u"], 4),
                      v=1 if u.get("via") else 0, b=1 if u.get("brut") else 0,
                      lot=u.get("lot")) for u in t["usages"] if u["fiable"] and u["ressources_j"]]
@@ -295,8 +297,9 @@ def planning_tab(cfg, my):
     best = f"{hours['best']}h – {(hours['best'] + 3) % 24}h" if hours else "21h – 0h"
     data = json.dumps(dict(targets=targets, best=best), ensure_ascii=False,
                       separators=(",", ":"))
-    return ("<h2>Planning de la journée</h2><p class='lead'>Deux façons de jouer ta récolte (la transformer, ou la vendre "
-            "brute quand le brut rapporte plus). "
+    return ("<h2>Planning de la journée</h2><p class='lead'>Quoi récolter et qu’en faire (le transformer, ou le vendre "
+            "brut quand le brut rapporte plus), sur les ressources blanches des points de récolte : les procs (vert, bleu, "
+            "éclatant) sont trop rares pour être planifiés, ils sont dans 🌲 Récolte. "
             "Les calculs utilisent tes niveaux de métier (🛠️ Mes métiers), ta récolte par heure (🌲 Récolte, "
             "100 par défaut) et ton stock (🧮 Mon stock).</p>"
             "<h3>🛡️ Planning safe : récolter ce qui rapporte et se vend</h3>"
@@ -386,10 +389,9 @@ def table_crafts(ctx, rows, tid, harvest, compare=None):
              _th("vs brut/u", "Net/u − ce que les mêmes ressources rapporteraient vendues brutes (prix réaliste, après "
                  "taxe ; échecs compris selon tes niveaux) : négatif = vends plutôt le brut", True) if harvest
              else _th("Marge", "Bénéfice / coût", True)) +
-            _th("Ventes/j", "Ta part (20 %) des ventes mesurées sur ton serveur : annonces disparues sur 24 h × taille "
-                "habituelle des annonces", True) +
+            _th("Ventes/j", "Ta part (20 %) des ventes mesurées sur ton serveur : annonces disparues sur 24 h (une vente "
+                "par annonce)", True) +
             _th("Profit/j", "Ventes/j × Net/u", True) +
-            _th("Volume serveur/j", "Unités vendues par jour sur ton serveur (mesurées)", True, True) +
             _th("Annonces vendues/j", "Annonces disparues sur 24 h sur ton serveur (achats ; une annonce retirée compte aussi)",
                 True, True) +
             _th("Prix affiché", "Prix le plus bas actuellement en vente", True, True) +
@@ -400,7 +402,7 @@ def table_crafts(ctx, rows, tid, harvest, compare=None):
             _th("Statut") + "</tr>")
     good = [e for e in rows if is_good(e)]
     bad = [e for e in rows if not is_good(e)]
-    ncol = 18 if not harvest else 17
+    ncol = 17 if not harvest else 16
     body = []
     for i, e in enumerate(good + bad, 1):
         if i == len(good) + 1 and bad:
@@ -408,7 +410,9 @@ def table_crafts(ctx, rows, tid, harvest, compare=None):
                         f'({len(bad)})</td></tr>')
         if harvest:
             res = '<div class="chips">' + "".join(
-                f'<span class="chip">{ctx.icon(name=k)}{esc(k)} ×{v:g}{ctx.mapbtn(k)}</span>' for k, v in e["ressources"].items()) + "</div>"
+                f'<span class="chip">{ctx.icon(name=k)}{esc(k)} ×{v:g}'
+                + (f' <span class="mut">· {fmt((e.get("prix_ressources") or {}).get(k))}</span>' if (e.get("prix_ressources") or {}).get(k) else "")
+                + f'{ctx.mapbtn(k)}</span>' for k, v in e["ressources"].items()) + "</div>"
             if e["ingredients"] and any("récolte" not in x for x in e["ingredients"]):
                 res += '<div class="sub">+ ' + esc("; ".join(x for x in e["ingredients"] if "récolte" not in x)) + "</div>"
         else:
@@ -417,14 +421,14 @@ def table_crafts(ctx, rows, tid, harvest, compare=None):
                 f'<td class="n {_cls(e["marge"])}" data-v="{e["marge"] or 0}">{(e["marge"] or 0):+.0%}</td>')
         body.append(
             f"<tr class='{'' if is_good(e) else 'dim'} {cmp_class(compare, e)}' {craft_attrs(e)}><td class='n rank'>{i}</td>"
-            f"<td>{ctx.label(e['item_id'], sub=f'{METIERS.get(e['metier'], e['metier'])} {niveau(e['maitrise'])} · lot ×{e['lot']:g}')}</td>"
+            f"<td>{ctx.label(e['item_id'], sub='vente du brut' if e.get('brut') else f'{METIERS.get(e['metier'], e['metier'])} {niveau(e['maitrise'])} · lot ×{e['lot']:g}')}</td>"
             f"<td>{res}</td>"
             + ("" if harvest else _num_td(e["achats_u"], color=False))
             + '<td class="n csr">–</td>'
             + _num_td(e["prix_real"], color=False) + _num_td(e["net_u"], "cnet") + cols
             + _num_td(e["ma_part_j"], color=False)
             + _num_td(e["profit_j"], "big cprof", k=True)
-            + _num_td(e["vol_serveur_j"], color=False, x=True) + _num_td(e.get("annonces_vendues_j"), color=False, x=True)
+            + _num_td(e.get("annonces_vendues_j"), color=False, x=True)
             + _num_td(e["prix_affiche"], color=False, x=True)
             + _num_td(e["prix_ref"], color=False, x=True) + _num_td(e["net_pess_u"], x=True)
             + _num_td(e["profit_pess_j"], k=True, x=True)
@@ -440,7 +444,42 @@ def use_name(u):
     return u["objet"]
 
 
-def table_targets(ctx, targets):
+GRADE_TABS = (("⚪ Blancs", "récoltés sur les points"), ("🟢 Verts", "« d’une grande pureté »"), ("🔵 Bleus", "« pur »"),
+              ("🟠 Éclatants", "« éclatant »"))
+
+
+def harvest_tab(ctx, my, hyp):
+    """🌲 Recolte, une section par grade : seul le blanc se recolte sur les points (recolte/heure, kinah/heure) ; vert,
+    bleu et eclatant sont des procs, trop rares pour etre planifies : on dit seulement quoi en faire."""
+    rows = my["harvest"] + (my.get("raw") or [])
+    rows.sort(key=lambda e: -e["profit_j"])
+    seg, panels = [], []
+    for g, (title, what) in enumerate(GRADE_TABS):
+        targets = [t for t in my["targets"] if t.get("rang", 0) == g]
+        crafts = [e for e in rows if e.get("rang", 0) == g]
+        if not targets and not crafts:
+            continue
+        pid, tid = f"hg{g}", f"th{g}"
+        seg.append(f'<button{" class=on" if not seg else ""} onclick="segShow(this,\'{pid}\')">{title} '
+                   f'<span class="mut">({len(crafts)})</span></button>')
+        lead = ("Indique ce que tu récoltes par heure pour chaque ressource (100 par défaut) : <b>Kinah / heure</b> dit où "
+                "passer ton temps, <b>Heures / jour</b> combien de temps de récolte le marché absorbe avant que les prix "
+                "baissent." if g == 0 else
+                f"Ressources {what} : elles tombent en proc pendant la récolte, trop rarement pour planifier leur récolte. "
+                "Voici quoi en faire quand tu en as.")
+        panels.append(f"<div id='{pid}' class='segp'{'' if not panels else ' style=display:none'}>"
+                      f"<h3>Ressources</h3><p class='lead'>{lead} Les usages douteux ou à perte sont indiqués en orange.</p>"
+                      + table_targets(ctx, targets, "targets" if g == 0 else f"targets{g}", rates=g == 0, crafts=tid)
+                      + f"<h3>Crafts et vente du brut, par profit</h3><p class='lead'>{hyp} Prix le plus bas de chaque "
+                      "ressource à côté de son nom.</p>" + table_crafts(ctx, crafts, tid, True) + "</div>")
+    return ("<h2>Récolte → craft ou vente du brut</h2><p class='lead'>Ta récolte ne coûte rien, mais chaque ressource vaut "
+            "au moins ce qu’elle rapporte vendue brute : un craft n’est intéressant que s’il fait mieux (colonne "
+            "« vs brut/u »). Une section par grade de ressource.</p>"
+            f'<div class="seg">{"".join(seg)}</div>' + "".join(panels))
+
+
+def table_targets(ctx, targets, tid="targets", rates=True, crafts="th"):
+    """rates : colonnes Recolte / heure, Kinah / heure, Heures / jour (ressources recoltees sur les points)."""
     body = []
     for t in targets:
         # gain moyen par ressource quand la recolte du jour est repartie sur les crafts fiables, selon ce que chacun absorbe
@@ -453,25 +492,25 @@ def table_targets(ctx, targets):
             + "</div>" for u in t["usages"]) + "</div>"
         body.append(f"<tr class='{'' if t['meilleur'] else 'dim'}' data-res=\"{esc(t['ressource'])}\" "
                     f"data-best='{avg}' data-abs='{t['absorbable_j'] or 0}'><td>{ctx.label(name=t['ressource'])}"
-                    f"<button class='mapbtn' style='margin-top:4px' onclick=\"resCrafts(this.closest('tr').dataset.res)\">crafts</button></td>"
-                    f"<td class='n'><input type='number' min='0' step='10' class='rate' placeholder='100' "
-                    f"style='width:74px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;background:var(--bg2);"
-                    f"color:var(--txt);font:inherit;text-align:right' oninput='rateCalc(this)'></td>"
-                    f"<td class='n big pos kh' data-v='0'>–</td><td class='n hj' data-v='0'>–</td>"
-                    f"{_num_td(t['meilleur'], 'big')}<td>{uses}</td>{_num_td(t['absorbable_j'], color=False)}"
+                    f"<button class='mapbtn' style='margin-top:4px' onclick=\"resCrafts(this.closest('tr').dataset.res,'{crafts}')\">crafts</button></td>"
+                    + (f"<td class='n'><input type='number' min='0' step='10' class='rate' placeholder='100' "
+                       f"style='width:74px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;background:var(--bg2);"
+                       f"color:var(--txt);font:inherit;text-align:right' oninput='rateCalc(this)'></td>"
+                       f"<td class='n big pos kh' data-v='0'>–</td><td class='n hj' data-v='0'>–</td>" if rates else "")
+                    + f"{_num_td(t['meilleur'], 'big')}<td>{uses}</td>{_num_td(t['absorbable_j'], color=False)}"
                     f"{_num_td(t['prix_brut'], color=False, x=True)}</tr>")
     head = ("<tr>" + _th("Ressource")
-            + _th("Récolte / heure", "Ce que tu récoltes en une heure (100 par défaut) : modifiable, enregistré dans ce navigateur")
-            + _th("Kinah / heure", "Récolte par heure × gain moyen par ressource, la récolte étant répartie sur les usages "
-                  "fiables (crafts et vente du brut) selon ce que chacun absorbe (après frais)", True)
-            + _th("Heures / jour", "Heures de récolte avant de saturer ce que le marché absorbe par jour", True)
+            + (_th("Récolte / heure", "Ce que tu récoltes en une heure (100 par défaut) : modifiable, enregistré dans ce navigateur")
+               + _th("Kinah / heure", "Récolte par heure × gain moyen par ressource, la récolte étant répartie sur les usages "
+                     "fiables (crafts et vente du brut) selon ce que chacun absorbe (après frais)", True)
+               + _th("Heures / jour", "Heures de récolte avant de saturer ce que le marché absorbe par jour", True) if rates else "")
             + _th("Meilleur net / ressource", "Ce que te rapporte chaque ressource récoltée dans son meilleur usage fiable "
                   "(craft ou vente du brut)", True)
             + _th("Qu’en faire") + _th("Utilisable/j", "Ressources que le marché absorbe par jour (crafts fiables et vente "
                                         "du brut)", True)
             + _th("Prix brut HDV", "Prix le plus bas du brut en vente", True, True)
             + "</tr>")
-    return (toolbar("targets") + f'<div class="wrap"><table id="targets"><thead>{head}</thead>'
+    return (toolbar(tid) + f'<div class="wrap"><table id="{tid}"><thead>{head}</thead>'
             f'<tbody>{"".join(body)}</tbody></table></div>')
 
 
@@ -787,7 +826,7 @@ def home(con, cfg, ctx, my, sname):
     good = [e for e in my["harvest"] if is_good(e)]
     top = good[:12]
     buys = [e for e in my["buy"] if is_good(e) and e["net_pess_u"] > 0]
-    targets = [t for t in my["targets"] if t["meilleur"]][:6]
+    targets = [t for t in my["targets"] if t["meilleur"] and not t.get("rang")][:6]
 
     kpis = (f'<div class="kpis">'
             '<div class="kpi"><div class="l">Potentiel du jour</div><div class="v pos" id="kpot">–</div>'
@@ -1205,19 +1244,7 @@ def build(con, cfg, results):
         add("home", "🏠 Aujourd’hui", home(con, cfg, ctx, my, sname))
         sep()
         add("planning", "📅 Planning", planning_tab(cfg, my))
-        add("harvest", "🌲 Récolte",
-            "<h2>Récolte → craft ou vente du brut</h2><p class='lead'>Ta récolte ne coûte rien, mais chaque ressource vaut "
-            "au moins ce qu’elle rapporte vendue brute : un craft n’est intéressant que s’il fait mieux (colonne "
-            "« vs brut/u »). Deux façons de voir les mêmes calculs.</p>"
-            '<div class="seg"><button class="on" data-v="res" onclick="segShow(this,\'hres\')">Par ressource</button>'
-            '<button data-v="craft" onclick="segShow(this,\'hcraft\')">Par craft</button></div>'
-            "<div id='hres' class='segp'><p class='lead'>Indique ce que tu récoltes par heure pour chaque ressource "
-            "(100 par défaut) : <b>Kinah / heure</b> dit où passer ton temps, <b>Heures / jour</b> combien de temps de récolte "
-            "le marché absorbe avant que les prix baissent. Clique sur « crafts » pour voir le détail d’une ressource. "
-            "Les usages douteux ou à perte sont indiqués en orange.</p>" + table_targets(ctx, my["targets"]) + "</div>"
-            f"<div id='hcraft' class='segp' style='display:none'><p class='lead'>{hyp} Ventes/j = ta part des ventes "
-            "mesurées sur ton serveur (annonces disparues sur 24 h × taille habituelle des annonces).</p>"
-            + table_crafts(ctx, my["harvest"], "th", True) + "</div>")
+        add("harvest", "🌲 Récolte", harvest_tab(ctx, my, hyp))
         direct, trans = my.get("buy_direct") or [], my.get("buy_trans") or []
         add("buy", "Achat → craft",
             f"<h2>Acheter les ingrédients → fabriquer → revendre</h2><p class='lead'>{hyp} Deux façons d’acheter les "

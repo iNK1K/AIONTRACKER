@@ -14,6 +14,10 @@ EQUIP_TYPES = {"Sword": "Épée", "Greatsword": "Espadon", "Dagger": "Dague", "B
                "Necklace": "Collier", "Earring": "Boucle d'oreille", "Ring": "Anneau", "Bracelet": "Bracelet",
                "Belt": "Ceinture", "Amulet": "Amulette"}
 
+# grades des ressources de recolte : seul le blanc se recolte sur les points, les autres sont des procs (taux inconnus)
+GRADES = ("Common", "Rare", "Legend", "Unique")
+
+
 def _dt(s):
     return datetime.fromisoformat(s.replace("Z", "+00:00"))
 
@@ -503,6 +507,7 @@ class Market:
             mode=mode, recipe_id=recipe["id"], item_id=oid, objet=self.items[oid]["name"],
             metier=recipe["profession"], maitrise=recipe["mastery"], lot=q,
             ingredients=c["lines"], ressources={k: v / q for k, v in c["gather"].items()},
+            rang=max((self.grade(k) for k in c["gather"]), default=0), prix_ressources=self.res_prices(c["gather"]),
             achats_u=round(cost_u), achats_pess_u=round(cost_pu),
             prix_affiche=sp["ask"], prix_ref=sp["ref"] and round(sp["ref"]), prix_real=round(sp["real"]),
             annonces=sp["listings"], net_u=round(net_u), net_pess_u=round(net_pu), ref_source=sp["ref_source"],
@@ -529,6 +534,15 @@ class Market:
             flags.append("prix affiché > 5x le prix habituel")
         return flags
 
+    def grade(self, name):
+        """Rang (0 blanc .. 3 eclatant) d'une ressource de recolte, d'apres son nom."""
+        g = self.items.get(self.by_base.get(name), {}).get("grade")
+        return GRADES.index(g) if g in GRADES else 0
+
+    def res_prices(self, names):
+        """Prix le plus bas actuel de chaque ressource (detail affiche a cote des crafts)."""
+        return {k: self.price.get(self.by_base.get(k)) for k in names}
+
     def raw_net(self, name):
         """Ce que rapporte une ressource vendue brute (prix realiste, apres taxe), ou None sans prix."""
         if name not in self._raw:
@@ -552,7 +566,8 @@ class Market:
             net_u, net_pu = sp["real"] * (1 - fees), sp["pess"] * (1 - fees)
             out.append(dict(
                 mode="raw", brut=True, recipe_id=None, item_id=iid, objet=name, metier=None, maitrise=None, lot=1,
-                ingredients=[], ressources={name: 1}, achats_u=0, achats_pess_u=0,
+                ingredients=[], ressources={name: 1}, rang=self.grade(name), prix_ressources=self.res_prices([name]),
+                achats_u=0, achats_pess_u=0,
                 prix_affiche=sp["ask"], prix_ref=sp["ref"] and round(sp["ref"]), prix_real=round(sp["real"]),
                 annonces=sp["listings"], net_u=round(net_u), net_pess_u=round(net_pu), ref_source=sp["ref_source"],
                 net_affiche_u=round(sp["ask"] * (1 - fees)), marge=None, ressources_u=1, net_par_ressource=round(net_u),
@@ -679,7 +694,7 @@ class Market:
         for res, uses in targets.items():
             uses.sort(key=lambda u: (not u["fiable"], -u["net_par_ressource"]))
             good = [u for u in uses if u["fiable"]]
-            out.append(dict(ressource=res, prix_brut=self.price.get(self.by_base.get(res)), usages=uses[:4],
+            out.append(dict(ressource=res, rang=self.grade(res), prix_brut=self.price.get(self.by_base.get(res)), usages=uses[:4],
                             meilleur=good[0]["net_par_ressource"] if good else None,
                             absorbable_j=sum(u["ressources_j"] for u in good)))
         out.sort(key=lambda t: (t["meilleur"] is None, -(t["meilleur"] or 0)))

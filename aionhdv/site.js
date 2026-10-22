@@ -407,8 +407,8 @@ function planSafe(save){const box=document.getElementById('psafe');if(!box||!win
   +(Object.keys(R).length?'':'<p class="sub">Récolte par heure : 100 par défaut pour chaque ressource ; indique tes vraies valeurs dans « 🌲 Récolte ».</p>')}
 function segShow(btn,id){const seg=btn.parentNode;seg.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===btn));
  const sec=seg.closest('section');sec.querySelectorAll('.segp').forEach(p=>p.style.display=p.id===id?'':'none')}
-function resCrafts(name){const sec=document.getElementById('harvest');segShow(sec.querySelectorAll('.seg button')[1],'hcraft');
- const inp=document.querySelector('#hcraft input.search');inp.value=name;filt(inp,'th');inp.scrollIntoView({block:'center'})}
+function resCrafts(name,tid){const tb=document.getElementById(tid),inp=tb&&tb.closest('.segp').querySelector('.toolbar input.search[oninput*="'+tid+'"]');
+ if(!inp)return;inp.value=name;filt(inp,tid);inp.scrollIntoView({block:'center'})}
 function clearStock(){document.querySelectorAll('#stock input[data-r]').forEach(i=>i.value='');calc()}
 document.addEventListener('DOMContentLoaded',()=>{let t='home';try{t=localStorage.getItem('tab')||t;
  if(localStorage.getItem('detail')){document.body.classList.add('detail');document.querySelectorAll('input.dt').forEach(x=>x.checked=true)}}catch(e){}
