@@ -443,6 +443,22 @@ function oppRender(save){const box=document.getElementById('obox');if(!box||!win
    :'<p class="mut">'+(slots?'Aucune opportunité ne tient dans ton budget et ton temps de récolte.':'Plus d’annonce libre : tes annonces en cours occupent toutes les places.')+'</p>')
   +(rest.length?'<details style="margin-top:10px"><summary class="mut" style="cursor:pointer">Opportunités suivantes ('+Math.min(rest.length,15)+')</summary><div class="wrap"><table>'+head+'<tbody>'
    +rest.slice(0,15).map((c,k)=>row(c,picks.length+k+1,c.q)).join('')+'</tbody></table></div></details>':'')}
+// ---------------- Mes procs de recolte (PROCS : ressource blanche -> [[grade, proc, valeur nette]]), gardes dans ce navigateur
+function procAdd(){const g=id=>document.getElementById(id),r=g('pres').value,n=+g('pn').value||0;if(!r||n<=0){toast('Indique le nombre de blancs récoltés');return}
+ const P=pget('procs',{}),x=P[r]||{n:0,g1:0,g2:0,g3:0};x.n+=n;['g1','g2','g3'].forEach(k=>{x[k]+=+g('p'+k).value||0;g('p'+k).value=''});g('pn').value='';
+ P[r]=x;pset('procs',P);procRender()}
+function procReset(r){const P=pget('procs',{});delete P[r];pset('procs',P);procRender()}
+function procRender(){const box=document.getElementById('pbox');if(!box||!window.PROCS)return;const P=pget('procs',{}),R=rates();
+ const rows=Object.entries(P).filter(([r])=>PROCS[r]).map(([r,x])=>{const pc=k=>x.n?x['g'+k]/x.n:0;
+  const bonus=PROCS[r].reduce((a,[g,,v])=>a+pc(g)*v,0),rate=R[r]!=null?R[r]:100;
+  return '<tr><td><b>'+escH(r)+'</b></td><td class="n">'+NF.format(x.n)+'</td>'+[1,2,3].map(k=>{const p=PROCS[r].find(q=>q[0]===k);
+   return '<td class="n">'+(p?(pc(k)*100).toFixed(2).replace('.',',')+' %<div class="sub">'+NF.format(x['g'+k])+' · '+kf(p[2])+'/u</div>':'–')+'</td>'}).join('')
+   +'<td class="n pos">+'+kf(bonus)+'</td><td class="n big pos">+'+kf(bonus*rate)+'</td>'
+   +'<td>'+(x.n<500?'<span class="badge b-warn">peu de mesures</span> ':'')+'<button class="mapbtn" onclick="procReset(\''+escH(r).replace(/'/g,"\\'")+'\')">effacer</button></td></tr>'});
+ box.innerHTML=rows.length?'<div class="wrap"><table><thead><tr><th>Ressource</th><th class="n">Blancs récoltés</th><th class="n">🟢 Vert</th><th class="n">🔵 Bleu</th><th class="n">🟠 Éclatant</th>'
+  +'<th class="n" title="Taux de proc × meilleur net de chaque proc">Bonus / ressource</th><th class="n" title="Bonus par ressource × ta récolte par heure">Bonus / heure</th><th></th></tr></thead><tbody>'+rows.join('')+'</tbody></table></div>'
+  :'<p class="mut">Pas encore de session notée.</p>'}
+document.addEventListener('DOMContentLoaded',()=>procRender());
 function segShow(btn,id){const seg=btn.parentNode;seg.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===btn));
  const sec=seg.closest('section');sec.querySelectorAll('.segp').forEach(p=>p.style.display=p.id===id?'':'none')}
 function resCrafts(name,tid){const tb=document.getElementById(tid),inp=tb&&tb.closest('.segp').querySelector('.toolbar input.search[oninput*="'+tid+'"]');

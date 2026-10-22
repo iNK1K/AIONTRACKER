@@ -515,7 +515,37 @@ def harvest_tab(ctx, my, hyp):
     return ("<h2>Récolte → craft ou vente du brut</h2><p class='lead'>Ta récolte ne coûte rien, mais chaque ressource vaut "
             "au moins ce qu’elle rapporte vendue brute : un craft n’est intéressant que s’il fait mieux (colonne "
             "« vs brut/u »). Une section par grade de ressource.</p>"
-            f'<div class="seg">{"".join(seg)}</div>' + "".join(panels))
+            f'<div class="seg">{"".join(seg)}</div>' + "".join(panels) + procs_html(my))
+
+
+def procs_html(my):
+    """Mesure de mes procs : je note mes sessions de recolte (blancs recoltes, verts, bleus, eclatants obtenus) ; le
+    navigateur en tire mes taux et ce qu'ils rapportent en plus par ressource blanche (site.js, procRender)."""
+    m = my["market"]
+    best = {t["ressource"]: t["meilleur"] for t in my["targets"] if t["meilleur"]}
+    names = m.gather_names()
+    procs = {}
+    for c in names:
+        if m.grade(c):
+            continue
+        for p in names:
+            g = m.grade(p)
+            if g and p.startswith(c + " "):
+                v = best.get(p) or m.raw_net(p)
+                procs.setdefault(c, []).append([g, p, round(v) if v else 0])
+    data = json.dumps({c: sorted(v) for c, v in procs.items()}, ensure_ascii=False, separators=(",", ":"))
+    opts = "".join(f"<option>{esc(c)}</option>" for c in sorted(procs))
+    inp = ('type="number" min="0" style="width:84px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;'
+           'background:var(--bg2);color:var(--txt);font:inherit"')
+    return ("<h3>📊 Mes procs de récolte</h3><p class='lead'>Note tes sessions de récolte : combien de ressources blanches "
+            "récoltées et combien de vertes, bleues, éclatantes obtenues. Le site en tire tes taux de proc et ce qu’ils "
+            "rapportent en plus par ressource blanche (meilleur usage de chaque proc). Gardé dans ce navigateur.</p>"
+            f'<div class="toolbar"><select id="pres" style="padding:5px 7px;border:1px solid var(--line);border-radius:7px;'
+            f'background:var(--bg2);color:var(--txt);font:inherit">{opts}</select>'
+            f'<label class="tg">Blancs <input id="pn" {inp}></label><label class="tg">🟢 <input id="pg1" {inp}></label>'
+            f'<label class="tg">🔵 <input id="pg2" {inp}></label><label class="tg">🟠 <input id="pg3" {inp}></label>'
+            '<button class="mapbtn" onclick="procAdd()">Ajouter la session</button></div><div id="pbox"></div>'
+            f"<script>window.PROCS={data};</script>")
 
 
 def table_targets(ctx, targets, tid="targets", rates=True, crafts="th"):

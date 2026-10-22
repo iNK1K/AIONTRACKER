@@ -16,7 +16,11 @@ Onglet **Mes métiers** : niveaux de métier enregistrés dans le navigateur ; l
 
 Onglet **Mes ventes** : journal des annonces (`journal.json`) — un clic quand tu postes, vends (tout ou partie), relistes ou retires, ou une capture (fenêtre des annonces ou historique des ventes). Bilan réel : kinah reçus, taxe perdue en relistes et retraits, bénéfice ; comparaison avec les estimations de l’outil. Le site enregistre le journal sur GitHub avec un jeton à droits limités (gardé dans le navigateur).
 
-Onglet **🧪 Par ingrédient** : « Que faire de… ? » — pour un ingrédient choisi (ex. Essence de Balaur), sa vente directe face à chaque craft qui l’utilise : valeur d’une unité dans le craft (réussite selon mes niveaux, 🔒 si niveau trop bas), écart avec la vente directe, ventes du produit.
+Onglet **🎯 Opportunités** : récolte (ressources blanches), achat → craft et flip dans une seule liste ; une opportunité occupe une annonce (relistée à chaque vente). La page garde les meilleures selon les annonces libres (`max_listings` moins mes annonces en cours du journal), les kinah disponibles et le temps de récolte saisis.
+
+Onglet **🌲 Récolte** : une section par grade. Seules les ressources blanches se récoltent sur les points (récolte/heure, kinah/heure) ; vertes, bleues et éclatantes sont des procs, non planifiés : la page dit seulement quoi en faire. Crafts triés par profit, avec le prix de chaque ressource. « Mes procs de récolte » : je note mes sessions (blancs récoltés, procs obtenus) pour mesurer mes taux de proc et ce qu’ils rapportent en plus.
+
+Alerte Discord **flip** : dès qu’un item passe sous son prix d’achat conseillé (pas au feu rouge), une fois par item toutes les 6 h.
 
 Onglet **Ravitaillement** : coller une capture de la fenêtre de ravitaillement → objets reconnus ; un tableau des objets demandés du jour trié par gain à les crafter pour les revendre ; la lecture distingue l’objet normal de sa version éclatante par la couleur de qualité du fond de la case (même icône) : l’objet normal s’obtient sans combo (combo montré à part), l’éclatant seulement par combo de l’objet de base (coût = crafts pour un combo − objets normaux revendus) (prix de vente modifiable, prérempli avec la moins chère des annonces − 1 ; échecs et combo comptés ; ingrédient éclatant crafté par sa chaîne ou acheté), détail repliable, bouton 📦 Poster vers Mes ventes.
 

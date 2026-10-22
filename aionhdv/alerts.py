@@ -63,15 +63,36 @@ def opportunities(cfg, result):
         if safe(e):
             out.append((f"spike{e['item_id']}", f"⚡ **{e['objet']}** en pic : affiché {fmt(e['prix_affiche'])} (habituellement "
                         f"{fmt(e['prix_ref'])}), +{fmt(e['net_affiche_u'])}/u en achat → craft, à vendre vite"))
-    for f in result.get("flips") or []:
-        if f["acheter"] and f["profit_j"] >= a["flip_min_profit_day"] and safe(f):
-            out.append((f"flip{f['item_id']}", f"🔁 **{f['objet']}** (flip) : acheter ≤ {fmt(f['achat_cible'])}, revendre "
-                        f"~{fmt(f['revente_cible'])}, **+{fmt(f['net_u'])}/u**"))
     for u in result.get("uniques") or []:
         if u["ratio"] <= a["unique_ratio"] and u["releves"] >= a["unique_min_samples"] and u["mediane"] >= a["unique_min_median"]:
             out.append((f"uniq{u['item_id']}", f"💎 **{u['objet']}** ({u['categorie']}) à {fmt(u['prix'])} "
                         f"(médiane 7 j {fmt(u['mediane'])}, {u['ratio']:.0%})"))
     return out
+
+
+def flips(con, cfg, result, hours=6):
+    """Alerte flip : un item vient de passer sous son prix d'achat conseille (bas de sa fourchette habituelle), avec
+    assez de ventes et pas au feu rouge. Une alerte par item toutes les `hours` heures au plus."""
+    a, now = cfg["alerts"], datetime.now(timezone.utc)
+    lines = []
+    for f in result.get("flips") or []:
+        s = f.get("surete") or {}
+        if not f["acheter"] or f["profit_j"] < a["flip_min_profit_day"] or s.get("feu") == "rouge":
+            continue
+        key = f"flipnow|{f['item_id']}"
+        last = con.execute("SELECT ts FROM alerts_sent WHERE key = ?", (key,)).fetchone()
+        if last and datetime.fromisoformat(last["ts"]) > now - timedelta(hours=hours):
+            continue
+        con.execute("INSERT OR REPLACE INTO alerts_sent VALUES (?,?,?)", (key, now.isoformat(timespec="seconds"), f["objet"]))
+        dot = {"vert": "🟢", "orange": "🟠"}.get(s.get("feu"), "")
+        lines.append(f"🔁 **{f['objet']}** à **{fmt(f['prix'])}** ({f['annonces']} annonce(s)) : acheter ≤ {fmt(f['achat_cible'])}, "
+                     f"revendre ~{fmt(f['revente_cible'])}, **+{fmt(f['net_u'])}/u** (+{f['marge']:.0%}), "
+                     f"~{fmt(f['ma_part_j'])} ventes/j {dot}".rstrip())
+    con.commit()
+    if not lines:
+        return None
+    srv = con.execute("SELECT name FROM servers WHERE id = ?", (result["server"],)).fetchone()
+    return "\n".join([f"🔁 **Flips à saisir {paris(None, '%Hh%M')}** · {srv['name'] if srv else result['server']}"] + lines)
 
 
 def hourly(con, cfg, result, top=6):

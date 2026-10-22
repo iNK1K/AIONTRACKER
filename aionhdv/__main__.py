@@ -89,6 +89,10 @@ def cmd_analyze(con, cfg, send_alerts=False, send_digest=False):
                 if msg:
                     alerts.send(cfg, msg)
                 log(f"rapport horaire : {'envoye' if msg else 'rien de nouveau'}")
+            msg = alerts.flips(con, cfg, res)                   # flips : des qu'un prix passe sous l'achat conseille
+            if msg:
+                alerts.send(cfg, msg)
+            log(f"alerte flip : {'envoyee' if msg else 'rien de nouveau'}")
         if send_digest and str(s) == str(cfg["my_server"]) and cfg["alerts"].get("daily", True):
             alerts.send(cfg, alerts.digest(con, cfg, res))
             if datetime.now(collect.PARIS or timezone.utc).weekday() == 6:      # dimanche
