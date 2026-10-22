@@ -280,6 +280,46 @@ def craft_attrs(e):
             f'data-day="{e["ma_part_j"]}"' + (f' data-brut="{e["brut_u"]}"' if e.get("brut_u") is not None else ""))
 
 
+def opportunities_tab(cfg, my):
+    """🎯 Opportunites : recolte (ressources blanches), achat -> craft et flip dans une seule liste. Chaque objet occupe
+    une annonce (relistee a chaque vente) : le navigateur garde les meilleures selon les annonces libres (limite du jeu
+    moins mes annonces en cours), les kinah disponibles et le temps de recolte (calcul dans site.js, oppRender)."""
+    rows = []
+    for e in my["harvest"] + (my.get("raw") or []):
+        if e.get("rang") or not is_good(e) or not e["ma_part_j"]:
+            continue                                   # procs non planifies ; usages douteux, a perte ou sans ventes
+        rows.append(dict(t="r", o=e["objet"], i=e["item_id"], n=e["net_u"], q=e["ma_part_j"], k=0, b=1 if e.get("brut") else 0,
+                         res={k: round(v, 3) for k, v in e["ressources"].items()}, p=e["prix_real"]))
+    for e in my["buy"]:
+        if not is_good(e) or not e["ma_part_j"]:
+            continue
+        s = e.get("surete") or {}
+        rows.append(dict(t="c", o=e["objet"], i=e["item_id"], n=e["net_u"], q=e["ma_part_j"], k=e["achats_u"],
+                         p=e["prix_real"], s=s.get("score"), f=s.get("feu"), ing=e["ingredients"][:4]))
+    for f in my["flips"]:
+        if not f["ma_part_j"]:
+            continue
+        s = f.get("surete") or {}
+        rows.append(dict(t="f", o=f["objet"], i=f["item_id"], n=f["net_u"], q=f["ma_part_j"], k=f["achat_cible"],
+                         p=f["revente_cible"], s=s.get("score"), f=s.get("feu"), now=1 if f["acheter"] else 0))
+    data = json.dumps(dict(rows=rows, slots=cfg.get("max_listings", 10)), ensure_ascii=False, separators=(",", ":"))
+    inp = ('style="width:{w}px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;background:var(--bg2);'
+           'color:var(--txt);font:inherit"')
+    return ("<h2>Opportunités du jour</h2><p class='lead'>Récolte, achat → craft et flip dans une seule liste. Une "
+            "opportunité occupe <b>une annonce</b>, relistée à chaque vente : la page garde les meilleures selon tes "
+            "annonces libres (limite du jeu moins tes annonces en cours du journal 💰), tes kinah disponibles et ton temps "
+            "de récolte. Kinah/annonce/j = ce que rapporte cette annonce en une journée (ta part des ventes mesurées, une "
+            "vente par annonce disparue). La réussite des crafts suit tes niveaux (🛠️ Mes métiers).</p>"
+            '<div class="toolbar">'
+            f'<label class="tg">Kinah disponibles : <input type="number" id="obudget" min="0" step="100000" placeholder="illimité" '
+            f'{inp.format(w=130)} oninput="oppRender(true)"></label>'
+            f'<label class="tg">Temps de récolte : <input type="number" id="ohours" min="0" step="0.5" value="3" '
+            f'{inp.format(w=64)} oninput="oppRender(true)"> h</label>'
+            '<label class="tg">Annonces libres : <b id="oslots">–</b></label></div>'
+            '<div id="obox"></div>'
+            f"<script>window.OPPDATA={data};</script>")
+
+
 def planning_tab(cfg, my):
     """Onglet Planning : plan « safe » (recolte -> crafts qui se vendent) et plan « gamble » (chaines d'amelioration
     avec combo). Calcul dans le navigateur : niveaux de metier, recolte par heure et stock du joueur."""
@@ -1243,6 +1283,7 @@ def build(con, cfg, results):
     if my:
         add("home", "🏠 Aujourd’hui", home(con, cfg, ctx, my, sname))
         sep()
+        add("opps", "🎯 Opportunités", opportunities_tab(cfg, my))
         add("planning", "📅 Planning", planning_tab(cfg, my))
         add("harvest", "🌲 Récolte", harvest_tab(ctx, my, hyp))
         direct, trans = my.get("buy_direct") or [], my.get("buy_trans") or []

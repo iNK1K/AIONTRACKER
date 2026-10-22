@@ -468,6 +468,11 @@ class Market:
                 lines.append(f"[{it.get('base_name')} x{o['qty']:g} à fabriquer : {', '.join(sc['lines'])}]")
                 parts.append(dict(n=it.get("base_name"), q=o["qty"], p=sc["cost_r"] / (sub[0]["output_qty"] or 1), k="craft",
                                   sub=sc["parts"]))
+            elif not it.get("bound"):
+                # objet echangeable ni en vente ni fabricable ici (ex. equipement eclatant d'un combo) : pas un reactif PNJ
+                ok = False
+                lines.append(f"{it.get('base_name')} x{o['qty']:g} INTROUVABLE")
+                parts.append(dict(n=it.get("base_name"), q=o["qty"], p=None, k="introuvable"))
             else:
                 cost_r += npc * o["qty"]
                 cost_p += npc * o["qty"]

@@ -223,7 +223,7 @@ async function jScan(file){if(!file||!(file.type||'').startsWith('image/'))retur
   URL.revokeObjectURL(url);if(added)jSync('capture : '+added+(hist?' vente(s)':' annonce(s)'));else jRender()}
  catch(e){msg.textContent='Lecture impossible : '+e+' (la lecture fonctionne sur le site en ligne)'}}
 // ---------------------------------------------------------------- affichage
-function jRender(){if(!J)return;const box=document.getElementById('jopen');if(!box)return;
+function jRender(){if(!J)return;oppRender();const box=document.getElementById('jopen');if(!box)return;
  const F=window.JFLOOR||{},lots=J.lots.filter(l=>!l.del).map(l=>[l,jState(l)]);
  const open=lots.filter(([l,s])=>s.reste>0).sort((a,b)=>a[0].objet.localeCompare(b[0].objet,'fr'));
  const nm=n=>'<span class="nm" title="Cliquer pour copier">'+jEsc(n)+'</span>';
@@ -326,7 +326,7 @@ function applyLevels(){const st=lvState();
   // face a la vente du brut : un echec fait aussi perdre les ressources (1 / reussite par craft reussi)
   const vb=el.querySelector('.cvb');if(vb&&el.dataset.brut!=null){const d=Math.round(net-(st.lose?+el.dataset.brut/info.rate:+el.dataset.brut));
    vb.textContent=NF.format(d);vb.dataset.v=d;vb.classList.toggle('pos',d>0);vb.classList.toggle('neg',d<=0)}});
- calc();renderMetiers();todoBuys();if(window.PLANDATA)planSafe();if(window.SUPPLY)supplyRender()}
+ calc();renderMetiers();todoBuys();if(window.PLANDATA)planSafe();oppRender();if(window.SUPPLY)supplyRender()}
 // « A faire maintenant » : achats -> craft que mes niveaux permettent (metier non renseigne = garde), 2 au plus,
 // avec le taux de reussite quand le niveau est connu
 function todoBuys(){let n=0;
@@ -362,7 +362,7 @@ function importLevelsFromHash(){const h=decodeURIComponent(location.hash||'');if
 // Quoi recolter : kinah par heure de recolte, selon ce que je recolte par heure (100 par defaut)
 function rates(){try{return JSON.parse(localStorage.getItem('rates')||'{}')}catch(e){return{}}}
 function rateCalc(inp){const R=rates();if(inp){const r=inp.closest('tr').dataset.res;if(inp.value==='')delete R[r];else R[r]=+inp.value;
- try{localStorage.setItem('rates',JSON.stringify(R))}catch(e){}}
+ try{localStorage.setItem('rates',JSON.stringify(R))}catch(e){}oppRender()}
  document.querySelectorAll('#targets tr[data-res]').forEach(tr=>{const r=tr.dataset.res,i=tr.querySelector('.rate');
   if(!inp&&R[r]!=null)i.value=R[r];const rate=i.value===''?100:+i.value,best=+tr.dataset.best,abs=+tr.dataset.abs;
   const kh=tr.querySelector('.kh'),hj=tr.querySelector('.hj');
@@ -405,6 +405,44 @@ function planSafe(save){const box=document.getElementById('psafe');if(!box||!win
   +'<div class="uses">'+rows.map(([r,p],k)=>`<div class="card" style="padding:12px 16px"><b>${k+1}. Récolter <span class="nm" title="Cliquer pour copier">${escH(r)}</span> pendant ${fmtH(p.h)}</b> <span class="sub">(≈ ${NF.format(Math.round(p.res))} ressources)</span>`
    +p.c.filter(c=>c.units>0).map(c=>`<div class="row"><span>→ ${c.b?'vendre brut':'fabriquer'} <b>${NF.format(c.units)}</b> × <span class="nm" title="Cliquer pour copier">${escH(c.o)}</span>${c.lot?' · '+Math.max(1,Math.round(c.units/Math.min(c.lot,c.units)))+' annonce(s) de '+NF.format(Math.min(c.lot,c.units)):''}</span><b class="pos">${kf(c.k)}</b></div>`).join('')+'</div>').join('')+'</div>'
   +(Object.keys(R).length?'':'<p class="sub">Récolte par heure : 100 par défaut pour chaque ressource ; indique tes vraies valeurs dans « 🌲 Récolte ».</p>')}
+// ---------------- Opportunites : recolte, achat -> craft et flip, une annonce chacune (OPPDATA)
+// Glouton par kinah/annonce/j, dans la limite des annonces libres, des kinah disponibles et du temps de recolte.
+// Un meme objet n'est retenu qu'une fois (meme marche, meme part des ventes).
+const OTYPE={r:['🌲','Récolte'],c:['🛒','Achat → craft'],f:['🔁','Flip']};
+function oppRender(save){const box=document.getElementById('obox');if(!box||!window.OPPDATA)return;
+ const bEl=document.getElementById('obudget'),hEl=document.getElementById('ohours');
+ if(save){pset('obudget',bEl.value===''?null:+bEl.value);pset('ohours',+hEl.value)}
+ else{const b=pget('obudget',null);bEl.value=b==null?'':b;hEl.value=pget('ohours',3)}
+ const open=J?J.lots.filter(l=>!l.del&&jState(l).reste>0).length:0;
+ let slots=Math.max(0,OPPDATA.slots-open),budget=bEl.value===''?Infinity:+bEl.value,hours=+hEl.value||0;
+ document.getElementById('oslots').textContent=slots+' / '+OPPDATA.slots;
+ const R=rates(),st=lvState();
+ const cands=OPPDATA.rows.map(r=>{let n=r.n,p=1;
+  if(r.t!=='f'){const info=craftInfo(r.i);if(info&&!info.ok)return null;p=info&&info.rate?info.rate:1}
+  if(r.t==='c'&&st.lose)n=r.n+r.k-r.k/p;            // echecs : les ingredients achetes sont perdus
+  let resH=0;if(r.t==='r')for(const[res,per]of Object.entries(r.res)){const rate=R[res]!=null?R[res]:100;if(!rate)return null;
+   resH+=per/rate/(st.lose?p:1)}
+  return n>0?{...r,n:n,resH:resH,day:r.q*n}:null}).filter(Boolean).sort((a,b)=>b.day-a.day);
+ const picks=[],taken=new Set(),rest=[];let tot=0,cap=0,used=0;
+ for(const c of cands){if(taken.has(c.i))continue;
+  let u=c.q;if(c.k>0&&budget<Infinity)u=Math.min(u,Math.floor(budget/c.k));if(c.resH>0)u=Math.min(u,Math.floor(hours/c.resH));
+  if(!slots||u<1){rest.push(c);continue}
+  budget-=u*c.k;hours-=u*c.resH;slots--;taken.add(c.i);tot+=u*c.n;cap+=u*c.k;used+=u*c.resH;picks.push({...c,u:u})}
+ const what=c=>c.t==='r'?(c.b?'récolter, vendre brut':'récolter '+Object.keys(c.res).map(escH).join(' + ')+' → fabriquer')
+  :c.t==='c'?'<span title="'+escH((c.ing||[]).join(' ; '))+'">acheter les ingrédients → fabriquer</span>'
+  :'acheter à ≤ <b>'+NF.format(c.k)+'</b>, revendre à '+NF.format(c.p)+(c.now?' <span class="badge b-ok">achetable maintenant</span>':'');
+ const feu=c=>c.f?'<span class="badge '+({vert:'b-ok',orange:'b-warn',rouge:'b-bad'}[c.f])+'">'+({vert:'🟢',orange:'🟠',rouge:'🔴'}[c.f])+' '+c.s+'</span>':'';
+ const row=(c,k,u)=>'<tr><td class="n">'+k+'</td><td>'+OTYPE[c.t][0]+' '+OTYPE[c.t][1]+'</td><td><b class="nm" title="Cliquer pour copier">'+escH(c.o)+'</b><div class="sub">'+what(c)+'</div></td>'
+  +'<td class="n">'+NF.format(u)+'</td><td class="n">'+(c.k?kf(u*c.k):'–')+'</td><td class="n">'+(c.resH?fmtH(u*c.resH):'–')+'</td>'
+  +'<td class="n big pos">'+kf(u*c.n)+'</td><td>'+feu(c)+'</td></tr>';
+ const head='<thead><tr><th class="n">#</th><th>Type</th><th>Quoi faire</th><th class="n">Ventes/j</th><th class="n">Capital</th><th class="n">Récolte</th><th class="n">Kinah / annonce / j</th><th>Sûreté</th></tr></thead>';
+ box.innerHTML='<div class="kpis"><div class="kpi"><div class="l">Gain du jour</div><div class="v pos">'+kf(tot)+'</div><div class="s">'+picks.length+' annonce(s), une fois tout vendu</div></div>'
+  +'<div class="kpi"><div class="l">Capital engagé</div><div class="v">'+kf(cap)+'</div><div class="s">'+(budget===Infinity?'budget non limité':'reste '+kf(budget))+'</div></div>'
+  +'<div class="kpi"><div class="l">Temps de récolte</div><div class="v">'+fmtH(used)+'</div><div class="s">récolte/heure de 🌲 Récolte (100 par défaut)</div></div></div>'
+  +(picks.length?'<div class="wrap"><table>'+head+'<tbody>'+picks.map((c,k)=>row(c,k+1,c.u)).join('')+'</tbody></table></div>'
+   :'<p class="mut">'+(slots?'Aucune opportunité ne tient dans ton budget et ton temps de récolte.':'Plus d’annonce libre : tes annonces en cours occupent toutes les places.')+'</p>')
+  +(rest.length?'<details style="margin-top:10px"><summary class="mut" style="cursor:pointer">Opportunités suivantes ('+Math.min(rest.length,15)+')</summary><div class="wrap"><table>'+head+'<tbody>'
+   +rest.slice(0,15).map((c,k)=>row(c,picks.length+k+1,c.q)).join('')+'</tbody></table></div></details>':'')}
 function segShow(btn,id){const seg=btn.parentNode;seg.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b===btn));
  const sec=seg.closest('section');sec.querySelectorAll('.segp').forEach(p=>p.style.display=p.id===id?'':'none')}
 function resCrafts(name,tid){const tb=document.getElementById(tid),inp=tb&&tb.closest('.segp').querySelector('.toolbar input.search[oninput*="'+tid+'"]');
@@ -414,7 +452,7 @@ document.addEventListener('DOMContentLoaded',()=>{let t='home';try{t=localStorag
  if(localStorage.getItem('detail')){document.body.classList.add('detail');document.querySelectorAll('input.dt').forEach(x=>x.checked=true)}}catch(e){}
  if(!document.getElementById(t))t='home';show(t);
  try{const s=JSON.parse(localStorage.getItem('stock')||'null');if(s)document.querySelectorAll('#stock input[data-r]').forEach(i=>i.value=s[i.dataset.r]||'')}catch(e){}
- importLevelsFromHash();applyLevels();jInit();rateCalc();planSafe();document.querySelectorAll('th').forEach(th=>th.onclick=()=>sortT(th))});
+ importLevelsFromHash();applyLevels();jInit();rateCalc();planSafe();oppRender();document.querySelectorAll('th').forEach(th=>th.onclick=()=>sortT(th))});
 
 // ======================================================================== ravitaillement
 // Objets lus sur la capture (icone de chaque objet), gardes dans ce navigateur ; prix du dernier passage (SUPPLY) :

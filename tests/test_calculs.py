@@ -78,6 +78,17 @@ class Transmutation(unittest.TestCase):
         c = market(make_db()).recipe_cost({"id": "r10"}, "harvest")
         self.assertEqual((c["cost_r"], c["gather"]), (0, {"Bois": 2}))
 
+    def test_reactif_pnj_ou_introuvable(self):
+        """Ingredient sans prix ni recette : lie = reactif vendu par un PNJ ; echangeable = introuvable (craft ecarte)."""
+        con = make_db()
+        con.executemany("INSERT INTO items (id, name, grade, is_gather, bound, base_name) VALUES (?,?,'Common',0,?,?)",
+                        [(30, "Sel", 1, "Sel"), (31, "Épaulettes éclatantes", 0, "Épaulettes éclatantes")])
+        con.executemany("INSERT INTO recipe_ingredients VALUES (?,?,?,?,0)", [("r10", 2, 30, 1), ("r20", 3, 31, 1)])
+        m = market(con)
+        c = m.recipe_cost({"id": "r10"}, "harvest")
+        self.assertEqual((c["ok"], c["cost_r"]), (True, 50))       # npc_reagent_price du test
+        self.assertFalse(m.recipe_cost({"id": "r20"}, "buy")["ok"])
+
 
 class Ventes(unittest.TestCase):
     def test_ventes_mesurees_sur_le_serveur(self):
