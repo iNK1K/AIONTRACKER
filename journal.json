@@ -1,7 +1,7 @@
 {
  "_": "Journal de mes annonces, rempli depuis l'onglet 💰 Mes ventes du site (ne pas modifier à la main). Une annonce = un lot posté ; ses événements : poste, reliste (nouveau prix, nouveaux frais), vendu (quantité, prix, reçu après taxe), retire. « avant » = annonce antérieure au journal (date de mise en vente et frais inconnus).",
  "debut": "2026-10-19 02:35",
- "maj": "2026-10-22 18:30",
+ "maj": "2026-10-22 20:21",
  "lots": [
   {"id":"mvej81biqpfnu","objet":"Corne dure de Balaur raffinée","src":"achat","qte":33,"prix":65000,"cout":48196,"ev":[{"id":"mvej81bi9708r","t":"2026-10-19 02:44","type":"poste","prix":65000,"qte":33},{"id":"mvejqri9s067c","t":"2026-10-19 02:59","type":"src","src":"achat"},{"id":"mvejqri9hezu9","t":"2026-10-19 02:59","type":"cout","cout":35500},{"id":"mvfakymlripxk","t":"2026-10-19 15:30","type":"reliste","prix":54443,"qte":33,"frais":214500},{"id":"mvi8uwy5qz7l7","t":"2026-10-21 17:05","type":"reliste","prix":32886,"qte":33,"frais":179661},{"id":"mvijymgskrsqe","t":"2026-10-21 22:16","type":"vendu","prix":32886,"qte":33,"recu":976714}]},
   {"id":"mvej81biwm19w","objet":"Lingot d'orichalque","src":"recolte","qte":64,"prix":14990,"cout":0,"ev":[{"id":"mvej81bi0hmo8","t":"2026-10-19 02:44","type":"poste","prix":14990,"qte":64},{"id":"mvekmypofgcwj","t":"2026-10-19 03:24","type":"reliste","prix":3999,"qte":64,"frais":95936},{"id":"mvf97y6khsw8b","t":"2026-10-19 14:52","type":"vendu","prix":3999,"qte":64,"recu":230342}]},
@@ -30,7 +30,7 @@
   {"id":"mvjjwkhws9odw","objet":"Égo de rage","src":"achat","qte":8,"prix":1438991,"cout":1000000,"ev":[{"id":"mvjjwkhwh9rhi","t":"2026-10-22 15:02","type":"poste","prix":1438991,"qte":8},{"id":"mvjr0ytvobk6r","t":"2026-10-22 18:21","type":"vendu","prix":1438991,"qte":8,"recu":10360735}]},
   {"id":"mvjjxa9gz78es","objet":"Cuir résistant","src":"recolte","qte":28,"prix":9843,"cout":0,"ev":[{"id":"mvjjxa9g5sc1j","t":"2026-10-22 15:03","type":"poste","prix":9843,"qte":28},{"id":"mvjjxqjvmwzx1","t":"2026-10-22 15:03","type":"retire","qte":28,"frais":27560}]},
   {"id":"mvjjy6elayto8","objet":"Mijoté de pujery de maître","src":"recolte","qte":17,"prix":20997,"cout":0,"ev":[{"id":"mvjjy6elzb6sr","t":"2026-10-22 15:03","type":"poste","prix":20997,"qte":17}]},
-  {"id":"mvjrc3svs1w7i","objet":"Parchemin de courage supérieur","src":"achat","qte":20,"prix":13597,"cout":4865,"ev":[{"id":"mvjrc3svscwme","t":"2026-10-22 18:30","type":"poste","prix":13597,"qte":20}]},
+  {"id":"mvjrc3svs1w7i","objet":"Parchemin de courage supérieur","src":"achat","qte":20,"prix":13597,"cout":4865,"ev":[{"id":"mvjrc3svscwme","t":"2026-10-22 18:30","type":"poste","prix":13597,"qte":20},{"id":"mvjva8yjnwyrf","t":"2026-10-22 20:21","type":"vendu","prix":13597,"qte":20,"recu":244746}]},
   {"id":"mvjrcebll35o4","objet":"Parchemin de courage supérieur","src":"achat","qte":20,"prix":13597,"cout":4865,"ev":[{"id":"mvjrcebleg5e8","t":"2026-10-22 18:30","type":"poste","prix":13597,"qte":20}]},
   {"id":"mvjrcm6j0ttbr","objet":"Parchemin de courage supérieur","src":"achat","qte":20,"prix":13597,"cout":4865,"ev":[{"id":"mvjrcm6jyy3s5","t":"2026-10-22 18:30","type":"poste","prix":13597,"qte":20}]},
   {"id":"mvjrcm6j0bij0","objet":"Parchemin de courage supérieur","src":"achat","qte":20,"prix":13597,"cout":4865,"ev":[{"id":"mvjrcm6jcblmu","t":"2026-10-22 18:30","type":"poste","prix":13597,"qte":20}]}
