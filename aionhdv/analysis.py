@@ -3,6 +3,7 @@ import json
 import math
 import statistics
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from .catalog import node_name
 from .collect import PARIS, paris
@@ -13,6 +14,10 @@ EQUIP_TYPES = {"Sword": "Épée", "Greatsword": "Espadon", "Dagger": "Dague", "B
                "Torso": "Plastron", "Pants": "Jambières", "Gloves": "Gants", "Boots": "Bottes", "Cape": "Cape",
                "Necklace": "Collier", "Earring": "Boucle d'oreille", "Ring": "Anneau", "Bracelet": "Bracelet",
                "Belt": "Ceinture", "Amulet": "Amulette"}
+
+# taille des annonces vendues mesuree sur Kaisinel (photo fixe du 22/10/2026), par item
+KAISINEL_LOTS = {int(k): v[0] for k, v in json.loads(
+    (Path(__file__).with_name("lots_kaisinel.json")).read_text(encoding="utf-8"))["lots"].items()}
 
 # grades des ressources de recolte : seul le blanc se recolte sur les points, les autres sont des procs (taux inconnus)
 GRADES = ("Common", "Rare", "Legend", "Unique")
@@ -251,14 +256,18 @@ class Market:
         return r["d"] * 24 if r and r["n"] and r["d"] is not None else None
 
     def lot_size(self, item_id):
-        """Taille d'une annonce vendue (unites), estimee par type d'objet : le jeu ne publie que le nombre d'annonces.
-        Objet non empilable (pile max 0 ou 1) et equipement : 1 ; sinon config lots (recolte, materiau, consommable)."""
+        """Taille d'une annonce vendue (unites) : le jeu ne publie que le nombre d'annonces pour ce serveur. Mesure de
+        Kaisinel (photo fixe) si elle existe ; sinon objet non empilable (pile max 0 ou 1) et equipement : 1, puis config
+        lots (recolte selon le grade : blanc, vert, bleu, eclatant ; materiau ; consommable)."""
+        if item_id in KAISINEL_LOTS:
+            return KAISINEL_LOTS[item_id]
         it = self.items.get(item_id) or {}
         lots = self.cfg.get("lots") or {}
         if (it.get("max_stack") is not None and it["max_stack"] <= 1) or it.get("category") == "Equip":
             return 1
         if it.get("is_gather"):
-            return lots.get("recolte", 1)
+            r = lots.get("recolte", 1)
+            return r[min(GRADES.index(it["grade"]) if it.get("grade") in GRADES else 0, len(r) - 1)] if isinstance(r, list) else r
         return lots.get("consommable" if it.get("category") == "Usable" else "materiau", 1)
 
     def sales(self, item_id):

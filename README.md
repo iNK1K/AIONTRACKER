@@ -60,7 +60,7 @@ Python est **portable** (`.runtime\python`) : rien n'est installé sur le systè
 | reddit.com/r/aion2 | posts dont le titre contient un mot-clé (au mieux : Reddit limite souvent les serveurs) |
 
 ## Méthode
-- Ventes d'un item sur ton serveur = annonces disparues sur 24 h × taille estimée des annonces (le jeu ne publie pas les quantités) : 1 pour un objet non empilable (pile max 0 ou 1) ou un équipement, sinon `lots` dans config.json (récolte 100, matériau 10, consommable 10). Modifiable par objet dans l'onglet Opportunités (gardé dans le navigateur).
+- Ventes d'un item sur ton serveur = annonces disparues sur 24 h × taille estimée des annonces (le jeu ne publie pas les quantités pour Zemurru) : mesure de Kaisinel figée le 22/10 pour 65 objets (`aionhdv/lots_kaisinel.json`, objets élyséens et mesures trop maigres écartés), sinon 1 pour un objet non empilable (pile max 0 ou 1) ou un équipement, sinon `lots` dans config.json (récolte 200 / 50 / 10 / 3 selon le grade blanc, vert, bleu, éclatant ; matériau 20 ; consommable 20). Modifiable par objet dans l'onglet Opportunités (gardé dans le navigateur).
 - Délai de vente (Opportunités) : devant = 1 ÷ annonces vendues par heure (tu postes au prix le plus bas) ; à la file = annonces en vente ÷ annonces vendues par heure.
 - Prix réaliste = moyenne (prix affiché, prix habituel des ventes observées sur ton serveur) si l'affiché est plus haut.
 - Profit/u = prix × (1 − 10 %) − ingrédients achetés − réactifs PNJ (400 par défaut).

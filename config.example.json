@@ -10,8 +10,8 @@
   "fees": 0.10,
   "npc_reagent_price": 400,
   "max_listings": 10,
-  "_lots": "taille d'une annonce vendue (unites), estimee par type d'objet : on ne connait que le nombre d'annonces disparues. Objet non empilable (pile max 0 ou 1) et equipement : 1. Modifiable par objet dans l'onglet Opportunites",
-  "lots": {"recolte": 100, "materiau": 10, "consommable": 10},
+  "_lots": "taille d'une annonce vendue (unites) : mesure de Kaisinel (aionhdv/lots_kaisinel.json) si elle existe, sinon regle par type. Non empilable (pile max 0 ou 1) et equipement : 1 ; recolte : blanc, vert, bleu, eclatant. Modifiable par objet dans l'onglet Opportunites",
+  "lots": {"recolte": [200, 50, 10, 3], "materiau": 20, "consommable": 20},
 
   "masteries": {
     "Alchemy": 999,

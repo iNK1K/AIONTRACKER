@@ -99,13 +99,16 @@ class Ventes(unittest.TestCase):
 
     def test_taille_des_lots_par_type(self):
         con = make_db()
-        con.executemany("INSERT INTO items (id, name, grade, category, bound, base_name, max_stack) VALUES (?,?,'Common',?,0,?,?)",
-                        [(40, "Épée", "Equip", "Épée", None), (41, "Potion", "Usable", "Potion", 100),
-                         (42, "Ticket", "Misc", "Ticket", 1)])
+        con.executemany("INSERT INTO items (id, name, grade, category, bound, base_name, max_stack, is_gather) "
+                        "VALUES (?,?,?,?,0,?,?,?)",
+                        [(40, "Épée", "Common", "Equip", "Épée", None, 0), (41, "Potion", "Common", "Usable", "Potion", 100, 0),
+                         (42, "Ticket", "Common", "Misc", "Ticket", 1, 0), (43, "Bois pur", "Legend", "Misc", "Bois pur", None, 1),
+                         (610610013, "Od", "Common", "Misc", "Od", None, 1)])
         con.execute("INSERT INTO activity VALUES (?,?,?,24,2.0,1.0,0.5,100,100)", (ME, BOIS, ts(1)))
-        m = market(con, lots={"recolte": 100, "materiau": 10, "consommable": 5})
-        self.assertEqual([m.lot_size(i) for i in (BOIS, PLANCHE, 40, 41, 42)], [100, 10, 1, 5, 1])
-        self.assertEqual(m.sales(BOIS)["units"], 48 * 100)        # annonces disparues x taille estimee
+        m = market(con, lots={"recolte": [200, 50, 10, 3], "materiau": 10, "consommable": 5})
+        self.assertEqual([m.lot_size(i) for i in (BOIS, 43, PLANCHE, 40, 41, 42)], [200, 10, 10, 1, 5, 1])
+        self.assertEqual(m.lot_size(610610013), 297)                # mesure de Kaisinel prioritaire
+        self.assertEqual(m.sales(BOIS)["units"], 48 * 200)         # annonces disparues x taille estimee
 
     def test_pas_de_mesure(self):
         self.assertIsNone(market(make_db()).sales(PLANCHE))
