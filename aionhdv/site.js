@@ -224,6 +224,20 @@ async function jScan(file){if(!file||!(file.type||'').startsWith('image/'))retur
    msg.textContent=added+' annonce(s) ajoutée(s)'+(known?', '+known+' déjà dans le journal':'')+(bad.length?' ; à saisir à la main (lecture incertaine) : '+bad.join(', '):'')+'.'}
   URL.revokeObjectURL(url);if(added)jSync('capture : '+added+(hist?' vente(s)':' annonce(s)'));else jRender()}
  catch(e){msg.textContent='Lecture impossible : '+e+' (la lecture fonctionne sur le site en ligne)'}}
+// conseil pour une annonce en cours (f = JFLOOR : plus bas, annonces en vente, prix habituel, annonces vendues/h, taille) :
+// garder, relister 1 sous le plus bas (la taxe de l'annonce retiree est perdue) ou retirer pour liberer l'annonce
+function jAdvice(s,f){if(!f)return '<span class="mut">pas en vente en ce moment</span>';
+ const [fl,n,ref,dh,lot]=f,seuil=s.cout!=null?Math.ceil(s.cout/(1-JC().tax)):null,b=(c,t)=>'<span class="badge '+c+'">'+t+'</span> ';
+ const ahead=fl<s.prix?n:0,wait=dh?(ahead+s.reste/(lot||1))/dh:null,w=wait!=null?'<span class="sub">vendu en ~'+fmtH(wait)+'</span>':'';
+ if(!ahead)return b('b-ok','✅ Garder')+w;
+ if(ref&&fl<0.85*ref)return b('b-warn','⏳ Attendre')+'<span class="sub">le plus bas ('+NF.format(fl)+') est sous le prix habituel ('+NF.format(ref)+')</span>';
+ const to=fl-1,tax=lost(s.prix,s.reste);
+ if(seuil&&to<seuil)return ref&&ref<seuil?b('b-bad','↩ Retirer')+'<span class="sub">le prix habituel ('+NF.format(ref)+') est passé sous ton seuil ('+NF.format(seuil)+') : libère l’annonce</span>'
+  :b('b-warn','⏳ Garder')+'<span class="sub">baisser passerait sous ton seuil ('+NF.format(seuil)+')</span>';
+ if(wait!=null&&n/dh<3)return b('b-ok','✅ Garder')+'<span class="sub">les '+n+' annonces devant partent en ~'+fmtH(n/dh)+'</span>';
+ const gain=s.cout!=null?net(to,s.reste)-s.cout*s.reste-tax:null;
+ if(gain!=null&&gain<=0)return b('b-warn','⏳ Garder')+'<span class="sub">relister à '+NF.format(to)+' coûterait plus (taxe '+NF.format(tax)+') que ça rapporte</span>';
+ return b('b-bad','🔁 Relister à '+NF.format(to))+'<span class="sub">taxe perdue '+NF.format(tax)+(gain!=null?', gain restant '+NF.format(gain):'')+'</span>'}
 // ---------------------------------------------------------------- affichage
 function jRender(){if(!J)return;oppRender();const box=document.getElementById('jopen');if(!box)return;
  const F=window.JFLOOR||{},lots=J.lots.filter(l=>!l.del).map(l=>[l,jState(l)]);
@@ -234,6 +248,7 @@ function jRender(){if(!J)return;oppRender();const box=document.getElementById('j
    +(JSRC[s.src]||'❔ origine ?')+'</span>'+(bat?' <span class="badge b-bad">battu : '+NF.format(f[0])+'</span>':f?' <span class="badge b-ok">le moins cher</span>':'')+'</td>'
    +'<td class="n">'+s.reste+(s.reste<s.qte?' / '+s.qte:'')+'</td><td class="n">'+NF.format(s.prix)+'</td>'
    +'<td class="n">'+(s.cout!=null?NF.format(s.cout):'–')+'</td><td class="n '+(s.cout!=null?(net(s.prix,1)-s.cout>0?'pos':'neg'):'')+'">'+(s.cout!=null?NF.format(net(s.prix,1)-s.cout):'–')+'</td>'
+   +'<td>'+jAdvice(s,f)+'</td>'
    +'<td>'+(s.poste?s.poste.slice(8,10)+'/'+s.poste.slice(5,7)+' '+s.poste.slice(11):'<span class="mut">avant le journal</span>')+'</td>'
    +'<td class="n">'+(s.relistes||'–')+'</td><td class="n">'+(s.frais?NF.format(s.frais):'–')+'</td>'
    +'<td style="white-space:nowrap"><button class="mapbtn" onclick="jAct(\''+l.id+'\',\'vendu\')">✅ Vendu</button> '
@@ -256,8 +271,8 @@ function jRender(){if(!J)return;oppRender();const box=document.getElementById('j
       return (s.cout==null||(s.cout===0&&c!==0))&&c!=null?c:(s.cout??'')})(),110)+' /u '+go
     +' <span class="sub">le coût suit l’origine choisie : 0 pour ta récolte (craftée ou vendue brute), ingrédients achetés pour l’achat → craft et le ravitaillement, ton prix d’achat pour un flip</span>'
    :'Coût de revient '+inp('c',s.cout??'',110)+' /u '+go;
-  return row+'<tr><td colspan="9" style="background:var(--card2)">'+f2+'</td></tr>'}).join('')
-  :'<tr><td colspan="9" class="mut">Aucune annonce en cours : ajoute-les ci-dessous ou colle une capture de ta fenêtre des ventes.</td></tr>';
+  return row+'<tr><td colspan="10" style="background:var(--card2)">'+f2+'</td></tr>'}).join('')
+  :'<tr><td colspan="10" class="mut">Aucune annonce en cours : ajoute-les ci-dessous ou colle une capture de ta fenêtre des ventes.</td></tr>';
  jStats(lots);jLog(lots)}
 function jStats(lots){const per=+(document.getElementById('jper')||{}).value||0,since=per?new Date(Date.now()-per*864e5):null;
  const p=n=>String(n).padStart(2,'0'),lim=since?since.getFullYear()+'-'+p(since.getMonth()+1)+'-'+p(since.getDate())+' '+p(since.getHours())+':'+p(since.getMinutes()):'';

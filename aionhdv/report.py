@@ -995,11 +995,14 @@ def journal_html(ctx, cfg, my):
     Tout est calcule et affiche dans le navigateur (site.js, j*) a partir de journal.json."""
     m = my["market"]
     j = cfg.get("journal") or {"lots": []}
+    # par objet du journal : prix le plus bas, annonces en vente, prix habituel, annonces vendues par heure, taille d'annonce
     floor = {}
     for lot in j.get("lots") or []:
         iid = m.by_base.get(lot["objet"])
         if iid in m.price:
-            floor[lot["objet"]] = [m.price[iid], m.listings.get(iid, 0)]
+            sp, sl = m.sell_price(iid), m.sales(iid)
+            floor[lot["objet"]] = [m.price[iid], m.listings.get(iid, 0), sp and sp["ref"] and round(sp["ref"]),
+                                   sl and round(sl["listings"] / 24, 3), m.lot_size(iid)]
     names = "".join(f'<option value="{esc(n["n"])}">' for n in sorted(ctx.market_icons(), key=lambda x: x["n"]))
     inp = lambda i, ph, w, t="number", extra="": (f'<input id="{i}" class="search" type="{t}" placeholder="{ph}" '
                                                  f'style="width:{w}px;display:inline-block" {extra}>')
@@ -1011,7 +1014,9 @@ def journal_html(ctx, cfg, my):
         '<span id="jsync" class="sub"></span>'
         '<h3>Mes annonces en cours</h3><div class="wrap"><table><thead><tr>'
         f'{_th("Objet")}{_th("Reste", None, True)}{_th("Prix /u", None, True)}{_th("Coût /u", "Coût de revient (clique « Coût » pour le changer)", True)}'
-        f'{_th("Gain /u", "Prix − taxe − coût", True)}{_th("Posté le")}{_th("Relistes", None, True)}'
+        f'{_th("Gain /u", "Prix − taxe − coût", True)}'
+        f'{_th("Conseil", "Garder, relister moins cher (la taxe de l’annonce retirée est perdue) ou retirer pour libérer l’annonce")}'
+        f'{_th("Posté le")}{_th("Relistes", None, True)}'
         f'{_th("Taxe perdue", "Taxe des annonces retirées pour relister", True)}{_th("Actions")}'
         '</tr></thead><tbody id="jopen"></tbody></table></div>'
         '<div class="card" style="margin-top:10px"><b>📦 J’ai posté</b><div class="toolbar" style="margin:0;flex-wrap:wrap;gap:6px">'
