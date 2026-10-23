@@ -1,7 +1,7 @@
 {
  "_": "Journal de mes annonces, rempli depuis l'onglet 💰 Mes ventes du site (ne pas modifier à la main). Une annonce = un lot posté ; ses événements : poste, reliste (nouveau prix, nouveaux frais), vendu (quantité, prix, reçu après taxe), retire. « avant » = annonce antérieure au journal (date de mise en vente et frais inconnus).",
  "debut": "2026-10-19 02:35",
- "maj": "2026-10-23 13:26",
+ "maj": "2026-10-23 14:25",
  "lots": [
   {"id":"mvej81biqpfnu","objet":"Corne dure de Balaur raffinée","src":"achat","qte":33,"prix":65000,"cout":48196,"ev":[{"id":"mvej81bi9708r","t":"2026-10-19 02:44","type":"poste","prix":65000,"qte":33},{"id":"mvejqri9s067c","t":"2026-10-19 02:59","type":"src","src":"achat"},{"id":"mvejqri9hezu9","t":"2026-10-19 02:59","type":"cout","cout":35500},{"id":"mvfakymlripxk","t":"2026-10-19 15:30","type":"reliste","prix":54443,"qte":33,"frais":214500},{"id":"mvi8uwy5qz7l7","t":"2026-10-21 17:05","type":"reliste","prix":32886,"qte":33,"frais":179661},{"id":"mvijymgskrsqe","t":"2026-10-21 22:16","type":"vendu","prix":32886,"qte":33,"recu":976714}]},
   {"id":"mvej81biwm19w","objet":"Lingot d'orichalque","src":"recolte","qte":64,"prix":14990,"cout":0,"ev":[{"id":"mvej81bi0hmo8","t":"2026-10-19 02:44","type":"poste","prix":14990,"qte":64},{"id":"mvekmypofgcwj","t":"2026-10-19 03:24","type":"reliste","prix":3999,"qte":64,"frais":95936},{"id":"mvf97y6khsw8b","t":"2026-10-19 14:52","type":"vendu","prix":3999,"qte":64,"recu":230342}]},
@@ -37,6 +37,6 @@
   {"id":"mvkvv299570ni","objet":"Rubis brut d'une grande pureté","src":"brut","qte":119,"prix":4497,"cout":0,"ev":[{"id":"mvkvv299z2kbp","t":"2026-10-23 13:25","type":"poste","prix":4497,"qte":119},{"id":"mvkvwxa22i8lc","t":"2026-10-23 13:26","type":"vendu","prix":4497,"qte":119,"recu":481628}]},
   {"id":"mvkvvfj81v9zj","objet":"Minerai d'orichalque pur","src":"brut","qte":6,"prix":149998,"cout":0,"ev":[{"id":"mvkvvfj83px16","t":"2026-10-23 13:25","type":"poste","prix":149998,"qte":6},{"id":"mvkvwsd60vrvf","t":"2026-10-23 13:26","type":"vendu","prix":149998,"qte":6,"recu":809989}]},
   {"id":"mvkvvq1d1v9c1","objet":"Diamant brut pur","src":"brut","qte":8,"prix":54997,"cout":0,"ev":[{"id":"mvkvvq1dmuobc","t":"2026-10-23 13:25","type":"poste","prix":54997,"qte":8},{"id":"mvkvwok69u14u","t":"2026-10-23 13:26","type":"vendu","prix":54997,"qte":8,"recu":395978}]},
-  {"id":"mvkvwa2mvannj","objet":"Cuir résistant","src":"achat","qte":48,"prix":13996,"cout":8400,"ev":[{"id":"mvkvwa2mflkns","t":"2026-10-23 13:26","type":"poste","prix":13996,"qte":48}]}
+  {"id":"mvkvwa2mvannj","objet":"Cuir résistant","src":"achat","qte":48,"prix":13996,"cout":8400,"ev":[{"id":"mvkvwa2mflkns","t":"2026-10-23 13:26","type":"poste","prix":13996,"qte":48},{"id":"mvky0p3otq1h6","t":"2026-10-23 14:25","type":"vendu","prix":13996,"qte":48,"recu":604627}]}
  ]
 }
