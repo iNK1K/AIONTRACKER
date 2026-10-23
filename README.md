@@ -8,7 +8,9 @@ Objectif : générer un maximum de kinah via l'hôtel des ventes d'Aion 2 (serve
 .\run.ps1 hourly      # prix de tout le marché + analyses + alertes + annonces officielles + rapport
 .\run.ps1 daily       # prix, activité, purge de la base, résumé
 ```
-Rapport : ouvrir `reports\index.html` dans le navigateur (onglets : Aujourd’hui, Opportunités, Mes ventes, Ravitaillement, le reste dans 🧰 Outils ; filtres, tri, bouton **MAP** sur les ressources, bouton **📈** pour la courbe de prix, clic sur un nom pour le copier).
+Rapport : ouvrir `reports\index.html` dans le navigateur (onglets : 💬 Assistant, Aujourd’hui, Opportunités, Mes ventes, Ravitaillement, le reste dans 🧰 Outils ; filtres, tri, bouton **MAP** sur les ressources, bouton **📈** pour la courbe de prix, clic sur un nom pour le copier).
+
+Onglet **💬 Assistant** (ouvert par défaut) : un chat façon ChatGPT pour toutes les questions sur Aion 2 (loot, donjons, crafts, builds, récolte, prix). Claude (Opus 5.5) cherche sur le web et lit les pages utiles, et consulte le catalogue du tracker (`assist.js` : objets, prix du serveur, recettes, zones de récolte ; données du jeu et prix publics, rien de personnel, hors de la page chiffrée, chargé à l’ouverture du chat). L’appel à l’API Anthropic part du navigateur : il faut une **clé API** (`sk-ant-api…`, console.anthropic.com, avec une limite de dépense mensuelle et la recherche web activée), gardée dans le navigateur comme le jeton GitHub du journal. Un jeton d’abonnement Claude Pro/Max (`sk-ant-oat…`) ne marche pas ici. Compter environ 0,10 à 0,40 $ par question avec recherche web ; le pied du chat affiche le total dépensé depuis ce navigateur. Code : `aionhdv/report/assistant.py` (onglet et catalogue), partie « assistant » de `aionhdv/site.js`.
 
 Onglet **Mon stock** : coller une capture de la réserve (Ctrl + V) remplit le stock automatiquement (reconnaissance des icônes et des quantités dans le navigateur, `aionhdv/scan.js`).
 

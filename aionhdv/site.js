@@ -1,6 +1,6 @@
 function show(id){document.querySelectorAll('section').forEach(s=>s.classList.toggle('on',s.id===id));
  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===id));
- const b=document.querySelector('nav button[data-t="'+id+'"]');if(b&&b.classList.contains('tool'))document.querySelector('nav').classList.add('tools');try{localStorage.setItem('tab',id)}catch(e){};scrollTo(0,0)}
+ const b=document.querySelector('nav button[data-t="'+id+'"]');if(b&&b.classList.contains('tool'))document.querySelector('nav').classList.add('tools');try{localStorage.setItem('tab',id)}catch(e){};scrollTo(0,0);if(id==='chat')aiInit()}
 // menu « Outils » : onglets secondaires, deplies au clic ou quand l'un d'eux est ouvert
 function toggleTools(){document.querySelector('nav').classList.toggle('tools')}
 function openMap(name){document.getElementById('mtitle').textContent='Carte : '+name;
@@ -494,7 +494,7 @@ function segShow(btn,id){const seg=btn.parentNode;seg.querySelectorAll('button')
 function resCrafts(name,tid){const tb=document.getElementById(tid),inp=tb&&tb.closest('.segp').querySelector('.toolbar input.search[oninput*="'+tid+'"]');
  if(!inp)return;inp.value=name;filt(inp,tid);inp.scrollIntoView({block:'center'})}
 function clearStock(){document.querySelectorAll('#stock input[data-r]').forEach(i=>i.value='');calc()}
-document.addEventListener('DOMContentLoaded',()=>{let t='home';try{t=localStorage.getItem('tab')||t;
+document.addEventListener('DOMContentLoaded',()=>{let t='chat';try{t=localStorage.getItem('tab')||t;
  if(localStorage.getItem('detail')){document.body.classList.add('detail');document.querySelectorAll('input.dt').forEach(x=>x.checked=true)}}catch(e){}
  if(!document.getElementById(t))t='home';show(t);
  try{const s=JSON.parse(localStorage.getItem('stock')||'null');if(s)document.querySelectorAll('#stock input[data-r]').forEach(i=>i.value=s[i.dataset.r]||'')}catch(e){}
@@ -657,3 +657,191 @@ function staleCheck(){const el=document.getElementById('stale');if(!el)return;
  if(g!=null&&g>=2)m.push('page générée il y a '+Math.floor(g)+' h (les passages horaires ne tournent plus ?)');
  el.hidden=!m.length;if(m.length)el.textContent='⚠ Données périmées : '+m.join(' ; ')+'. Les chiffres ci-dessous peuvent être faux.'}
 document.addEventListener('DOMContentLoaded',()=>{staleCheck();setInterval(staleCheck,6e5)});
+// ======================================================================== assistant
+// Chat Claude, appelé depuis le navigateur (API Anthropic) : recherche web et lecture de pages côté Anthropic, plus l'outil
+// tracker_search sur le catalogue du tracker (assist.js : objets, prix du serveur, recettes, récolte, chargé à l'ouverture).
+// La clé API reste dans ce navigateur. La conversation (blocs bruts de l'API, renvoyés tels quels) aussi.
+const AIMODEL='claude-opus-5-5',AIPRICE={in:4,out:20,cw:5,cr:.2,search:.01};   // $ par million de jetons, $ par recherche
+let AIH=[],AIBUSY=null,AIX=null;
+function aiKey(){try{return localStorage.getItem('aikey')||''}catch(e){return ''}}
+function aiSave(){try{localStorage.setItem('aichat',JSON.stringify(AIH))}catch(e){try{localStorage.removeItem('aichat')}catch(e2){}}}
+function aiCostGet(){try{return +localStorage.getItem('aicost')||0}catch(e){return 0}}
+function aiCostAdd(u){if(!u)return;const s=u.server_tool_use||{},c=((u.input_tokens||0)*AIPRICE.in+(u.output_tokens||0)*AIPRICE.out
+ +(u.cache_creation_input_tokens||0)*AIPRICE.cw+(u.cache_read_input_tokens||0)*AIPRICE.cr)/1e6+(s.web_search_requests||0)*AIPRICE.search;
+ try{localStorage.setItem('aicost',String(aiCostGet()+c))}catch(e){}aiCostShow()}
+function aiCostShow(){const el=document.getElementById('aicost');if(el)el.textContent=aiCostGet()?'≈ '+aiCostGet().toFixed(2).replace('.',',')+' $ dépensés depuis ce navigateur':''}
+function aiLoad(){const v=(document.getElementById('ai')||{dataset:{}}).dataset.v||'';
+ return window.ASSIST?Promise.resolve():new Promise(ok=>{const sc=document.createElement('script');sc.src='assist.js?v='+v;sc.onload=ok;sc.onerror=ok;document.head.appendChild(sc)})}
+function aiInit(){const box=document.getElementById('aimsgs');if(!box)return;if(aiRenderAll.hello==null)aiRenderAll.hello=box.innerHTML;aiLoad();aiCostShow();
+ if(!AIH.length){try{AIH=JSON.parse(localStorage.getItem('aichat')||'[]')}catch(e){AIH=[]}if(AIH.length)aiRenderAll()}
+ if(!aiKey())aiKeyForm();else setTimeout(()=>document.getElementById('aiin').focus(),0)}
+function aiKeyForm(on){const box=document.getElementById('aikey');if(on===false){box.hidden=true;return}box.hidden=false;
+ box.innerHTML='<b>Clé API Anthropic</b><div class="sub">Une clé qui commence par <code>sk-ant-api…</code>, créée sur '
+  +'<a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a> (mets une limite de dépense '
+  +'mensuelle, et active la recherche web dans les réglages de l’organisation). Elle reste dans ce navigateur, jamais sur GitHub.</div>'
+  +'<input id="aikeyin" type="password" autocomplete="off" placeholder="sk-ant-api03-…" value="'+(aiKey()?'••••••••':'')+'">'
+  +'<button onclick="aiKeySet()">Enregistrer</button>'+(aiKey()?'<button class="sec" onclick="aiKeyForget()">Oublier la clé</button>':'')
+  +'<button class="sec" onclick="aiKeyForm(false)">Fermer</button><div id="aikeymsg" class="sub"></div>'}
+function aiKeySet(){const v=document.getElementById('aikeyin').value.trim(),msg=document.getElementById('aikeymsg');if(!v||v.startsWith('•'))return;
+ if(v.startsWith('sk-ant-oat')){msg.innerHTML='<span class="neg">C’est un jeton d’abonnement Claude (Pro/Max) : il ne marche que dans les applis Claude, pas sur un site. '
+  +'Il faut une clé API de la console.</span>';return}
+ if(!v.startsWith('sk-ant-')){msg.innerHTML='<span class="neg">Ce n’est pas une clé Anthropic (elle commence par sk-ant-api).</span>';return}
+ try{localStorage.setItem('aikey',v)}catch(e){}aiKeyForm(false);toast('Clé enregistrée dans ce navigateur');document.getElementById('aiin').focus()}
+function aiKeyForget(){try{localStorage.removeItem('aikey')}catch(e){}aiKeyForm();toast('Clé oubliée dans ce navigateur')}
+function aiGrow(t){t.style.height='auto';t.style.height=Math.min(t.scrollHeight,220)+'px'}
+function aiNew(){if(AIBUSY)AIBUSY.abort();AIH=[];aiSave();aiRenderAll();document.getElementById('aiin').focus()}
+function aiAsk(q){document.getElementById('aiin').value=q;aiSend()}
+
+// ---------------------------------------------------------------- outil tracker_search (exécuté dans la page)
+const AITOOLS=[{type:'web_search_20260209',name:'web_search',max_uses:8},
+ {type:'web_fetch_20260209',name:'web_fetch',max_uses:6,max_content_tokens:25000},
+ {name:'tracker_search',eager_input_streaming:true,
+  description:'Search the AION HDV tracker catalogue: live auction-house (HDV) data from the players\' own server, refreshed hourly. '
+   +'Item names are in French (the game client language); English names are matched too. For each match it returns rarity, type, level, '
+   +'current lowest price in kinah, number of listings, usual price (what it really sells for), crafting recipes with ingredient prices, '
+   +'what the item is used to craft, and gathering zones with node counts. Use it for any question about an item\'s price, crafting, '
+   +'profit, ingredients or where to gather it. One item or keyword per call; call it several times for several items.',
+  input_schema:{type:'object',properties:{query:{type:'string',description:'Item name or part of it, French or English (e.g. "Potion de soin", "Asvata wood")'}},
+   required:['query'],additionalProperties:false}}];
+function aiIdx(){if(AIX||!window.ASSIST)return AIX;const by={},uses={};ASSIST.items.forEach(r=>by[r[0]]=r);
+ Object.entries(ASSIST.recipes).forEach(([id,rs])=>rs.forEach(r=>r[3].forEach(([i])=>{(uses[i]=uses[i]||new Set()).add(+id)})));
+ AIX={by,uses,list:ASSIST.items.map(r=>[r,normName(r[1]||''),normName(r[2]||'')])};return AIX}
+function aiItem(r,full){const X=aiIdx(),o={nom:r[1],nom_en:r[2]||undefined,rarete:r[3]||undefined,type:r[4]||undefined,niveau:r[5]||undefined,
+  prix_hdv_actuel:r[6],annonces:r[7],prix_habituel:r[8]};
+ if(!full)return o;
+ const rs=ASSIST.recipes[r[0]];if(rs)o.recettes=rs.map(([p,m,q,ing])=>({metier:(window.PROF&&PROF[p])||p,maitrise_requise:m,quantite_produite:q,
+  ingredients:ing.map(([i,n])=>({nom:(X.by[i]||[0,'#'+i])[1],qte:n,prix_hdv:(X.by[i]||[])[6]}))}));
+ const u=X.uses[r[0]];if(u)o.sert_a_crafter=[...u].slice(0,15).map(i=>(X.by[i]||[0,'#'+i])[1]);
+ const nd=ASSIST.nodes[r[0]];if(nd)o.recolte_points_par_zone=nd;
+ return o}
+function aiSearch(q){const X=aiIdx();if(!X)return{erreur:'catalogue du tracker indisponible (assist.js non chargé)'};
+ const n=normName(String(q||'')),toks=n.split(' ').filter(Boolean);if(!toks.length)return{erreur:'requête vide'};
+ const hits=[];X.list.forEach(([r,fr,en])=>{let s=0;
+  if(fr===n||en===n)s=100;else if(fr.startsWith(n)||en.startsWith(n))s=60;else if(toks.every(t=>fr.includes(t))||toks.every(t=>en.includes(t)))s=30;
+  if(s)hits.push([s+(r[6]?5:0)-Math.min(fr.length,60)/100,r])});
+ hits.sort((a,b)=>b[0]-a[0]);
+ return{serveur:ASSIST.server,prix_releves_le:ASSIST.asof,unite:'kinah',resultats:hits.length,
+  objets:hits.slice(0,8).map(([s,r],i)=>aiItem(r,i<3))}}
+function aiTool(b){if(b.name!=='tracker_search')return{content:'outil inconnu : '+b.name,is_error:true};
+ if(!b.input||typeof b.input.query!=='string')return{content:'INVALID_JSON : paramètre query attendu (texte)',is_error:true};
+ return{content:JSON.stringify(aiSearch(b.input.query))}}
+
+// ---------------------------------------------------------------- appel de l'API (streaming SSE, blocs reconstitués tels quels)
+function aiSystem(){const A=window.ASSIST;
+ return 'You are the Aion 2 assistant inside AION HDV, a private tool used by two friends who play Aion 2 (NCSOFT\'s MMORPG) '
+  +'on the server '+(A?A.server:'Zemurru')+', with a French game client. They ask anything about the game: loot and drops, dungeons, bosses, '
+  +'classes and builds, gear progression, crafting, gathering, quests, the auction house (HDV), events and patches.\n\n'
+  +'Your built-in knowledge of Aion 2 is thin and easily confused with the original Aion (2008). Do not answer game facts from memory: '
+  +'search the web first and base the answer on what you find. Prefer recent, specific sources (official site and patch notes, game databases '
+  +'and wikis, guides, Reddit, Korean or Taiwanese community sites when the global version lacks coverage), fetch a page when search snippets '
+  +'are not enough, and say so when sources disagree, are old, or only cover the Korean version.\n\n'
+  +'For item prices, crafting recipes and costs, profit, ingredients or gathering locations, call tracker_search first: it is live data '
+  +'from their own server (prices in kinah). Item names there are French; give French names as they appear in game, with the English '
+  +'name in brackets when it helps.\n\n'
+  +'Answer in the language of the question. Lead with the direct answer, then the details that matter: short sections, lists, '
+  +'and a table when comparing options. Bold key item names and numbers. Be concrete (names, numbers, where, how many), skip filler.'}
+async function aiStream(signal,draw){
+ const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',signal,headers:{'content-type':'application/json',
+   'x-api-key':aiKey(),'anthropic-version':'2023-06-01','anthropic-beta':'server-side-fallback-2026-07-01',
+   'anthropic-dangerous-direct-browser-access':'true'},
+  body:JSON.stringify({model:AIMODEL,max_tokens:32000,stream:true,thinking:{type:'adaptive'},output_config:{effort:'medium'},
+   fallbacks:'default',cache_control:{type:'ephemeral'},system:aiSystem(),tools:AITOOLS,messages:AIH})});
+ if(!r.ok){let m='';try{const j=await r.json();m=(j.error&&j.error.message)||''}catch(e){}
+  const e=new Error(r.status===401?'Clé API refusée ('+m+')':r.status===429?'Limite de débit ou de dépense atteinte, réessaie dans un moment ('+m+')'
+   :r.status===529?'API surchargée, réessaie dans un moment':'Erreur '+r.status+' : '+m);e.status=r.status;throw e}
+ const rd=r.body.getReader(),dec=new TextDecoder(),blocks=[];let buf='',msg={};
+ for(;;){const{done,value}=await rd.read();if(done)break;buf+=dec.decode(value,{stream:true});let i;
+  while((i=buf.indexOf('\n\n'))>=0){const data=buf.slice(0,i).split('\n').filter(l=>l.startsWith('data:')).map(l=>l.slice(5).trim()).join('');
+   buf=buf.slice(i+2);if(!data)continue;const ev=JSON.parse(data);
+   if(ev.type==='message_start')msg=ev.message;
+   else if(ev.type==='content_block_start'){const b=ev.content_block;if(b.type==='tool_use'||b.type==='server_tool_use')b._j='';blocks[ev.index]=b;draw(b,blocks)}
+   else if(ev.type==='content_block_delta'){const b=blocks[ev.index],d=ev.delta;
+    if(d.type==='text_delta')b.text+=d.text;else if(d.type==='input_json_delta')b._j+=d.partial_json;
+    else if(d.type==='thinking_delta')b.thinking+=d.thinking;else if(d.type==='signature_delta')b.signature=d.signature;
+    else if(d.type==='citations_delta')(b.citations=b.citations||[]).push(d.citation);
+    if(d.type==='text_delta')draw(null,blocks)}
+   else if(ev.type==='content_block_stop'){const b=blocks[ev.index];
+    if('_j' in b){try{b.input=b._j?JSON.parse(b._j):{}}catch(e){b.input=b.type==='tool_use'?null:{}}delete b._j}draw(b,blocks)}
+   else if(ev.type==='message_delta'){Object.assign(msg,ev.delta);msg.usage=Object.assign({},msg.usage,ev.usage)}
+   else if(ev.type==='error')throw new Error((ev.error&&ev.error.message)||'erreur de l’API')}}
+ msg.content=blocks.filter(Boolean);return msg}
+async function aiSend(){const inp=document.getElementById('aiin'),q=inp.value.trim();
+ if(AIBUSY){AIBUSY.abort();return}if(!q)return;if(!aiKey()){aiKeyForm();return}
+ await aiLoad();inp.value='';aiGrow(inp);
+ const H=AIH,start=H.length;H.push({role:'user',content:q});const turn=aiTurn(q);AIBUSY=new AbortController();aiBusy(true);
+ let note='';
+ try{for(let step=0;step<15;step++){
+   const msg=await aiStream(AIBUSY.signal,(b,blocks)=>{aiPaint.live=blocks;aiDraw(turn,start,b)});
+   aiPaint.live=null;H.push({role:'assistant',content:msg.content});aiCostAdd(msg.usage);
+   if(msg.stop_reason==='tool_use'){const calls=msg.content.filter(b=>b.type==='tool_use');
+    H.push({role:'user',content:calls.map(b=>Object.assign({type:'tool_result',tool_use_id:b.id},aiTool(b)))});continue}
+   if(msg.stop_reason==='pause_turn')continue;
+   if(msg.stop_reason==='max_tokens')note='Réponse coupée (trop longue).';
+   if(msg.stop_reason==='refusal')note='L’assistant a refusé de répondre à cette question.';
+   break}
+  if(H===AIH)aiSave()}
+ catch(e){if(H===AIH){AIH.length=start;aiSave()}                              // tour annule : l'historique reste valide pour la suite
+  note=e.name==='AbortError'?'Interrompu.':e.message;if(e.status===401)aiKeyForm()}
+ aiPaint.live=null;AIBUSY=null;aiBusy(false);aiDraw(turn,start,null,true,note)}
+function aiBusy(on){const b=document.getElementById('aigo');b.textContent=on?'■':'➤';b.title=on?'Arrêter':'Envoyer (Entrée)'}
+
+// ---------------------------------------------------------------- affichage
+function aiTurn(q){const box=document.getElementById('aimsgs'),h=box.querySelector('.aihello');if(h)h.remove();
+ const u=document.createElement('div');u.className='aiu';u.textContent=q;box.appendChild(u);
+ const a=document.createElement('div');a.className='aia';a.innerHTML='<div class="aibody"></div><div class="aistat">Réflexion…</div><div class="aisrc"></div>';
+ box.appendChild(a);u.scrollIntoView({block:'start',behavior:'smooth'});return a}
+function aiSteps(msgs){let s=0,f=0,t=0;msgs.forEach(m=>Array.isArray(m.content)&&m.content.forEach(b=>{
+  if(b.type==='server_tool_use'){if(b.name==='web_search')s++;else if(b.name==='web_fetch')f++}else if(b.type==='tool_use')t++}));
+ return[s&&s+' recherche'+(s>1?'s':'')+' web',f&&f+' page'+(f>1?'s':'')+' lue'+(f>1?'s':''),t&&t+' recherche'+(t>1?'s':'')+' tracker'].filter(Boolean).join(' · ')}
+let AIRAF=0;
+function aiDraw(turn,start,b,done,note){
+ if(b&&b.type==='server_tool_use'&&b.input&&!('_j' in b)){const st=turn.querySelector('.aistat');
+  if(st){st.style.display='';st.textContent=b.name==='web_search'?'Recherche web'+(b.input.query?' : '+b.input.query:'…'):b.name==='web_fetch'?'Lecture'+(b.input.url?' : '+b.input.url:'…'):'Analyse des résultats…'}}
+ if(b&&b.type==='tool_use'&&b.input&&!('_j' in b)){const st=turn.querySelector('.aistat');if(st){st.style.display='';st.textContent='Données du tracker : '+(b.input.query||'…')}}
+ if(done){cancelAnimationFrame(AIRAF);aiPaint(turn,start,true,note);return}
+ if(!AIRAF)AIRAF=requestAnimationFrame(()=>{AIRAF=0;aiPaint(turn,start,false)})}
+function aiPaint(turn,start,done,note){
+ const ms=AIH.slice(start+1).filter(m=>m.role==='assistant').map(m=>m.content);
+ // le message en cours n'est dans AIH qu'une fois fini : on lit aussi ses blocs en direct
+ if(!done&&aiPaint.live)ms.push(aiPaint.live.filter(Boolean));
+ const text=ms.map(c=>c.filter(b=>b.type==='text').map(b=>b.text).join('')).filter(t=>t.trim()).join('\n\n');
+ turn.querySelector('.aibody').innerHTML=aiMd(text);
+ const st=turn.querySelector('.aistat');
+ if(done){if(st)st.remove();const meta=aiSteps(AIH.slice(start+1));
+  // sources : passages cités, sinon pages lues (la recherche filtrée par code ne renvoie pas de citations)
+  const src=new Map();ms.forEach(c=>c.forEach(b=>(b.citations||[]).forEach(x=>x.url&&!src.has(x.url)&&src.set(x.url,x.title||x.url))));
+  if(!src.size)ms.forEach(c=>c.forEach(b=>{const r=b.type==='web_fetch_tool_result'&&b.content;
+   if(r&&r.type==='web_fetch_result'&&r.url&&!src.has(r.url))src.set(r.url,(r.content&&r.content.title)||r.url.replace(/^https?:\/\/(www\.)?/,''))}));
+  turn.querySelector('.aisrc').innerHTML=[...src].slice(0,10).map(([u,t])=>'<a href="'+escH(u)+'" target="_blank" rel="noopener" title="'+escH(t)+'">'
+   +escH(t)+'</a>').join('')+(meta?'<span class="sub" style="align-self:center">'+meta+'</span>':'');
+  if(note){const e=document.createElement('div');e.className='aierr';e.textContent=note;turn.appendChild(e)}}
+ else if(st&&text)st.style.display='none'}
+function aiRenderAll(){const box=document.getElementById('aimsgs');box.innerHTML='';
+ if(!AIH.length){box.innerHTML=aiRenderAll.hello||'';return}
+ AIH.forEach((m,i)=>{if(m.role==='user'&&typeof m.content==='string'){const t=aiTurn(m.content);aiPaint(t,i,true)}})}
+
+// mini Markdown : titres, listes, tableaux, citations, code, gras, italique, liens (http seulement)
+function aiInline(s){return s.replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>').replace(/(^|[^*\w])\*([^*\s][^*]*)\*/g,'$1<i>$2</i>')
+ .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>')
+ .replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g,'$1<a href="$2" target="_blank" rel="noopener">$2</a>')}
+function aiMd(src){const L=escH(src||'').split('\n'),out=[];let i=0;
+ const cells=l=>l.trim().replace(/^\||\|$/g,'').split('|').map(c=>c.trim());
+ while(i<L.length){const l=L[i];
+  if(/^```/.test(l)){const c=[];i++;while(i<L.length&&!/^```/.test(L[i]))c.push(L[i++]);i++;out.push('<pre><code>'+c.join('\n')+'</code></pre>');continue}
+  let m=l.match(/^(#{1,4})\s+(.*)/);if(m){out.push('<h'+(m[1].length+1)+'>'+aiInline(m[2])+'</h'+(m[1].length+1)+'>');i++;continue}
+  if(/^\s*\|.*\|\s*$/.test(l)&&i+1<L.length&&/^\s*\|?\s*:?-{2,}/.test(L[i+1])){const h=cells(l);i+=2;const rows=[];
+   while(i<L.length&&/^\s*\|.*\|\s*$/.test(L[i]))rows.push(cells(L[i++]));
+   out.push('<div class="aitbl"><table><thead><tr>'+h.map(c=>'<th>'+aiInline(c)+'</th>').join('')+'</tr></thead><tbody>'
+    +rows.map(r=>'<tr>'+r.map(c=>'<td>'+aiInline(c)+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>');continue}
+  if(/^\s*([-*•]|\d+[.)])\s+/.test(l)){const ol=/^\s*\d/.test(l),items=[];
+   while(i<L.length&&(/^\s*([-*•]|\d+[.)])\s+/.test(L[i])||(/^\s{2,}\S/.test(L[i])&&items.length))){
+    if(items.length&&/^(?:[-*•]|\d+[.)])\s+/.test(L[i])&&/^\d/.test(L[i])!==ol)break;   // liste d'un autre type
+    const x=L[i].match(/^(\s*)(?:[-*•]|\d+[.)])\s+(.*)/);if(x)items.push([x[1].length>=2,x[2]]);else items[items.length-1][1]+=' '+L[i].trim();i++}
+   let h='<'+(ol?'ol':'ul')+'>',sub=false;items.forEach(([n,t])=>{if(n&&!sub){h+='<ul>';sub=true}if(!n&&sub){h+='</ul>';sub=false}h+='<li>'+aiInline(t)+'</li>'});
+   out.push(h+(sub?'</ul>':'')+'</'+(ol?'ol':'ul')+'>');continue}
+  if(/^&gt;\s?/.test(l)){const q=[];while(i<L.length&&/^&gt;\s?/.test(L[i]))q.push(L[i++].replace(/^&gt;\s?/,''));out.push('<blockquote>'+aiInline(q.join('<br>'))+'</blockquote>');continue}
+  if(/^\s*(---|\*\*\*)\s*$/.test(l)){i++;continue}
+  if(!l.trim()){i++;continue}
+  const p=[];while(i<L.length&&L[i].trim()&&!/^(#{1,4}\s|```|\s*([-*•]|\d+[.)])\s|&gt;|\s*\|.*\|\s*$)/.test(L[i]))p.push(L[i++]);
+  if(!p.length)p.push(L[i++]);out.push('<p>'+aiInline(p.join('<br>'))+'</p>')}
+ return out.join('')}
