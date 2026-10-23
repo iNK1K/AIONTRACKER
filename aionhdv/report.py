@@ -170,6 +170,7 @@ class Ctx:
                 self.gather_counts[r["name"]] = self.gather_counts.get(r["name"], 0) + r["c"]
         self.gather_names = set(self.gather_counts)
         self.charted = set()       # items dont la courbe de prix est disponible (prices.js)
+        self.data = {}             # grosses donnees de la page (window.<cle>) : data.js, hors de la page chiffree
         self.by_base = {}
         for it in self.items.values():
             if not it["bound"]:
@@ -970,9 +971,8 @@ def home(con, cfg, ctx, my, sname):
                      'alerté quand quelqu’un vend moins cher que toi ou sous ton seuil.</p>')
 
     mine_html += ('<p class="sub" style="margin-top:8px">Pour noter une annonce postée, vendue, relistée ou retirée : '
-                  '<a href="#" onclick="show(\'gains\');return false" style="color:var(--acc)">onglet 💰 Mes ventes</a>.</p>'
-                  f'<script>window.COSTS={json.dumps(costs, ensure_ascii=False)};'
-                  f'window.MARKET_ICONS={json.dumps(ctx.market_icons(), ensure_ascii=False)};</script>')
+                  '<a href="#" onclick="show(\'gains\');return false" style="color:var(--acc)">onglet 💰 Mes ventes</a>.</p>')
+    ctx.data.update(COSTS=costs, MARKET_ICONS=ctx.market_icons())
 
     # 6. annonces officielles
     news = con.execute("SELECT * FROM news WHERE key NOT LIKE 'reddit|%' ORDER BY posted DESC LIMIT 6").fetchall()
@@ -1185,6 +1185,7 @@ def supply_tab(ctx, cfg, my):
             bi = r["item_id"]
             items.append(dict(sale(cid, it), via=dict(craft_info(bi, [r]), i=bi, n=m.items[bi]["name"], plain=plain(r), pmd=meds(bi)),
                               prof=r["profession"], m=r["mastery"] or 0))
+    ctx.data["SUPPLY"] = items
     return ("<h2>Ravitaillement</h2><p class='lead'>Les objets demandés du jour sont recherchés à l’HDV : colle une capture "
             "de ta fenêtre de ravitaillement (<b>Ctrl + V</b> sur cet onglet) pour voir lesquels rapportent à crafter puis "
             f"revendre. Gain par craft = vente après taxe ({fees:.0%}) − coût des ingrédients (prix d’achat réaliste, dernier relevé "
@@ -1199,8 +1200,7 @@ def supply_tab(ctx, cfg, my):
             'accept="image/*" hidden onchange="supplyScan(this.files[0])"></label>. La dernière lecture est gardée dans ce '
             'navigateur et recalculée avec les prix de chaque passage.</span><span id="smsg" class="mut"></span></div>'
             '<div id="sbox"></div>'
-            f'<script>window.SUPPLY={json.dumps(items, ensure_ascii=False, separators=(",", ":"))};'
-            f'window.SUPPLY_CFG={json.dumps(dict(tax=fees, warn=cfg["alerts"].get("price_vs_median", 0.5)))};</script>')
+            f'<script>window.SUPPLY_CFG={json.dumps(dict(tax=fees, warn=cfg["alerts"].get("price_vs_median", 0.5)))};</script>')
 
 
 def gains_tab(ctx, cfg, my):
@@ -1335,8 +1335,12 @@ def build(con, cfg, results):
     add("map", "🗺 Carte", "<h2>Ressources de récolte</h2><p class='lead'>Clique sur MAP pour voir les points de récolte.</p>"
         f'<div class="cards">{cards}</div>')
     as_of = my["as_of"] if my else "?"
+    # donnees de prix sans rien de personnel : fichier a part, telecharge compresse (la page chiffree ne se compresse pas)
+    data_js = "".join(f"window.{k}={json.dumps(v, ensure_ascii=False, separators=(',', ':'))};\n" for k, v in ctx.data.items())
+    (REPORT_DIR / "data.js").write_text(data_js, encoding="utf-8")
+    dv = hashlib.sha1(data_js.encode("utf-8")).hexdigest()[:8]
     page = f"""<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>HDV Aion 2</title><style>{CSS}</style><script src="site.js?v={jsv}"></script></head><body>
+<title>HDV Aion 2</title><style>{CSS}</style><script src="site.js?v={jsv}"></script><script src="data.js?v={dv}"></script></head><body>
 <header><h1>HDV Aion 2 · <b>{esc(sname)}</b></h1>
 <div class="meta">Prix relevés le {esc(paris(as_of) if my and as_of else "?")} (heure de Paris)<br>Page générée le {esc(paris())}</div></header>
 <div id="stale" hidden data-asof="{esc(as_of if my and as_of else "")}" data-gen="{now_iso()}"></div>

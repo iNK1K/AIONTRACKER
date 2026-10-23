@@ -131,4 +131,4 @@ Rapport : `reports/index.html`. Sous Windows, `run.ps1` attend un Python portabl
 
 ### Ce qui est public
 - Le dépôt : code, `config.json`, base de départ (prix déjà publics).
-- Le site : seule `index.html` est protégée par mot de passe ; `map.html` et les images restent accessibles par leur adresse.
+- Le site : seule `index.html` est protégée par mot de passe ; `map.html`, les images et les données de prix (`prices.js`, `data.js` : rien de personnel) restent accessibles par leur adresse. Le journal des ventes est sur la branche `journal` du dépôt public.
