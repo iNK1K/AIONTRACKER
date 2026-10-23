@@ -1,7 +1,7 @@
 {
  "_": "Journal de mes annonces, rempli depuis l'onglet 💰 Mes ventes du site (ne pas modifier à la main). Une annonce = un lot posté ; ses événements : poste, reliste (nouveau prix, nouveaux frais), vendu (quantité, prix, reçu après taxe), retire. « avant » = annonce antérieure au journal (date de mise en vente et frais inconnus).",
  "debut": "2026-10-19 02:35",
- "maj": "2026-10-23 22:04",
+ "maj": "2026-10-23 22:09",
  "lots": [
   {"id":"mvej81biqpfnu","objet":"Corne dure de Balaur raffinée","src":"achat","qte":33,"prix":65000,"cout":48196,"ev":[{"id":"mvej81bi9708r","t":"2026-10-19 02:44","type":"poste","prix":65000,"qte":33},{"id":"mvejqri9s067c","t":"2026-10-19 02:59","type":"src","src":"achat"},{"id":"mvejqri9hezu9","t":"2026-10-19 02:59","type":"cout","cout":35500},{"id":"mvfakymlripxk","t":"2026-10-19 15:30","type":"reliste","prix":54443,"qte":33,"frais":214500},{"id":"mvi8uwy5qz7l7","t":"2026-10-21 17:05","type":"reliste","prix":32886,"qte":33,"frais":179661},{"id":"mvijymgskrsqe","t":"2026-10-21 22:16","type":"vendu","prix":32886,"qte":33,"recu":976714}]},
   {"id":"mvej81biwm19w","objet":"Lingot d'orichalque","src":"recolte","qte":64,"prix":14990,"cout":0,"ev":[{"id":"mvej81bi0hmo8","t":"2026-10-19 02:44","type":"poste","prix":14990,"qte":64},{"id":"mvekmypofgcwj","t":"2026-10-19 03:24","type":"reliste","prix":3999,"qte":64,"frais":95936},{"id":"mvf97y6khsw8b","t":"2026-10-19 14:52","type":"vendu","prix":3999,"qte":64,"recu":230342}]},
@@ -41,6 +41,6 @@
   {"id":"mvkyoc8kfo2ff","objet":"Minerai d'orichalque d'une grande pureté","src":"brut","qte":37,"prix":3096,"cout":0,"ev":[{"id":"mvkyoc8k36lv1","t":"2026-10-23 14:43","type":"poste","prix":3096,"qte":37},{"id":"mvlefd1f8v1tw","t":"2026-10-23 22:04","type":"vendu","prix":3096,"qte":37,"recu":103096}]},
   {"id":"mvkyoc8l9rjo9","objet":"Diamant brut d'une grande pureté","src":"brut","qte":17,"prix":2496,"cout":0,"ev":[{"id":"mvkyoc8lnxe8m","t":"2026-10-23 14:43","type":"poste","prix":2496,"qte":17}]},
   {"id":"mvkyoc8leueby","objet":"Ailes d'Od","src":"achat","qte":1,"prix":2333332,"ev":[{"id":"mvkyoc8l89r4k","t":"2026-10-23 14:43","type":"poste","prix":2333332,"qte":1},{"id":"mvkyoplxu9zdc","t":"2026-10-23 14:44","type":"src","src":"recolte"},{"id":"mvkyoplx7ob3s","t":"2026-10-23 14:44","type":"cout","cout":0}]},
-  {"id":"mvkzptxa6wdo4","objet":"Cuir résistant","src":"achat","qte":116,"prix":22999,"cout":8198,"ev":[{"id":"mvkzptxa6e3br","t":"2026-10-23 15:12","type":"poste","prix":22999,"qte":116}]}
+  {"id":"mvkzptxa6wdo4","objet":"Cuir résistant","src":"achat","qte":116,"prix":22999,"cout":8198,"ev":[{"id":"mvkzptxa6e3br","t":"2026-10-23 15:12","type":"poste","prix":22999,"qte":116},{"id":"mvlem49kryfte","t":"2026-10-23 22:09","type":"reliste","prix":16498,"qte":116,"frais":266788}]}
  ]
 }
