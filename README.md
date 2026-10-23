@@ -8,7 +8,7 @@ Objectif : générer un maximum de kinah via l'hôtel des ventes d'Aion 2 (serve
 .\run.ps1 hourly      # prix de tout le marché + analyses + alertes + annonces officielles + rapport
 .\run.ps1 daily       # prix, activité, purge de la base, résumé
 ```
-Rapport : ouvrir `reports\index.html` dans le navigateur (onglets, filtres, tri, bouton **MAP** sur les ressources, bouton **📈** pour la courbe de prix, clic sur un nom pour le copier).
+Rapport : ouvrir `reports\index.html` dans le navigateur (onglets : Aujourd’hui, Opportunités, Mes ventes, Ravitaillement, le reste dans 🧰 Outils ; filtres, tri, bouton **MAP** sur les ressources, bouton **📈** pour la courbe de prix, clic sur un nom pour le copier).
 
 Onglet **Mon stock** : coller une capture de la réserve (Ctrl + V) remplit le stock automatiquement (reconnaissance des icônes et des quantités dans le navigateur, `aionhdv/scan.js`).
 

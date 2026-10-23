@@ -1,5 +1,8 @@
 function show(id){document.querySelectorAll('section').forEach(s=>s.classList.toggle('on',s.id===id));
- document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===id));try{localStorage.setItem('tab',id)}catch(e){};scrollTo(0,0)}
+ document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===id));
+ const b=document.querySelector('nav button[data-t="'+id+'"]');if(b&&b.classList.contains('tool'))document.querySelector('nav').classList.add('tools');try{localStorage.setItem('tab',id)}catch(e){};scrollTo(0,0)}
+// menu « Outils » : onglets secondaires, deplies au clic ou quand l'un d'eux est ouvert
+function toggleTools(){document.querySelector('nav').classList.toggle('tools')}
 function openMap(name){document.getElementById('mtitle').textContent='Carte : '+name;
  document.getElementById('mframe').src='map.html?r='+encodeURIComponent(name);document.getElementById('modal').classList.add('on')}
 function closeMap(){document.getElementById('modal').classList.remove('on');document.getElementById('mframe').src='about:blank'}

@@ -30,6 +30,7 @@ nav{position:sticky;top:0;z-index:20;background:rgba(11,13,18,.94);backdrop-filt
  padding:0 28px;display:flex;gap:2px;overflow-x:auto}
 nav button{background:none;border:0;border-bottom:2px solid transparent;color:var(--mut);padding:13px 14px;font:inherit;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap}
 nav button:hover{color:var(--txt)}nav button.on{color:var(--acc);border-bottom-color:var(--acc)}
+nav button.tool{display:none}nav.tools button.tool{display:inline-block}nav.tools .toolbtn{color:var(--acc)}
 nav .sep{flex:none;width:1px;background:var(--line);margin:12px 8px}
 main{padding:22px 28px 60px;max-width:1600px;margin:0 auto}
 section{display:none}section.on{display:block}
@@ -1274,6 +1275,10 @@ def gains_tab(ctx, cfg, my):
     return head + body
 
 
+# onglets toujours visibles, dans cet ordre ; les autres sont des outils (menu « Outils »)
+MAIN_TABS = ("home", "opps", "gains", "supply")
+
+
 def build(con, cfg, results):
     REPORT_DIR.mkdir(exist_ok=True)
     ctx = Ctx(con, map_world_ids(con, cfg))
@@ -1287,14 +1292,12 @@ def build(con, cfg, results):
     names = {r["id"]: r["name"] for r in con.execute("SELECT id, name FROM servers")}
     my = next((r for r in results if r["server"] == str(cfg["my_server"])), results[0] if results else None)
     sname = names.get(my["server"], my["server"]) if my else "?"
-    sections, navs = [], []
+    sections, navs = [], {}
 
     def add(sid, title, content):
-        navs.append(f'<button data-t="{sid}" onclick="show(\'{sid}\')">{title}</button>')
+        navs[sid] = (f'<button data-t="{sid}" onclick="show(\'{sid}\')"{"" if sid in MAIN_TABS else " class=tool"}>'
+                     f'{title}</button>')
         sections.append(f'<section id="{sid}">{content}</section>')
-
-    def sep():
-        navs.append('<span class="sep"></span>')
 
     share = my["market"].share if my else cfg["market_share"]
     calib = " (ta part réelle, mesurée sur tes ventes du journal)" if my and my["market"]._share["source"] == "journal" else ""
@@ -1303,7 +1306,6 @@ def build(con, cfg, results):
            "quand il est anormalement haut.")
     if my:
         add("home", "🏠 Aujourd’hui", home(con, cfg, ctx, my, sname))
-        sep()
         add("opps", "🎯 Opportunités", opportunities_tab(cfg, my, precision(con)))
         add("planning", "📅 Planning", planning_tab(cfg, my))
         add("harvest", "🌲 Récolte", harvest_tab(ctx, my, hyp))
@@ -1328,12 +1330,14 @@ def build(con, cfg, results):
             + ("<h3>Plan quotidien (config)</h3>" + table_plan(my["plan"]) if my["plan"] else ""))
         add("gains", "💰 Mes ventes", gains_tab(ctx, cfg, my))
         add("supply", "📦 Ravitaillement", supply_tab(ctx, cfg, my))
-        sep()
     gathers = sorted(ctx.gather_names)
     cards = "".join(f'<div class="card" style="flex-direction:row;align-items:center;justify-content:space-between">'
                     f'{ctx.label(name=g, sub=f"{ctx.gather_counts.get(g, 0)} points")}</div>' for g in gathers)
     add("map", "🗺 Carte", "<h2>Ressources de récolte</h2><p class='lead'>Clique sur MAP pour voir les points de récolte.</p>"
         f'<div class="cards">{cards}</div>')
+    # onglets de tous les jours en avant, les autres derriere « Outils » (deplies quand l'un d'eux est ouvert)
+    nav = ("".join(navs.pop(s) for s in MAIN_TABS if s in navs) + '<span class="sep"></span>'
+           + '<button class="toolbtn" onclick="toggleTools()">🧰 Outils</button>' + "".join(navs.values()))
     as_of = my["as_of"] if my else "?"
     # donnees de prix sans rien de personnel : fichier a part, telecharge compresse (la page chiffree ne se compresse pas)
     data_js = "".join(f"window.{k}={json.dumps(v, ensure_ascii=False, separators=(',', ':'))};\n" for k, v in ctx.data.items())
@@ -1344,7 +1348,7 @@ def build(con, cfg, results):
 <header><h1>HDV Aion 2 · <b>{esc(sname)}</b></h1>
 <div class="meta">Prix relevés le {esc(paris(as_of) if my and as_of else "?")} (heure de Paris)<br>Page générée le {esc(paris())}</div></header>
 <div id="stale" hidden data-asof="{esc(as_of if my and as_of else "")}" data-gen="{now_iso()}"></div>
-<nav>{''.join(navs)}</nav><main>{''.join(sections)}</main>
+<nav>{nav}</nav><main>{''.join(sections)}</main>
 <div id="cmodal" onclick="if(event.target===this)closeChart()"><div class="box"><div class="bar"><b id="ctitle"></b>
 <button class="mapbtn" onclick="closeChart()">Fermer ✕</button></div><div id="cbody"></div></div></div>
 <div id="modal" onclick="if(event.target===this)closeMap()"><div class="box"><div class="bar"><b id="mtitle"></b>
