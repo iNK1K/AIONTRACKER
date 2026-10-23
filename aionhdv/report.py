@@ -7,6 +7,7 @@ import shutil
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from .analysis import CALIB_MIN_ITEMS
 from .catalog import node_name
 from .collect import BOUND_RE, now_iso, paris
 from .config import DATA_DIR, REPORT_DIR
@@ -285,7 +286,8 @@ def opportunities_tab(cfg, my):
     """🎯 Opportunites : recolte (ressources blanches), achat -> craft et flip dans une seule liste. Chaque objet occupe
     une annonce (relistee a chaque vente) : le navigateur garde les meilleures selon les annonces libres (limite du jeu
     moins mes annonces en cours), les kinah disponibles et le temps de recolte (calcul dans site.js, oppRender)."""
-    m, share = my["market"], cfg["market_share"]
+    m = my["market"]
+    share = m.share
     rows = []
 
     def row(e, t, **kw):
@@ -437,7 +439,7 @@ def table_crafts(ctx, rows, tid, harvest, compare=None):
              _th("vs brut/u", "Net/u − ce que les mêmes ressources rapporteraient vendues brutes (prix réaliste, après "
                  "taxe ; échecs compris selon tes niveaux) : négatif = vends plutôt le brut", True) if harvest
              else _th("Marge", "Bénéfice / coût", True)) +
-            _th("Ventes/j", "Ta part (20 %) des ventes sur ton serveur, en unités : annonces disparues sur 24 h × taille "
+            _th("Ventes/j", "Ta part du marché des ventes sur ton serveur, en unités : annonces disparues sur 24 h × taille "
                 "estimée des annonces (type d’objet, config lots)", True) +
             _th("Profit/j", "Ventes/j × Net/u", True) +
             _th("Annonces vendues/j", "Annonces disparues sur 24 h sur ton serveur (achats ; une annonce retirée compte aussi)",
@@ -782,7 +784,7 @@ def table_flips(ctx, flips, cfg):
             + _th("Acheter à ≤", "Prix d'achat cible : bas de la fourchette habituelle (1er quartile sur 3 j)", True)
             + _th("Revendre à", "Prix plancher médian des 3 derniers jours", True)
             + _th("Net/u", "Après la taxe de l’HDV (10 %)", True) + _th("Marge", None, True)
-            + _th("Ventes/j", "Ta part du marché (20 %)", True) + _th("Profit/j", None, True)
+            + _th("Ventes/j", "Ta part du marché (voir les hypothèses en haut de l’onglet)", True) + _th("Profit/j", None, True)
             + _th("Mettre en vente", "Taille habituelle des lots vendus")
             + _th("Capital/j", "Kinah à immobiliser par jour", True, True) + _th("Annonces", None, True, True)
             + _th("Relevés", "Prix relevés sur 3 j", True, True) + "</tr>")
@@ -1205,11 +1207,15 @@ def gains_tab(ctx, cfg, my):
             if g["prix_ratio"]:
                 notes.append(f"Prix obtenu = <b>{g['prix_ratio']:.2f}".replace(".", ",") + "×</b> le prix des ventes "
                              "observées sur le marché pendant la même période.")
+            sh = my["market"]._share
             notes.append(f"Calcul sur {n} objet{'s' if n > 1 else ''} vendu{'s' if n > 1 else ''} au moins 3 fois : "
-                         + ("attends d’en avoir au moins 3 avant de changer les hypothèses de l’outil." if n < 3 else
-                            "assez pour ajuster les hypothèses (part de marché dans config.json)."))
+                         + (f"<b>l’outil utilise maintenant ta part réelle ({pct(sh['value'])})</b> pour tous les profits par "
+                            f"jour, au lieu des {pct(sh['supposee'])} supposés (bornée entre 2 et 50 %)." if sh["source"] == "journal"
+                            else f"il en faut {CALIB_MIN_ITEMS} pour que l’outil remplace la part supposée "
+                                 f"({pct(sh['supposee'])}) par ta part réelle."))
         else:
-            notes.append("Pas encore d’objet vendu au moins 3 fois : ajoute des captures pour comparer aux estimations.")
+            notes.append("Pas encore d’objet vendu au moins 3 fois : ajoute des captures pour comparer aux estimations. "
+                         f"À partir de {CALIB_MIN_ITEMS} objets, l’outil remplace la part supposée par ta part réelle.")
         loss = [x for x in g["items"] if x["marge_u"] is not None and x["marge_u"] < 0]
         for x in loss:
             notes.append(f"<b class='neg'>⚠ {esc(x['objet'])} : vendu à perte</b> (reçu {fmt(round(x['recu_u']))} /u après "
@@ -1222,7 +1228,8 @@ def gains_tab(ctx, cfg, my):
             f"{_num_td(round(x['unites_j'], 1) if x['unites_j'] else None, color=False)}"
             f"{_num_td(round(x['estime_unites_j'], 1) if x['estime_unites_j'] else None, color=False)}"
             f"<td class='n'>{pct(x['part']) if x['part'] else '–'}</td>"
-            f"{_num_td(round(x['achat_moyen'], 1), color=False)}</tr>"
+            f"{_num_td(round(x['achat_moyen'], 1), color=False)}"
+            f"{_num_td(my['market'].lot_size(x['item_id']) if x['item_id'] else None, color=False)}</tr>"
             for x in g["items"])
         table = (f'<div class="wrap"><table><thead><tr>{_th("Objet")}{_th("Ventes", "Achats (lignes de l’historique)", True)}'
                  f'{_th("Unités", None, True)}{_th("Reçu", "Après la taxe de 10 %", True)}'
@@ -1233,6 +1240,7 @@ def gains_tab(ctx, cfg, my):
                  f'{_th("Unités /j prévu", "Annonces vendues par jour sur le serveur × taille estimée des annonces × ta part supposée", True)}'
                  f'{_th("Part réelle", "Mes unités vendues / unités vendues sur le marché", True)}'
                  f'{_th("Achat moyen", "Unités par achat", True)}'
+                 f'{_th("Annonce estimée", "Taille estimée d’une annonce vendue sur le marché (Kaisinel ou règle par type), à comparer à l’achat moyen", True)}'
                  f'</tr></thead><tbody>{rows}</tbody></table></div>')
         body = kpis + "<div class='card' style='margin:12px 0'>" + "".join(f"<div>{n}</div>" for n in notes) + "</div>" + table
     else:
@@ -1262,7 +1270,9 @@ def build(con, cfg, results):
     def sep():
         navs.append('<span class="sep"></span>')
 
-    hyp = (f"Part de marché {cfg['market_share']:.0%}, taxes et frais {cfg['fees']:.0%}. "
+    share = my["market"].share if my else cfg["market_share"]
+    calib = " (ta part réelle, mesurée sur tes ventes du journal)" if my and my["market"]._share["source"] == "journal" else ""
+    hyp = (f"Part de marché {share:.0%}{calib}, taxes et frais {cfg['fees']:.0%}. "
            "« Vendre à » = prix réaliste : le prix affiché, ramené vers le prix habituel sur ton serveur (médiane 3 j) "
            "quand il est anormalement haut.")
     if my:

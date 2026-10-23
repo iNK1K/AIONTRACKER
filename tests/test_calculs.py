@@ -163,6 +163,20 @@ class VraisGains(unittest.TestCase):
         self.assertAlmostEqual(p["part"], 2.0 / 24)                 # 24 annonces vendues par jour sur le marche
         self.assertEqual(p["marge_u"], -10)                         # 990 recus pour un cout de 1000
 
+    def test_part_reelle_remplace_la_part_supposee(self):
+        con = make_db()
+        for iid in (BOIS, PLANCHE, MEUBLE):
+            con.execute("INSERT INTO activity VALUES (?,?,?,24,1.0,1.0,0.5,100,100)", (ME, iid, ts(1)))
+        sale = lambda o, h: dict(date=(datetime.now() - timedelta(hours=h)).strftime("%Y-%m-%d %H:%M"), objet=o,
+                                 quantite=1, prix=1000, recu=900)
+        two = [sale(o, h) for o in ("Planche", "Meuble") for h in (2, 14, 26)]
+        m = market(con, my_sales=two)
+        self.assertEqual(m.share, 0.20)                             # 2 objets seulement : part supposee
+        m = market(con, my_sales=two + [sale("Bois", h) for h in (2, 14, 26)])
+        self.assertAlmostEqual(m.share, 2.0 / 24)                   # 2 unites/j sur 24 vendues : part reelle
+        self.assertEqual(m._share["source"], "journal")
+
+
 
 class Fraicheur(unittest.TestCase):
     def test_alerte_une_fois_si_plus_de_prix(self):

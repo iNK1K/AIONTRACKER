@@ -19,6 +19,9 @@ EQUIP_TYPES = {"Sword": "Épée", "Greatsword": "Espadon", "Dagger": "Dague", "B
 KAISINEL_LOTS = {int(k): v[0] for k, v in json.loads(
     (Path(__file__).with_name("lots_kaisinel.json")).read_text(encoding="utf-8"))["lots"].items()}
 
+# objets vendus au moins 3 fois (journal) a partir desquels ma part reelle du marche remplace la part supposee
+CALIB_MIN_ITEMS = 3
+
 # grades des ressources de recolte : seul le blanc se recolte sur les points, les autres sont des procs (taux inconnus)
 GRADES = ("Common", "Rare", "Legend", "Unique")
 
@@ -40,6 +43,7 @@ class Market:
         self._usual = {}
         self._sales = {}
         self._raw = {}
+        self._share = None                                            # part du marche, calibree par le journal (share)
         # brut vendable depuis la MaJ du 21/10/2026 : avant, prix et ventes du brut viennent d'un autre regime de marche
         self.raw_since = cfg.get("brut_vendable_depuis") or ""
         srow = con.execute("SELECT faction FROM servers WHERE id = ?", (self.server,)).fetchone()
@@ -187,6 +191,19 @@ class Market:
                     ratio=statistics.median(ratio) if ratio else None,
                     prix_ratio=statistics.median(prix) if prix else None, n_cal=len(cal))
 
+    @property
+    def share(self):
+        """Ma part des ventes du marche, utilisee pour tous les profits par jour : la part supposee (config market_share),
+        remplacee par ma part reelle (journal, mediane des objets vendus au moins 3 fois) des que `CALIB_MIN_ITEMS`
+        objets la mesurent, bornee a 2-50 % (quelques ventes atypiques ne doivent pas tout emballer)."""
+        if self._share is None:
+            g = self.real_gains() if self.cfg.get("my_sales") else None
+            ok = g and g["part"] and g["n_cal"] >= CALIB_MIN_ITEMS
+            self._share = dict(value=min(0.5, max(0.02, g["part"])) if ok else self.cfg["market_share"],
+                               source="journal" if ok else "config", n=g["n_cal"] if g else 0,
+                               supposee=self.cfg["market_share"])
+        return self._share["value"]
+
     def price_drop(self, item_id, hours=3):
         """Chute en cours : prix actuel compare au plus haut des dernieres heures (None si pas de chute nette)."""
         now = self.price.get(item_id)
@@ -220,7 +237,7 @@ class Market:
             net_u = med * (1 - fees) - q1
             if not sl or sl["source"] != "serveur" or q1 <= 0 or net_u / q1 < a["flip_min_margin"]:
                 continue                              # flip seulement sur des ventes mesurees sur mon serveur
-            mine = sl["units"] * self.cfg["market_share"]
+            mine = sl["units"] * self.share
             out.append(dict(item_id=iid, objet=it["name"], prix=price, achat_cible=round(q1), revente_cible=round(med),
                             net_u=round(net_u), marge=round(net_u / q1, 3), ma_part_j=round(mine),
                             profit_j=round(mine * net_u), capital_j=round(mine * q1), annonces=self.listings.get(iid, 0),
@@ -519,7 +536,7 @@ class Market:
         # ventes mesurees sur mon serveur
         sl = self.sales(oid)
         vol = sl["units"] if sl else 0
-        mine = vol * self.cfg["market_share"]
+        mine = vol * self.share
         res_u = sum(c["gather"].values()) / q
         flags = self._flags(sl, sp)
         if c["thin"]:
@@ -586,7 +603,7 @@ class Market:
                 continue
             sl = self.sales(iid)
             vol = sl["units"] if sl else 0
-            mine = vol * self.cfg["market_share"]
+            mine = vol * self.share
             net_u, net_pu = sp["real"] * (1 - fees), sp["pess"] * (1 - fees)
             out.append(dict(
                 mode="raw", brut=True, recipe_id=None, item_id=iid, objet=name, metier=None, maitrise=None, lot=1,

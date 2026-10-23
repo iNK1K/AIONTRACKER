@@ -67,7 +67,7 @@ Python est **portable** (`.runtime\python`) : rien n'est installé sur le systè
 - Prix réaliste = moyenne (prix affiché, prix habituel des ventes observées sur ton serveur) si l'affiché est plus haut.
 - Profit/u = prix × (1 − 10 %) − ingrédients achetés − réactifs PNJ (400 par défaut).
 - Brut vendable depuis la MaJ du 21/10/2026 : une ressource récoltée vaut au moins sa vente brute (prix réaliste − 10 %). La vente du brut est un usage comme un craft (Quoi récolter, Planning, Mon stock) ; « vs brut/u » = gain d'un craft face à la vente brute des mêmes ressources, un craft qui fait moins bien n'est plus conseillé. Prix et ventes du brut d'avant `brut_vendable_depuis` sont ignorés (autre régime de marché).
-- Profit/j = profit/u × ta part du marché (20 %).
+- Profit/j = profit/u × ta part du marché : 20 % supposés (`market_share`), remplacés automatiquement par ta part réelle (journal : médiane des objets vendus au moins 3 fois, bornée 2-50 %) dès que 3 objets la mesurent.
 - Heures de vente = annonces disparues d'une heure à l'autre, tous items confondus (heure de Paris).
 - Unique bradé = prix actuel ≤ 60 % de la médiane des 7 derniers jours (au moins 12 relevés).
 - Flip = acheter au 1er quartile des prix plancher sur 3 j, revendre au prix médian, marge ≥ 10 % après frais ; items sans volume et prix en tendance écartés (brut compris, sur son historique depuis le 21/10).

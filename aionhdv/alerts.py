@@ -190,7 +190,7 @@ def digest(con, cfg, result, top=8):
     srv = con.execute("SELECT name FROM servers WHERE id = ?", (result["server"],)).fetchone()
     sname = srv["name"] if srv else result["server"]
     lines = [f"📊 **Résumé du jour : {sname}** (prix de {paris(result['as_of'], '%H:%M')} heure de Paris, ventes mesurées sur le serveur)",
-             "", "**Récolte → craft → vente** (profit par jour à 20 % des ventes mesurées)"]
+             "", f"**Récolte → craft → vente** (profit par jour à {result['market'].share:.0%} des ventes mesurées)"]
     h = result.get("hours")
     if h:
         lines.insert(1, f"🕒 Meilleur moment pour poster : **{h['best']}h – {(h['best'] + 3) % 24}h** "
