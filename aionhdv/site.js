@@ -137,7 +137,9 @@ function jToken(){try{return localStorage.getItem('ghtoken')||''}catch(e){return
 function jStatus(t,cls){const el=document.getElementById('jsync');if(el){el.innerHTML=t;el.className='sub '+(cls||'')}}
 const b64e=s=>{let b='';new TextEncoder().encode(s).forEach(c=>b+=String.fromCharCode(c));return btoa(b)};
 const b64d=s=>new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\s/g,'')),c=>c.charCodeAt(0)));
-async function jApi(method,body){const r=await fetch('https://api.github.com/repos/'+JC().repo+'/contents/journal.json'+(method==='GET'?'?ref=main&t='+Date.now():''),
+// le journal vit sur sa propre branche (jamais sur main : l'historique du code reste lisible)
+const JBRANCH='journal';
+async function jApi(method,body){const r=await fetch('https://api.github.com/repos/'+JC().repo+'/contents/journal.json'+(method==='GET'?'?ref='+JBRANCH+'&t='+Date.now():''),
   {method,headers:{Authorization:'Bearer '+jToken(),Accept:'application/vnd.github+json','Content-Type':'application/json'},body:body&&JSON.stringify(body)});
  if(r.status===404&&method==='GET')return null;if(!r.ok){const e=new Error('GitHub '+r.status);e.status=r.status;throw e}return r.json()}
 async function jPull(){const d=await jApi('GET');if(!d){JSHA=null;return null}JSHA=d.sha;return JSON.parse(b64d(d.content))}
@@ -147,7 +149,7 @@ async function jSync(label){jKeep();
  if(JBUSY)return;JBUSY=true;jStatus('⏳ Enregistrement sur GitHub…');
  try{for(let k=0;k<3;k++){const remote=await jPull();const merged=jMerge(remote,J);merged.maj=jNow();
    if(remote&&jText(remote)===jText({...merged,maj:remote.maj})){J=remote;break}
-   try{const r=await jApi('PUT',{message:'Journal : '+(label||'mise à jour'),content:b64e(jText(merged)),branch:'main',...(JSHA?{sha:JSHA}:{})});
+   try{const r=await jApi('PUT',{message:'Journal : '+(label||'mise à jour'),content:b64e(jText(merged)),branch:JBRANCH,...(JSHA?{sha:JSHA}:{})});
     JSHA=r.content.sha;J=merged;break}catch(e){if(e.status!==409&&e.status!==422)throw e}}
   jKeep();jStatus('✅ Enregistré sur GitHub à '+jNow().slice(11)+' (pris en compte au prochain passage horaire).','pos')}
  catch(e){jStatus('⚠ Pas enregistré sur GitHub ('+jEsc(e.message)+(e.status===401?' : jeton refusé':e.status===403||e.status===404?' : le jeton n’a pas le droit d’écrire dans ce dépôt':'')

@@ -2,6 +2,9 @@
 config.local.json
 .runtime/
 
+# journal des ventes : sur la branche journal (copie locale faite par run.ps1 et le workflow)
+journal.json
+
 # genere a chaque passage
 data/aion.db
 data/aion.db-*

@@ -5,6 +5,7 @@
 # Les creneaux planifies de GitHub (schedule) ont ete retires : retards de plusieurs heures et doublons.
 # La base SQLite est conservee dans le cache d'Actions. Si le cache est vide, elle repart de la derniere sauvegarde
 # (release GitHub "db-backup", mise a jour a chaque passage daily), et a defaut de seed/aion.db.gz.
+# Le journal des ventes (journal.json) est lu sur la branche "journal", ou le site l'enregistre.
 # Secrets : SITE_PASSWORD (obligatoire), DISCORD_WEBHOOK_URL, DISCORD_WEBHOOK_UNIQUE_URL, DISCORD_WEBHOOK_NEWS_URL (facultatifs).
 name: HDV Aion 2
 
@@ -30,6 +31,15 @@ jobs:
     timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
+
+      - name: Journal des ventes (branche journal)
+        run: |
+          # le site enregistre journal.json sur la branche journal, jamais sur main
+          if git fetch --depth=1 origin journal 2>/dev/null; then
+            git show FETCH_HEAD:journal.json > journal.json
+          else
+            echo "::warning::branche journal absente : pas de journal des ventes"
+          fi
 
       - uses: actions/setup-python@v5
         with:

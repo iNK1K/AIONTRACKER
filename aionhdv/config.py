@@ -23,8 +23,8 @@ def load_config():
             cfg.update(json.load(f))
     journal = ROOT / "journal.json"
     if journal.exists():
-        # journal des ventes (rempli depuis le site, onglet Mes ventes)
-        with open(journal, encoding="utf-8") as f:
+        # journal des ventes (rempli depuis le site, onglet Mes ventes, branche journal)
+        with open(journal, encoding="utf-8-sig") as f:      # -sig : copie faite par PowerShell (run.ps1)
             cfg["journal"] = json.load(f)
         cfg["my_listings"], cfg["my_sales"] = from_journal(cfg["journal"])
     # depot GitHub ou le site enregistre le journal (connu dans GitHub Actions)

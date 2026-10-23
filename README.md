@@ -14,7 +14,7 @@ Onglet **Mon stock** : coller une capture de la réserve (Ctrl + V) remplit le s
 
 Onglet **Mes métiers** : niveaux de métier enregistrés dans le navigateur ; les crafts impossibles sont grisés partout et le profit tient compte du taux de réussite du jeu (tables extraites du client, mises à jour par le passage daily).
 
-Onglet **Mes ventes** : journal des annonces (`journal.json`) — un clic quand tu postes, vends (tout ou partie), relistes ou retires, ou une capture (fenêtre des annonces ou historique des ventes). Bilan réel : kinah reçus, taxe perdue en relistes et retraits, bénéfice ; comparaison avec les estimations de l’outil. Le site enregistre le journal sur GitHub avec un jeton à droits limités (gardé dans le navigateur).
+Onglet **Mes ventes** : journal des annonces (`journal.json`) — un clic quand tu postes, vends (tout ou partie), relistes ou retires, ou une capture (fenêtre des annonces ou historique des ventes). Bilan réel : kinah reçus, taxe perdue en relistes et retraits, bénéfice ; comparaison avec les estimations de l’outil. Le site enregistre le journal sur GitHub, sur la branche `journal` (jamais sur `main`), avec un jeton à droits limités (gardé dans le navigateur) ; le workflow et `run.ps1` en prennent une copie avant chaque passage.
 
 Onglet **🎯 Opportunités** : récolte (ressources blanches), achat → craft et flip dans une seule liste ; une opportunité occupe une annonce (relistée à chaque vente). La page garde les meilleures selon les annonces libres (`max_listings` moins mes annonces en cours du journal), les kinah disponibles et le temps de récolte saisis.
 
@@ -33,7 +33,7 @@ Python est **portable** (`.runtime\python`) : rien n'est installé sur le systè
 ## Réglages : `config.json`
 - `my_server` / `watch_servers` : ids a2-tracker (2315 Zemurru, 2310 Hadala, 2318 Baba…)
 - `masteries` : ta maîtrise par métier (filtre les recettes)
-- `journal.json` : mes annonces et mes ventes (rempli depuis l’onglet Mes ventes, ne pas modifier à la main) → alertes « Tu es battu », sous le seuil, etc.
+- `journal.json` : mes annonces et mes ventes (rempli depuis l’onglet Mes ventes, branche `journal`, ne pas modifier à la main) → alertes « Tu es battu », sous le seuil, etc.
 - `github_repo` : dépôt où le site enregistre le journal
 - `alerts.hourly` / `alerts.daily` : rapport Discord horaire (bonnes opportunités au feu vert, seulement s'il y en a de nouvelles) et résumé quotidien détaillé (+ annonces NCSOFT pas encore postées). Jamais d'alerte sur tes annonces (salon partagé)
 - `alerts.flip_min_margin`, `flip_min_samples`, `flip_min_profit_day` : seuils de l'onglet et de l'alerte Flip
@@ -120,6 +120,7 @@ Python 3.10+ suffit : le code n'utilise que la bibliothèque standard.
 ```bash
 git clone https://github.com/iNK1K/AIONTRACKER.git && cd AIONTRACKER
 gunzip -c seed/aion.db.gz > data/aion.db
+git fetch origin journal && git show FETCH_HEAD:journal.json > journal.json   # journal des ventes (facultatif)
 python3 -X utf8 -m aionhdv hourly
 ```
 Rapport : `reports/index.html`. Sous Windows, `run.ps1` attend un Python portable dans `.runtime\python` (absent du dépôt) : avec un Python installé, lancer directement `python -X utf8 -m aionhdv hourly`.

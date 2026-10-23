@@ -2,6 +2,17 @@
 
 Une tâche par ligne. Claude les traite dans l'ordre et coche `[x]` quand c'est fait.
 
+- [x] Journal sur une branche `journal` dédiée (le site n'écrit plus sur `main`, le workflow le lit depuis cette branche)
+- [ ] Fraîcheur des données : alerte Discord si aucun prix reçu depuis 3 h + bandeau rouge sur le site si les données ou la page sont vieilles
+- [ ] Calibration par les vraies ventes : comparer par objet l'estimé (part du marché, taille de lot, délai) au réel du journal, et corriger les estimations quand il y a assez de ventes
+- [ ] Précision des alertes : garder les opportunités feu vert et mesurer 48 h après si elles ont tenu (prix revenu, marge réalisée)
+- [ ] Conseil par annonce en cours : garder / baisser à X / retirer, en comptant la taxe de reliste
+- [ ] Site plus léger : données dans un fichier à part, onglets construits à l'ouverture
+- [ ] Navigation : Aujourd'hui, Opportunités, Mes ventes, Ravitaillement en avant ; le reste dans un menu « Outils »
+- [ ] Incohérences : `config.example.json` (brut_vendable_depuis), mentions de Hadala, tailles de lot Kaisinel
+- [ ] Tests de `scan.js` (captures de référence → résultat attendu)
+- [ ] Découper `report.py` (un module par onglet)
+
 
 ## Fait
 - [x] Brut vendable (MaJ du 21/10) : valeur d'une ressource récoltée = le mieux entre vente brute et craft (Récolte, Quoi récolter, Planning, Mon stock)
