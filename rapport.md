@@ -523,3 +523,32 @@ Aucun calcul de livraison ni de profit. La dernière capture est gardée dans le
 
 ## Origine « 📦 Ravitaillement » dans Mes ventes — 19/10/2026
 Quatrième origine d'annonce, calculée comme l'achat → craft (reçu − coût − taxe perdue). Coût proposé : le **total du craft de l'onglet Ravitaillement** (ingrédients au prix le plus bas relevé), sinon l'estimation de l'achat → craft. Un objet présent dans ta dernière capture de ravitaillement est proposé d'office en « Ravitaillement ». Le bilan par activité et le filtre l'incluent.
+
+
+# Bilan du projet et suites — 23/10/2026
+
+## Journal sur la branche `journal`
+Le site enregistre `journal.json` sur la branche `journal` (et non plus sur `main`, où il faisait 101 commits sur 167). Le workflow et `run.ps1` en prennent une copie avant chaque passage ; `journal.json` n'est plus versionné sur `main`.
+
+## Fraîcheur des données
+- Alerte Discord « 🚨 Données périmées » si aucun prix n'est arrivé depuis 3 h (source en panne), rappel toutes les 12 h.
+- Bandeau rouge sur le site si les prix ont plus de 3 h ou si la page n'a pas été régénérée depuis 2 h (passages horaires arrêtés) : vérifié dans le navigateur à l'ouverture, puis toutes les 10 min.
+
+## Calibration par les vraies ventes
+La part du marché (20 % supposés) est remplacée automatiquement par ta part réelle (médiane, sur les objets vendus au moins 3 fois dans le journal, bornée à 2-50 %) dès que 3 objets la mesurent. Au 23/10 : 25 ventes, 1 seul objet vendu 3 fois, donc l'outil garde 20 %. L'onglet Mes ventes compare aussi l'achat moyen de tes ventes à la taille d'annonce estimée.
+
+## Précision des alertes
+Chaque opportunité alertable (feu vert, pic, Unique bradé, flip à saisir) est notée (table `opp_track`), puis jugée une fois sa fenêtre de vente passée (48 h, 6 h pour un pic) : prix réel = médiane du prix plancher sur cette fenêtre. Bilan en bas de l'onglet Opportunités et dans le résumé du dimanche. Les premiers jugements arrivent 48 h après la mise en ligne.
+
+## Conseil par annonce en cours (Mes ventes)
+✅ garder (le moins cher, ou la file devant toi part en moins de 3 h), 🔁 relister à X (taxe perdue et gain restant affichés), ⏳ attendre (le plus bas est anormalement bas, sous ton seuil, ou relister coûterait plus que ça rapporte), ↩ retirer (le prix habituel est passé sous ton seuil : libère l'annonce).
+
+## Site
+- Données de prix (ravitaillement, coûts, icônes du marché) dans `data.js`, hors de la page chiffrée : 1,34 → 0,78 Mo avant chiffrement. La page chiffrée ne se compresse pas : c'est elle qui coûte le plus au chargement.
+- Navigation : Aujourd'hui, Opportunités, Mes ventes, Ravitaillement en avant ; le reste derrière « 🧰 Outils ».
+- `aionhdv/report.py` découpé en paquet `aionhdv/report/` (un module par onglet) ; page générée identique à l'octet près.
+- Les tests vérifient la syntaxe du JavaScript sur Mac aussi (JavaScriptCore, sans node).
+
+## Reste à faire
+- Tests de `scan.js` : il faut des captures du jeu de référence.
+- Onglets construits à l'ouverture : seulement si les tableaux de marché peuvent sortir de la page chiffrée.

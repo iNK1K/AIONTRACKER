@@ -2,20 +2,20 @@
 
 Une tâche par ligne. Claude les traite dans l'ordre et coche `[x]` quand c'est fait.
 
+- [ ] Onglets construits à l'ouverture : seulement si les tableaux de marché peuvent sortir de la page chiffrée (à décider)
+- [ ] Tests de `scan.js` (captures de référence → résultat attendu) : il faut des captures du jeu (réserve, fenêtre des ventes, historique, ravitaillement) avec ce qu'elles contiennent
+
+
+## Fait
 - [x] Journal sur une branche `journal` dédiée (le site n'écrit plus sur `main`, le workflow le lit depuis cette branche)
 - [x] Fraîcheur des données : alerte Discord si aucun prix reçu depuis 3 h + bandeau rouge sur le site si les données ou la page sont vieilles
 - [x] Calibration par les vraies ventes : comparer par objet l'estimé (part du marché, taille de lot, délai) au réel du journal, et corriger les estimations quand il y a assez de ventes
 - [x] Précision des alertes : garder les opportunités feu vert et mesurer 48 h après si elles ont tenu (prix revenu, marge réalisée)
 - [x] Conseil par annonce en cours : garder / baisser à X / retirer, en comptant la taxe de reliste
 - [x] Site plus léger : données de prix (ravitaillement, coûts, icônes) dans `data.js`, hors de la page chiffrée (1,34 → 0,78 Mo avant chiffrement)
-- [ ] Onglets construits à l'ouverture : seulement si les tableaux de marché peuvent sortir de la page chiffrée (à décider)
 - [x] Navigation : Aujourd'hui, Opportunités, Mes ventes, Ravitaillement en avant ; le reste dans un menu « Outils »
 - [x] Incohérences : `config.example.json` (brut_vendable_depuis), mentions de Hadala, tailles de lot Kaisinel
-- [ ] Tests de `scan.js` (captures de référence → résultat attendu)
 - [x] Découper `report.py` (un module par onglet) : paquet `aionhdv/report/`, page générée identique
-
-
-## Fait
 - [x] Brut vendable (MaJ du 21/10) : valeur d'une ressource récoltée = le mieux entre vente brute et craft (Récolte, Quoi récolter, Planning, Mon stock)
 - [x] Brut vendable : coupure de l'historique de prix et de ventes du brut au 21/10 (`brut_vendable_depuis`) pour les médianes, prix habituels, Flip, Ravitaillement
 - [x] Brut vendable : le brut revient dans le Flip
