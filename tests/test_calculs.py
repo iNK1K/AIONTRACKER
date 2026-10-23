@@ -188,6 +188,26 @@ class Fraicheur(unittest.TestCase):
         self.assertIsNone(alerts.freshness(con, CFG))                # pas de repetition chaque heure
 
 
+class Flip(unittest.TestCase):
+    def flips(self, now):
+        """Planche : prix qui alterne 600 / 1000 / 1000 sur 12 h (1er quartile ~600, mediane 1000), `now` a l'instant."""
+        con = make_db()
+        con.execute("DELETE FROM quotes WHERE item_id = ?", (PLANCHE,))
+        con.executemany("INSERT INTO quotes VALUES (?,?,?,?,?)",
+                        [(ME, PLANCHE, ts(h), (600, 1000, 1000)[h % 3], 10) for h in range(1, 13)] + [(ME, PLANCHE, ts(0), now, 10)])
+        con.execute("INSERT INTO activity VALUES (?,?,?,24,1.0,1.0,0.5,100,100)", (ME, PLANCHE, ts(1)))
+        a = dict(flip_min_samples=12, flip_min_margin=0.1, flip_max_ecart=0.5)
+        return [f for f in market(con, alerts=a).flips() if f["item_id"] == PLANCHE]
+
+    def test_flip_normal(self):
+        f = self.flips(600)
+        self.assertEqual((len(f), f[0]["acheter"]), (1, True))
+
+    def test_prix_aberrant_ecarte(self):
+        self.assertEqual(self.flips(50), [])                         # 5 % de la mediane : erreur de saisie ou releve faux
+        self.assertEqual(self.flips(5000), [])                       # 5 fois la mediane
+
+
 class PrecisionDesAlertes(unittest.TestCase):
     def test_opportunite_notee_puis_jugee(self):
         con = make_db()

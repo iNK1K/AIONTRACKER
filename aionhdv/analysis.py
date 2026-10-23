@@ -217,7 +217,8 @@ class Market:
     def flips(self, days=3):
         """Achat-revente sans craft : acheter au bas de la fourchette habituelle (1er quartile des prix plancher sur
         3 j), revendre au prix median, apres frais. Ecarte les items sans volume de reference et ceux dont le prix suit
-        une tendance (mediane des dernieres 24 h a plus de 25-33 % de celle d'avant). Brut compris (vendable depuis
+        une tendance (mediane des dernieres 24 h a plus de 25-33 % de celle d'avant), ceux dont le prix actuel est aberrant
+        (hors de [50 %, 200 %] de la mediane, config alerts.flip_max_ecart) et ceux dont la fourchette est trop large. Brut compris (vendable depuis
         la MaJ du 21/10/2026), sur son historique d'apres cette date."""
         a, fees = self.cfg["alerts"], self.cfg["fees"]
         cut = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()[:19]
@@ -233,6 +234,11 @@ class Market:
             if old and new and not 0.75 <= statistics.median(new) / statistics.median(old) <= 1.33:
                 continue
             q1, med, _ = statistics.quantiles([p for _, p in rows], n=4)
+            # garde-fou : prix actuel aberrant face a la mediane (erreur de saisie d'un vendeur, releve faux : deja
+            # parti quand tu arrives) ou fourchette trop large (prix erratique, pas un marche stable) -> pas de flip
+            ecart = a.get("flip_max_ecart", 0.5)
+            if not (1 - ecart) * med <= price <= med / (1 - ecart) or q1 < (1 - ecart) * med:
+                continue
             sl = self.sales(iid)
             net_u = med * (1 - fees) - q1
             if not sl or sl["source"] != "serveur" or q1 <= 0 or net_u / q1 < a["flip_min_margin"]:

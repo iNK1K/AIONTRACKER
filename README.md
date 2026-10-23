@@ -72,7 +72,7 @@ Python est **portable** (`.runtime\python`) : rien n'est installé sur le systè
 - Profit/j = profit/u × ta part du marché : 20 % supposés (`market_share`), remplacés automatiquement par ta part réelle (journal : médiane des objets vendus au moins 3 fois, bornée 2-50 %) dès que 3 objets la mesurent.
 - Heures de vente = annonces disparues d'une heure à l'autre, tous items confondus (heure de Paris).
 - Unique bradé = prix actuel ≤ 60 % de la médiane des 7 derniers jours (au moins 12 relevés).
-- Flip = acheter au 1er quartile des prix plancher sur 3 j, revendre au prix médian, marge ≥ 10 % après frais ; items sans volume et prix en tendance écartés (brut compris, sur son historique depuis le 21/10).
+- Flip = acheter au 1er quartile des prix plancher sur 3 j, revendre au prix médian, marge ≥ 10 % après frais ; items sans volume, prix en tendance et prix aberrants écartés (prix actuel hors de 50 % à 200 % de la médiane : erreur de saisie d'un vendeur ou relevé faux ; ou 1er quartile sous 50 % de la médiane : prix erratique ; `alerts.flip_max_ecart`) (brut compris, sur son historique depuis le 21/10).
 - Notes de version : items cités surveillés 48 h, alerte si le prix bouge de ±20 %.
 
 ## Structure

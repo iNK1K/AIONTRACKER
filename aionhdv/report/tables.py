@@ -240,7 +240,9 @@ def table_flips(ctx, flips, cfg):
             + _th("Relevés", "Prix relevés sur 3 j", True, True) + "</tr>")
     lead = ("<p class='lead'>Acheter un item quand il passe en bas de sa fourchette de prix habituelle, le revendre "
             "au prix médian, sans rien fabriquer. Calcul sur les 3 derniers jours ; les items dont le prix monte ou "
-            "baisse durablement et les items sans volume de vente connu sont écartés. Le brut est compris, sur ses prix "
+            "baisse durablement, les items sans volume de vente connu et les prix aberrants (prix actuel hors de "
+            f"{1 - a.get('flip_max_ecart', 0.5):.0%} à {1 / (1 - a.get('flip_max_ecart', 0.5)):.0%} de la médiane : erreur de "
+            "saisie d’un vendeur ou relevé faux ; ou fourchette trop large) sont écartés. Le brut est compris, sur ses prix "
             f"depuis le {esc(cfg.get('brut_vendable_depuis') or '?')} (avant, il n’était pas vendable). "
             "🛡️ Sûreté : 🟢 marché fluide, 🟠 prudence, 🔴 stock qui s’accumule (détail au survol). "
             f"Alerte Discord quand un item passe sous son prix d’achat cible (marge ≥ {a['flip_min_margin']:.0%}, "
