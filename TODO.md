@@ -12,7 +12,7 @@ Une tâche par ligne. Claude les traite dans l'ordre et coche `[x]` quand c'est 
 - [x] Navigation : Aujourd'hui, Opportunités, Mes ventes, Ravitaillement en avant ; le reste dans un menu « Outils »
 - [x] Incohérences : `config.example.json` (brut_vendable_depuis), mentions de Hadala, tailles de lot Kaisinel
 - [ ] Tests de `scan.js` (captures de référence → résultat attendu)
-- [ ] Découper `report.py` (un module par onglet)
+- [x] Découper `report.py` (un module par onglet) : paquet `aionhdv/report/`, page générée identique
 
 
 ## Fait

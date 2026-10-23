@@ -77,7 +77,7 @@ Python est **portable** (`.runtime\python`) : rien n'est installé sur le systè
 
 ## Structure
 ```
-aionhdv/        code (collect, catalog, analysis, alerts, report)
+aionhdv/        code (collect, catalog, analysis, alerts ; report/ : la page, un module par onglet)
 data/aion.db    base SQLite        data/icons/   images des items
 data/raw/       données brutes      reports/      rapport HTML + carte
 logs/           run.log, alerts.log
