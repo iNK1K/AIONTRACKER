@@ -48,7 +48,7 @@ def _pages(server, locale, priced, progress=None):
         page += 1
 
 
-def sync_catalog(con, server="2310"):
+def sync_catalog(con, server="2315"):
     """Tous les items du jeu (9 000+), noms francais et anglais, image, categorie."""
     n = 0
     for it in _pages(server, "fr-FR", "all"):

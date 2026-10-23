@@ -23,6 +23,9 @@
 
   "harvest_per_day": {},
 
+  "_brut_vendable_depuis": "le brut est vendable depuis la MaJ du 21/10/2026 : avant cette date, prix et ventes du brut (autre régime de marché) sont ignorés",
+  "brut_vendable_depuis": "2026-10-21",
+
   "discord_webhook_url": "",
   "_discord_webhooks": "facultatif : salons dedies aux Unique bradés et aux annonces officielles (sinon salon principal)",
   "discord_webhook_unique_url": "",

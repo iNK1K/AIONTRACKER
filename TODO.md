@@ -10,7 +10,7 @@ Une tâche par ligne. Claude les traite dans l'ordre et coche `[x]` quand c'est 
 - [x] Site plus léger : données de prix (ravitaillement, coûts, icônes) dans `data.js`, hors de la page chiffrée (1,34 → 0,78 Mo avant chiffrement)
 - [ ] Onglets construits à l'ouverture : seulement si les tableaux de marché peuvent sortir de la page chiffrée (à décider)
 - [x] Navigation : Aujourd'hui, Opportunités, Mes ventes, Ravitaillement en avant ; le reste dans un menu « Outils »
-- [ ] Incohérences : `config.example.json` (brut_vendable_depuis), mentions de Hadala, tailles de lot Kaisinel
+- [x] Incohérences : `config.example.json` (brut_vendable_depuis), mentions de Hadala, tailles de lot Kaisinel
 - [ ] Tests de `scan.js` (captures de référence → résultat attendu)
 - [ ] Découper `report.py` (un module par onglet)
 
