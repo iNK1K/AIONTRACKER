@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from .catalog import node_name
-from .collect import BOUND_RE, paris
+from .collect import BOUND_RE, now_iso, paris
 from .config import DATA_DIR, REPORT_DIR
 
 MAP_DIR = DATA_DIR / "maps"
@@ -23,6 +23,7 @@ body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.5 "Segoe UI",sys
 header{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:18px 28px;background:linear-gradient(180deg,#151a26,var(--bg));border-bottom:1px solid var(--line)}
 header h1{font-size:21px;margin:0;font-weight:700}header h1 b{color:var(--acc)}
 .meta{color:var(--mut);font-size:13px;margin-left:auto;text-align:right}
+#stale{background:#f064701f;color:var(--bad);border-bottom:1px solid var(--bad);padding:10px 28px;font-weight:600}
 nav{position:sticky;top:0;z-index:20;background:rgba(11,13,18,.94);backdrop-filter:blur(6px);border-bottom:1px solid var(--line);
  padding:0 28px;display:flex;gap:2px;overflow-x:auto}
 nav button{background:none;border:0;border-bottom:2px solid transparent;color:var(--mut);padding:13px 14px;font:inherit;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap}
@@ -1302,6 +1303,7 @@ def build(con, cfg, results):
 <title>HDV Aion 2</title><style>{CSS}</style><script src="site.js?v={jsv}"></script></head><body>
 <header><h1>HDV Aion 2 · <b>{esc(sname)}</b></h1>
 <div class="meta">Prix relevés le {esc(paris(as_of) if my and as_of else "?")} (heure de Paris)<br>Page générée le {esc(paris())}</div></header>
+<div id="stale" hidden data-asof="{esc(as_of if my and as_of else "")}" data-gen="{now_iso()}"></div>
 <nav>{''.join(navs)}</nav><main>{''.join(sections)}</main>
 <div id="cmodal" onclick="if(event.target===this)closeChart()"><div class="box"><div class="bar"><b id="ctitle"></b>
 <button class="mapbtn" onclick="closeChart()">Fermer ✕</button></div><div id="cbody"></div></div></div>

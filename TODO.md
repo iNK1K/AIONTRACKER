@@ -3,7 +3,7 @@
 Une tâche par ligne. Claude les traite dans l'ordre et coche `[x]` quand c'est fait.
 
 - [x] Journal sur une branche `journal` dédiée (le site n'écrit plus sur `main`, le workflow le lit depuis cette branche)
-- [ ] Fraîcheur des données : alerte Discord si aucun prix reçu depuis 3 h + bandeau rouge sur le site si les données ou la page sont vieilles
+- [x] Fraîcheur des données : alerte Discord si aucun prix reçu depuis 3 h + bandeau rouge sur le site si les données ou la page sont vieilles
 - [ ] Calibration par les vraies ventes : comparer par objet l'estimé (part du marché, taille de lot, délai) au réel du journal, et corriger les estimations quand il y a assez de ventes
 - [ ] Précision des alertes : garder les opportunités feu vert et mesurer 48 h après si elles ont tenu (prix revenu, marge réalisée)
 - [ ] Conseil par annonce en cours : garder / baisser à X / retirer, en comptant la taxe de reliste

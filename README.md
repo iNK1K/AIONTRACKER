@@ -20,6 +20,8 @@ Onglet **🎯 Opportunités** : récolte (ressources blanches), achat → craft 
 
 Onglet **🌲 Récolte** : une section par grade. Seules les ressources blanches se récoltent sur les points (récolte/heure, kinah/heure) ; vertes, bleues et éclatantes sont des procs, non planifiés : la page dit seulement quoi en faire. Crafts triés par profit, avec le prix de chaque ressource. « Mes procs de récolte » : je note mes sessions (blancs récoltés, procs obtenus) pour mesurer mes taux de proc et ce qu’ils rapportent en plus.
 
+Alerte Discord **données périmées** : aucun prix reçu depuis 3 h (source en panne), puis rappel toutes les 12 h. Le site affiche aussi un bandeau rouge si les prix ont plus de 3 h ou si la page n'a pas été régénérée depuis 2 h.
+
 Alerte Discord **flip** : dès qu’un item passe sous son prix d’achat conseillé (pas au feu rouge), une fois par item toutes les 6 h.
 
 Onglet **Ravitaillement** : coller une capture de la fenêtre de ravitaillement → objets reconnus ; un tableau des objets demandés du jour trié par gain à les crafter pour les revendre ; la lecture distingue l’objet normal de sa version éclatante par la couleur de qualité du fond de la case (même icône) : l’objet normal s’obtient sans combo (combo montré à part), l’éclatant seulement par combo de l’objet de base (coût = crafts pour un combo − objets normaux revendus) (prix de vente modifiable, prérempli avec la moins chère des annonces − 1 ; échecs et combo comptés ; ingrédient éclatant crafté par sa chaîne ou acheté), détail repliable, bouton 📦 Poster vers Mes ventes.

@@ -49,6 +49,20 @@ def _once(con, key, message):
     return True
 
 
+def freshness(con, cfg, max_hours=3, every_hours=12):
+    """Donnees perimees : aucun prix recu pour mon serveur depuis `max_hours` heures (source en panne, API changee...).
+    Une alerte en entrant dans la panne, puis un rappel toutes les `every_hours` heures tant qu'elle dure."""
+    last = con.execute("SELECT MAX(ts) AS ts FROM quotes WHERE server = ?", (str(cfg["my_server"]),)).fetchone()["ts"]
+    if not last:
+        return None
+    d = datetime.fromisoformat(last.replace("Z", "+00:00"))
+    age = (datetime.now(timezone.utc) - (d if d.tzinfo else d.replace(tzinfo=timezone.utc))).total_seconds() / 3600
+    if age < max_hours or not _once(con, f"stale|{last}|{int(age // every_hours)}", last):
+        return None
+    return (f"🚨 **Données périmées** : aucun prix reçu depuis **{age:.0f} h** (dernier relevé le {paris(last, '%d/%m à %H:%M')}). "
+            "Les sources (a2-tracker, aion2.exchange) sont peut-être en panne : le site et les alertes se basent sur de vieux prix.")
+
+
 def opportunities(cfg, result):
     """Bonnes opportunites du moment, seulement au feu vert de l'indice de surete (aucune donnee personnelle) :
     liste de (cle, ligne)."""

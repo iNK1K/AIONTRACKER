@@ -632,3 +632,10 @@ function supplyCalc(x,e,part){const n=v=>v==null?'–':NF.format(Math.round(v)),
   +(cb?tr('Résultat moyen avec combo <span class="sub">('+Math.round((1-c)*100)+' % objet normal, '+Math.round(c*100)+' % '+jEsc(cb.n)+' à '+n(cb.v)+' → '+n(V)+' net)</span>',o=>o.res)
    +tr('Gain moyen avec combo <span class="sub">(sur beaucoup de crafts : un pari)</span>',o=>o.gain,pn):'');
  return h+'</tbody></table></div>'}
+// ---------------------------------------------------------------- fraicheur : prix relevés il y a plus de 3 h, ou page plus regeneree depuis 2 h
+function staleCheck(){const el=document.getElementById('stale');if(!el)return;
+ const age=v=>v?(Date.now()-new Date(/[zZ]|[+-]\d\d:\d\d$/.test(v)?v:v+'Z'))/36e5:null,p=age(el.dataset.asof),g=age(el.dataset.gen),m=[];
+ if(p==null||p>=3)m.push(p==null?'aucun prix relevé':'prix relevés il y a '+Math.floor(p)+' h');
+ if(g!=null&&g>=2)m.push('page générée il y a '+Math.floor(g)+' h (les passages horaires ne tournent plus ?)');
+ el.hidden=!m.length;if(m.length)el.textContent='⚠ Données périmées : '+m.join(' ; ')+'. Les chiffres ci-dessous peuvent être faux.'}
+document.addEventListener('DOMContentLoaded',()=>{staleCheck();setInterval(staleCheck,6e5)});

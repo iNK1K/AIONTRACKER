@@ -113,6 +113,14 @@ def cmd_news(con, cfg):
     log(f"annonces : {len(msgs)} nouvelle(s)" + (f", sources en erreur : {'; '.join(errors)}" if errors else ""))
 
 
+def cmd_freshness(con, cfg):
+    """Alerte Discord si plus aucun prix n'arrive (le bandeau du site, lui, signale aussi une page qui n'est plus regeneree)."""
+    msg = alerts.freshness(con, cfg)
+    if msg:
+        alerts.send(cfg, msg)
+    log(f"fraicheur des prix : {'alerte envoyee' if msg else 'ok'}")
+
+
 def step(name, fn, errors):
     """Etape isolee : une erreur (source injoignable, requete expiree...) est notee et n'empeche pas les suivantes."""
     t = time.time()
@@ -165,11 +173,13 @@ def main(argv):
                 if not con.execute("SELECT 1 FROM rate_curves LIMIT 1").fetchone():
                     step("recettes", lambda: log(f"recettes : {collect.sync_recipes(con, cfg['locale'])}"), errors)
                 step("marche", lambda: cmd_snapshot(con, cfg), errors)
+                step("fraicheur", lambda: cmd_freshness(con, cfg), errors)
                 step("analyse", lambda: cmd_analyze(con, cfg, send_alerts=True), errors)
                 step("annonces", lambda: cmd_news(con, cfg), errors)
             else:
                 step("recettes", lambda: log(f"recettes : {collect.sync_recipes(con, cfg['locale'])}"), errors)
                 step("marche", lambda: cmd_snapshot(con, cfg), errors)    # le daily peut remplacer un passage horaire
+                step("fraicheur", lambda: cmd_freshness(con, cfg), errors)
                 step("activite", lambda: cmd_activity(con, cfg), errors)
                 step("purge", lambda: (log(f"purge : {collect.purge(con, servers(cfg))} lignes"), con.execute("VACUUM")), errors)
                 step("images", lambda: catalog.download_icons(con), errors)

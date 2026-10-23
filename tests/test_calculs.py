@@ -9,6 +9,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from aionhdv import alerts
 from aionhdv.analysis import Market
 from aionhdv.config import from_journal, lot_state
 from aionhdv.db import SCHEMA
@@ -163,6 +164,16 @@ class VraisGains(unittest.TestCase):
         self.assertEqual(p["marge_u"], -10)                         # 990 recus pour un cout de 1000
 
 
+class Fraicheur(unittest.TestCase):
+    def test_alerte_une_fois_si_plus_de_prix(self):
+        con = make_db()
+        self.assertIsNone(alerts.freshness(con, CFG))                # dernier releve il y a 0 h
+        con.execute("DELETE FROM quotes WHERE ts > ?", (ts(4),))
+        msg = alerts.freshness(con, CFG)
+        self.assertIn("Données périmées", msg)
+        self.assertIsNone(alerts.freshness(con, CFG))                # pas de repetition chaque heure
+
+
 class Brut(unittest.TestCase):
     """Brut vendable depuis la MaJ du 21/10/2026 : historique coupe, valeur brute face aux crafts."""
     def test_historique_du_brut_coupe(self):
@@ -241,12 +252,23 @@ class Journal(unittest.TestCase):
         self.assertEqual(sales[0], dict(date="2026-10-19 15:00", objet="Planche", quantite=5, prix=4500, recu=4050, cout=650, origine="recolte"))
 
 
-@unittest.skipUnless(shutil.which("node"), "node absent")
+# moteur JavaScript : node, sinon JavaScriptCore (present sur tout Mac)
+JSC = "/System/Library/Frameworks/JavaScriptCore.framework/Versions/Current/Helpers/jsc"
+NODE = shutil.which("node")
+
+
+def js_check(path):
+    if NODE:
+        return subprocess.run([NODE, "--check", str(path)], capture_output=True, text=True)
+    return subprocess.run([JSC, "-e", f"checkSyntax({str(path)!r})"], capture_output=True, text=True)
+
+
+@unittest.skipUnless(NODE or Path(JSC).exists(), "ni node ni JavaScriptCore")
 class JavaScript(unittest.TestCase):
     def test_syntaxe(self):
         for f in ("site.js", "scan.js"):
-            r = subprocess.run(["node", "--check", str(ROOT / "aionhdv" / f)], capture_output=True, text=True)
-            self.assertEqual(r.returncode, 0, r.stderr)
+            r = js_check(ROOT / "aionhdv" / f)
+            self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
 
 
 if __name__ == "__main__":
