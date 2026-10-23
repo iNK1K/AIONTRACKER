@@ -35,7 +35,7 @@
   {"id":"mvjrcm6j0ttbr","objet":"Parchemin de courage supérieur","src":"achat","qte":20,"prix":13597,"cout":4865,"ev":[{"id":"mvjrcm6jyy3s5","t":"2026-10-22 18:30","type":"poste","prix":13597,"qte":20},{"id":"mvjvaf98390iw","t":"2026-10-22 20:21","type":"vendu","prix":13597,"qte":20,"recu":244746}]},
   {"id":"mvjrcm6j0bij0","objet":"Parchemin de courage supérieur","src":"achat","qte":20,"prix":13597,"cout":4865,"ev":[{"id":"mvjrcm6jcblmu","t":"2026-10-22 18:30","type":"poste","prix":13597,"qte":20},{"id":"mvjvahhim8mzh","t":"2026-10-22 20:21","type":"vendu","prix":13597,"qte":20,"recu":244746}]},
   {"id":"mvkvv299570ni","objet":"Rubis brut d'une grande pureté","src":"brut","qte":119,"prix":4497,"cout":0,"ev":[{"id":"mvkvv299z2kbp","t":"2026-10-23 13:25","type":"poste","prix":4497,"qte":119}]},
-  {"id":"mvkvvfj81v9zj","objet":"Minerai d'orichalque pur","src":"brut","qte":6,"prix":149998,"cout":0,"ev":[{"id":"mvkvvfj83px16","t":"2026-10-23 13:25","type":"poste","prix":149998,"qte":6}]},
+  {"id":"mvkvvfj81v9zj","objet":"Minerai d'orichalque pur","src":"brut","qte":6,"prix":149998,"cout":0,"ev":[{"id":"mvkvvfj83px16","t":"2026-10-23 13:25","type":"poste","prix":149998,"qte":6},{"id":"mvkvwsd60vrvf","t":"2026-10-23 13:26","type":"vendu","prix":149998,"qte":6,"recu":809989}]},
   {"id":"mvkvvq1d1v9c1","objet":"Diamant brut pur","src":"brut","qte":8,"prix":54997,"cout":0,"ev":[{"id":"mvkvvq1dmuobc","t":"2026-10-23 13:25","type":"poste","prix":54997,"qte":8},{"id":"mvkvwok69u14u","t":"2026-10-23 13:26","type":"vendu","prix":54997,"qte":8,"recu":395978}]},
   {"id":"mvkvwa2mvannj","objet":"Cuir résistant","src":"achat","qte":48,"prix":13996,"cout":8400,"ev":[{"id":"mvkvwa2mflkns","t":"2026-10-23 13:26","type":"poste","prix":13996,"qte":48}]}
  ]
