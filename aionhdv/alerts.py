@@ -1,5 +1,6 @@
 """Detection d'opportunites et envoi Discord (webhook). Sans webhook, les alertes vont dans logs/alerts.log."""
 import json
+import re
 import statistics
 import urllib.request
 from datetime import datetime, timedelta, timezone
@@ -82,6 +83,72 @@ def opportunities(cfg, result):
             out.append((f"uniq{u['item_id']}", f"💎 **{u['objet']}** ({u['categorie']}) à {fmt(u['prix'])} "
                         f"(médiane 7 j {fmt(u['mediane'])}, {u['ratio']:.0%})"))
     return out
+
+
+# fenetre de vente sur laquelle une opportunite est jugee : un pic se vend vite, le reste sur 2 jours
+TRACK_HOURS = {"spike": 6, "buy": 48, "flip": 48, "uniq": 48}
+TRACK_KINDS = {"buy": "🟢 Achat → craft", "spike": "⚡ Pic de prix", "flip": "🔁 Flip", "uniq": "💎 Unique bradé"}
+
+
+def track(con, cfg, result):
+    """Precision des alertes : note chaque opportunite alertable (feu vert, flips a saisir, Unique bradés ; une fois par
+    objet et par jour), puis la juge quand sa fenetre de vente est passee : prix reel = mediane des prix plancher du
+    produit sur cette fenetre, net reel = prix reel apres taxe - cout au moment de l'alerte. Tenue = net reel > 0."""
+    fees, now = cfg["fees"], datetime.now(timezone.utc)
+    rows = []
+    for key, _ in opportunities(cfg, result):                 # cles buy<id>, spike<id>, uniq<id>
+        kind, iid = re.fullmatch(r"([a-z]+)(\d+)", key).groups()
+        src = {"buy": result.get("buy"), "spike": result.get("spikes"), "uniq": result.get("uniques")}[kind] or []
+        e = next((x for x in src if x["item_id"] == int(iid)), None)
+        if not e:
+            continue
+        if kind == "buy":
+            rows.append((key, kind, e, e["achats_u"], e["prix_real"], e["net_u"]))
+        elif kind == "spike":
+            rows.append((key, kind, e, e["achats_u"], e["prix_affiche"], e["net_affiche_u"]))
+        else:
+            rows.append((key, kind, e, e["prix"], e["mediane"], e["mediane"] * (1 - fees) - e["prix"]))
+    a = cfg["alerts"]
+    for f in result.get("flips") or []:
+        if f["acheter"] and f["profit_j"] >= a["flip_min_profit_day"] and (f.get("surete") or {}).get("feu") != "rouge":
+            rows.append((f"flip{f['item_id']}", "flip", f, f["prix"], f["revente_cible"], f["revente_cible"] * (1 - fees) - f["prix"]))
+    day = (now - timedelta(hours=24)).isoformat(timespec="seconds")
+    for key, kind, e, cost, price, net in rows:
+        if not con.execute("SELECT 1 FROM opp_track WHERE key = ? AND ts > ?", (key, day)).fetchone():
+            con.execute("INSERT INTO opp_track (key, kind, item_id, objet, ts, cout, prix_prevu, net_prevu) VALUES (?,?,?,?,?,?,?,?)",
+                        (key, kind, e["item_id"], e["objet"], now.isoformat(timespec="seconds"), cost, price, net))
+    # jugement des opportunites dont la fenetre de vente est passee
+    for r in con.execute("SELECT rowid, * FROM opp_track WHERE checked IS NULL").fetchall():
+        t = datetime.fromisoformat(r["ts"])
+        end = t + timedelta(hours=TRACK_HOURS.get(r["kind"], 48))
+        if end > now:
+            continue
+        seen = [p for (p,) in con.execute("SELECT price FROM quotes WHERE server = ? AND item_id = ? AND ts > ? AND ts <= ?",
+                                          (str(cfg["my_server"]), r["item_id"], t.isoformat()[:19], end.isoformat()[:19]))]
+        price = statistics.median(seen) if seen else None
+        con.execute("UPDATE opp_track SET prix_reel = ?, net_reel = ?, checked = ? WHERE rowid = ?",
+                    (price, price * (1 - fees) - r["cout"] if price is not None else None, now.isoformat(timespec="seconds"),
+                     r["rowid"]))
+    con.commit()
+
+
+def precision(con, days=30):
+    """Bilan des opportunites jugees sur `days` jours, par type : nombre, part tenue (net reel > 0), net reel moyen
+    rapporte au net prevu."""
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
+    out = {}
+    for r in con.execute("SELECT kind, net_prevu, net_reel FROM opp_track WHERE checked IS NOT NULL AND net_reel IS NOT NULL "
+                         "AND ts > ?", (since,)):
+        k = out.setdefault(r["kind"], dict(kind=r["kind"], label=TRACK_KINDS.get(r["kind"], r["kind"]), n=0, ok=0, prevu=0, reel=0))
+        k["n"] += 1
+        k["ok"] += r["net_reel"] > 0
+        k["prevu"] += r["net_prevu"] or 0
+        k["reel"] += r["net_reel"]
+    for k in out.values():
+        k["taux"] = k["ok"] / k["n"]
+        k["vs_prevu"] = k["reel"] / k["prevu"] if k["prevu"] > 0 else None
+    pending = con.execute("SELECT COUNT(*) FROM opp_track WHERE checked IS NULL").fetchone()[0]
+    return dict(kinds=[out[k] for k in TRACK_KINDS if k in out], attente=pending, jours=days)
 
 
 def flips(con, cfg, result, hours=6):
@@ -183,6 +250,11 @@ def weekly(con, cfg, result, top=5):
         left = [n for i, n in old_top.items() if i not in new_top]
         lines += ["", "**Top 10 des crafts**",
                   "Entrés : " + (", ".join(entered) or "aucun"), "Sortis : " + (", ".join(left) or "aucun")]
+    prec = precision(con, 7)
+    if prec["kinds"]:
+        lines += ["", "**Précision des alertes (7 j)**"]
+        lines += [f"{k['label']} : {k['ok']}/{k['n']} tenues ({k['taux']:.0%}), net réel moyen {fmt(k['reel'] / k['n'])}/u"
+                  for k in prec["kinds"]]
     return "\n".join(lines)
 
 

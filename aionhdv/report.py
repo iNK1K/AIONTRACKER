@@ -7,6 +7,7 @@ import shutil
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from .alerts import precision
 from .analysis import CALIB_MIN_ITEMS
 from .catalog import node_name
 from .collect import BOUND_RE, now_iso, paris
@@ -282,7 +283,27 @@ def craft_attrs(e):
             f'data-day="{e["ma_part_j"]}"' + (f' data-brut="{e["brut_u"]}"' if e.get("brut_u") is not None else ""))
 
 
-def opportunities_tab(cfg, my):
+def precision_html(prec):
+    """Bilan des alertes passees (alerts.precision) : est-ce que les opportunites annoncees ont vraiment rapporte ?"""
+    if not prec["kinds"]:
+        return (f"<h3>Précision des alertes</h3><p class='mut'>Pas encore d’alerte jugée : chaque opportunité alertée est "
+                f"vérifiée 48 h après (6 h pour un pic). {prec['attente']} en attente.</p>")
+    rows = "".join(
+        f"<tr><td>{esc(k['label'])}</td>{_num_td(k['n'], color=False)}"
+        f"<td class='n'><b class='{'pos' if k['taux'] >= 0.7 else 'neg' if k['taux'] < 0.5 else ''}'>{k['taux']:.0%}</b></td>"
+        f"{_num_td(round(k['reel'] / k['n']))}"
+        f"<td class='n'>{format(k['vs_prevu'], '.0%') if k['vs_prevu'] is not None else '–'}</td></tr>"
+        for k in prec["kinds"])
+    return (f"<h3>Précision des alertes ({prec['jours']} derniers jours)</h3><p class='lead'>Chaque opportunité alertée est "
+            "notée puis jugée une fois sa fenêtre de vente passée (48 h, 6 h pour un pic) : prix réel = médiane du prix le "
+            "plus bas en vente sur cette fenêtre. <b>Tenue</b> = elle aurait rapporté après la taxe. "
+            f"{prec['attente']} alerte(s) en attente de jugement.</p>"
+            f'<div class="wrap"><table><thead><tr>{_th("Type")}{_th("Alertes", "Opportunités jugées", True)}'
+            f'{_th("Tenues", "Net réel > 0 après la taxe de 10 %", True)}{_th("Net réel /u", "Moyenne par alerte", True)}'
+            f'{_th("Réel / prévu", "Net réel total rapporté au net annoncé", True)}</tr></thead><tbody>{rows}</tbody></table></div>')
+
+
+def opportunities_tab(cfg, my, prec=None):
     """🎯 Opportunites : recolte (ressources blanches), achat -> craft et flip dans une seule liste. Chaque objet occupe
     une annonce (relistee a chaque vente) : le navigateur garde les meilleures selon les annonces libres (limite du jeu
     moins mes annonces en cours), les kinah disponibles et le temps de recolte (calcul dans site.js, oppRender)."""
@@ -327,7 +348,7 @@ def opportunities_tab(cfg, my):
             f'{inp.format(w=64)} oninput="oppRender(true)"> h</label>'
             '<label class="tg">Annonces libres : <b id="oslots">–</b></label></div>'
             '<div id="obox"></div>'
-            f"<script>window.OPPDATA={data};</script>")
+            f"<script>window.OPPDATA={data};</script>" + (precision_html(prec) if prec else ""))
 
 
 def planning_tab(cfg, my):
@@ -1278,7 +1299,7 @@ def build(con, cfg, results):
     if my:
         add("home", "🏠 Aujourd’hui", home(con, cfg, ctx, my, sname))
         sep()
-        add("opps", "🎯 Opportunités", opportunities_tab(cfg, my))
+        add("opps", "🎯 Opportunités", opportunities_tab(cfg, my, precision(con)))
         add("planning", "📅 Planning", planning_tab(cfg, my))
         add("harvest", "🌲 Récolte", harvest_tab(ctx, my, hyp))
         direct, trans = my.get("buy_direct") or [], my.get("buy_trans") or []

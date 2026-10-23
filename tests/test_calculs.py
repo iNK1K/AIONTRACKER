@@ -188,6 +188,25 @@ class Fraicheur(unittest.TestCase):
         self.assertIsNone(alerts.freshness(con, CFG))                # pas de repetition chaque heure
 
 
+class PrecisionDesAlertes(unittest.TestCase):
+    def test_opportunite_notee_puis_jugee(self):
+        con = make_db()
+        cfg = dict(CFG, alerts=dict(buy_craft_min_margin=0.3, buy_craft_min_profit_day=1000, unique_ratio=0.6,
+                                    unique_min_samples=12, unique_min_median=10000, flip_min_profit_day=1000))
+        e = dict(item_id=PLANCHE, objet="Planche", flags=[], marge=2.5, profit_j=10000, net_pess_u=500, achats_u=200,
+                 prix_real=1000, net_u=700, surete=dict(feu="vert", qte_max=5))
+        res = dict(buy=[e], spikes=[], uniques=[], flips=[])
+        alerts.track(con, cfg, res)
+        alerts.track(con, cfg, res)                                  # une seule fois par objet et par jour
+        self.assertEqual(con.execute("SELECT COUNT(*) FROM opp_track").fetchone()[0], 1)
+        self.assertEqual(alerts.precision(con)["attente"], 1)
+        con.execute("UPDATE opp_track SET ts = ?", (ts(49) + "+00:00",))   # fenetre de vente (48 h) passee
+        alerts.track(con, cfg, dict(res, buy=[]))
+        k = alerts.precision(con)["kinds"][0]
+        self.assertEqual((k["kind"], k["n"], k["ok"]), ("buy", 1, 1))
+        self.assertAlmostEqual(k["reel"], 1000 * 0.9 - 200)          # vendu au prix releve (1000) apres taxe
+        self.assertAlmostEqual(k["vs_prevu"], 700 / 700)
+
 class Brut(unittest.TestCase):
     """Brut vendable depuis la MaJ du 21/10/2026 : historique coupe, valeur brute face aux crafts."""
     def test_historique_du_brut_coupe(self):

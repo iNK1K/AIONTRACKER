@@ -20,6 +20,8 @@ Onglet **🎯 Opportunités** : récolte (ressources blanches), achat → craft 
 
 Onglet **🌲 Récolte** : une section par grade. Seules les ressources blanches se récoltent sur les points (récolte/heure, kinah/heure) ; vertes, bleues et éclatantes sont des procs, non planifiés : la page dit seulement quoi en faire. Crafts triés par profit, avec le prix de chaque ressource. « Mes procs de récolte » : je note mes sessions (blancs récoltés, procs obtenus) pour mesurer mes taux de proc et ce qu’ils rapportent en plus.
 
+**Précision des alertes** (bas de l'onglet Opportunités, et résumé du dimanche) : chaque opportunité alertable (feu vert, pic, Unique bradé, flip à saisir) est notée puis jugée une fois sa fenêtre de vente passée (48 h, 6 h pour un pic) : prix réel = médiane du prix plancher sur la fenêtre, tenue = net réel > 0 après taxe.
+
 Alerte Discord **données périmées** : aucun prix reçu depuis 3 h (source en panne), puis rappel toutes les 12 h. Le site affiche aussi un bandeau rouge si les prix ont plus de 3 h ou si la page n'a pas été régénérée depuis 2 h.
 
 Alerte Discord **flip** : dès qu’un item passe sous son prix d’achat conseillé (pas au feu rouge), une fois par item toutes les 6 h.

@@ -83,6 +83,10 @@ def cmd_analyze(con, cfg, send_alerts=False, send_digest=False):
             watch = analysis.watched_items(res)
             analysis.add_safety(con, res, collect.recent_activity(con, s, watch))
             log(f"activite recente : {len(watch)} items surveilles")
+            try:                                                # precision des alertes : ne bloque jamais le rapport
+                alerts.track(con, cfg, res)
+            except Exception:
+                log(f"suivi des alertes : erreur\n{traceback.format_exc()}")
             # Discord est partage : aucune alerte sur mes annonces ; un rapport horaire leger des bonnes opportunites
             if cfg["alerts"].get("hourly", True):
                 msg = alerts.hourly(con, cfg, res)

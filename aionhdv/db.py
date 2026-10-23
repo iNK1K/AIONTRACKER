@@ -83,6 +83,12 @@ CREATE TABLE IF NOT EXISTS patch_watch (     -- items cites dans une note de ver
 CREATE TABLE IF NOT EXISTS rate_curves (     -- taux de reussite (en millioniemes de %) selon l'ecart de maitrise
     id INTEGER PRIMARY KEY, rates TEXT
 );
+CREATE TABLE IF NOT EXISTS opp_track (      -- opportunites alertees, verifiees apres coup (alerts.track)
+    key TEXT, kind TEXT, item_id INTEGER, objet TEXT, ts TEXT,
+    cout REAL, prix_prevu REAL, net_prevu REAL,  -- au moment de l'alerte (par unite)
+    prix_reel REAL, net_reel REAL, checked TEXT, -- prix median du produit sur la fenetre de vente qui a suivi
+    PRIMARY KEY (key, ts)
+);
 CREATE TABLE IF NOT EXISTS runs (
     ts TEXT, job TEXT, status TEXT, detail TEXT
 );
