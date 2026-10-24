@@ -866,7 +866,7 @@ function aiLocalShow(){const b=document.getElementById('ailocal');if(!b)return;c
 async function aiLocalToggle(force){const on=force||!aiLocalWanted();try{on?localStorage.setItem('ailocal','1'):localStorage.removeItem('ailocal')}catch(e){}
  await aiLocalProbe();
  if(AILOCAL){aiKeyForm(false);toast('Le chat passe par ton abonnement Claude (Claude Code sur ce PC)')}
- else if(on)toast('Pont local introuvable : lance « py scripts\\assistant_local.py » puis réessaie');
+ else if(on)toast('Pont local injoignable : lance « py scripts\\assistant_local.py », et si Chrome demande l’accès aux appareils du réseau local, accepte');
  else{toast('Retour à la clé API');if(!aiKey())aiKeyForm()}}
 async function aiSendLocal(q){const inp=document.getElementById('aiin');inp.value='';aiGrow(inp);
  const H=AIH,start=H.length;H.push({role:'user',content:q});const turn=aiTurn(q);AIBUSY=new AbortController();aiBusy(true);
@@ -886,6 +886,6 @@ async function aiSendLocal(q){const inp=document.getElementById('aiin');inp.valu
   try{if(fin.session&&H===AIH)localStorage.setItem('aisession',fin.session)}catch(e){}
   H.push({role:'assistant',content:[{type:'text',text:fin.text||text}],src:fin.sources||[],steps});if(H===AIH)aiSave()}
  catch(e){if(H===AIH){AIH.length=start;aiSave()}
-  note=e.name==='AbortError'?'Interrompu.':e instanceof TypeError?'Pont local injoignable : lance « py scripts\\assistant_local.py ».':e.message;
+  note=e.name==='AbortError'?'Interrompu.':e instanceof TypeError?'Pont local injoignable : lance « py scripts\\assistant_local.py » (et accepte l’accès au réseau local si Chrome le demande).':e.message;
   if(e instanceof TypeError)aiLocalProbe()}
  aiPaint.live=null;AIBUSY=null;aiBusy(false);aiDraw(turn,start,null,true,note)}
