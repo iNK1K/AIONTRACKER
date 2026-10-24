@@ -50,6 +50,6 @@
   {"id":"mvmfhyrzgpvs3","objet":"Papier d'Asvata","src":"recolte","qte":50,"prix":6399,"cout":0,"ev":[{"id":"mvmfhyrzsz3g8","t":"2026-10-24 15:22","type":"poste","prix":6399,"qte":50}]},
   {"id":"mvmfhyrzxlew0","objet":"Papier d'Asvata","src":"recolte","qte":50,"prix":6399,"cout":0,"ev":[{"id":"mvmfhyrzpc4ds","t":"2026-10-24 15:22","type":"poste","prix":6399,"qte":50}]},
   {"id":"mvmgsx2043l9z","objet":"Pierre de raffinage de maître","src":"recolte","qte":15,"prix":474499,"cout":0,"ev":[{"id":"mvmgsx209hu55","t":"2026-10-24 15:59","type":"poste","prix":474499,"qte":15},{"id":"mvmgt7nkgi583","t":"2026-10-24 15:59","type":"vendu","prix":474499,"qte":15,"recu":6405736}]},
-  {"id":"mvmquh9mzuxyo","objet":"Bois d'Asvata d'une grande pureté","src":"brut","qte":98,"prix":18886,"ev":[{"id":"mvmquh9m057ho","t":"2026-10-24 20:40","type":"poste","prix":18886,"qte":98}]}
+  {"id":"mvmquh9mzuxyo","objet":"Bois d'Asvata d'une grande pureté","src":"brut","qte":98,"prix":18886,"ev":[{"id":"mvmquh9m057ho","t":"2026-10-24 20:40","type":"poste","prix":18886,"qte":98},{"id":"mvmqukzamx9qt","t":"2026-10-24 20:40","type":"vendu","prix":18886,"qte":98,"recu":1665745}]}
  ]
 }
