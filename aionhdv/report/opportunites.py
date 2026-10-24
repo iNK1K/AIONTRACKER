@@ -17,10 +17,10 @@ def precision_html(prec):
         for k in prec["kinds"])
     return (f"<h3>Précision des alertes ({prec['jours']} derniers jours)</h3><p class='lead'>Chaque opportunité alertée est "
             "notée puis jugée une fois sa fenêtre de vente passée (48 h, 6 h pour un pic) : prix réel = médiane du prix le "
-            "plus bas en vente sur cette fenêtre. <b>Tenue</b> = elle aurait rapporté après la taxe. "
+            "plus bas en vente sur cette fenêtre. <b>Tenue</b> = elle aurait rapporté après la taxe et les frais. "
             f"{prec['attente']} alerte(s) en attente de jugement.</p>"
             f'<div class="wrap"><table><thead><tr>{_th("Type")}{_th("Alertes", "Opportunités jugées", True)}'
-            f'{_th("Tenues", "Net réel > 0 après la taxe de 10 %", True)}{_th("Net réel /u", "Moyenne par alerte", True)}'
+            f'{_th("Tenues", "Net réel > 0 après la taxe (10 %) et les frais d’enregistrement (2 %)", True)}{_th("Net réel /u", "Moyenne par alerte", True)}'
             f'{_th("Réel / prévu", "Net réel total rapporté au net annoncé", True)}</tr></thead><tbody>{rows}</tbody></table></div>')
 
 

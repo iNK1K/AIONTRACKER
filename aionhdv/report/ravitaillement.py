@@ -118,7 +118,7 @@ def supply_tab(ctx, cfg, my):
     ctx.data["SUPPLY"] = items
     return ("<h2>Ravitaillement</h2><p class='lead'>Les objets demandés du jour sont recherchés à l’HDV : colle une capture "
             "de ta fenêtre de ravitaillement (<b>Ctrl + V</b> sur cet onglet) pour voir lesquels rapportent à crafter puis "
-            f"revendre. Gain par craft = vente après taxe ({fees:.0%}) − coût des ingrédients (prix d’achat réaliste, dernier relevé "
+            f"revendre. Gain par craft = vente après taxe et frais d’enregistrement ({fees:.0%}) − coût des ingrédients (prix d’achat réaliste, dernier relevé "
             f"{esc(paris(m.as_of, '%d/%m %H:%M')) if m.as_of else '?'}), échecs compris selon tes niveaux (🛠️ Mes métiers). "
             "La capture distingue l’objet normal de sa version <b>éclatante</b> (même icône, fond de "
             "qualité différent) : l’objet normal s’obtient quand le craft ne fait pas combo (le combo est montré à part, c’est "

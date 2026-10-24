@@ -37,10 +37,10 @@ def table_crafts(ctx, rows, tid, harvest, compare=None):
             ("" if harvest else _th("Coût/u", "Coût des ingrédients au prix réaliste", True)) +
             _th("Réussite", "Chance de réussite selon tes niveaux (onglet Mes métiers) ; 🔒 = niveau insuffisant", True) +
             _th("Vendre à", "Prix de vente conseillé (réaliste)", True) +
-            _th("Net/u", "Bénéfice par unité après la taxe de l’HDV (10 %) (et échecs, selon tes niveaux)", True) +
+            _th("Net/u", "Bénéfice par unité après la taxe de l’HDV (10 %) et les frais d’enregistrement (2 %) (et échecs, selon tes niveaux)", True) +
             (_th("Net/ressource", "Bénéfice par ressource récoltée utilisée", True) +
              _th("vs brut/u", "Net/u − ce que les mêmes ressources rapporteraient vendues brutes (prix réaliste, après "
-                 "taxe ; échecs compris selon tes niveaux) : négatif = vends plutôt le brut", True) if harvest
+                 "taxe et frais ; échecs compris selon tes niveaux) : négatif = vends plutôt le brut", True) if harvest
              else _th("Marge", "Bénéfice / coût", True)) +
             _th("Ventes/j", "Ta part du marché des ventes sur ton serveur, en unités : annonces disparues sur 24 h × taille "
                 "estimée des annonces (type d’objet, config lots)", True) +
@@ -233,7 +233,7 @@ def table_flips(ctx, flips, cfg):
     head = ("<tr>" + _th("Item") + _th("Statut") + _th("Prix actuel", "Prix le plus bas en vente", True)
             + _th("Acheter à ≤", "Prix d'achat cible : bas de la fourchette habituelle (1er quartile sur 3 j)", True)
             + _th("Revendre à", "Prix plancher médian des 3 derniers jours", True)
-            + _th("Net/u", "Après la taxe de l’HDV (10 %)", True) + _th("Marge", None, True)
+            + _th("Net/u", "Après la taxe de l’HDV (10 %) et les frais d’enregistrement (2 %)", True) + _th("Marge", None, True)
             + _th("Ventes/j", "Ta part du marché (voir les hypothèses en haut de l’onglet)", True) + _th("Profit/j", None, True)
             + _th("Mettre en vente", "Taille habituelle des lots vendus")
             + _th("Capital/j", "Kinah à immobiliser par jour", True, True) + _th("Annonces", None, True, True)

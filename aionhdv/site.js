@@ -113,18 +113,20 @@ document.addEventListener('paste',e=>{const it=[...((e.clipboardData||{}).items|
 // retiree. Enregistre dans journal.json du depot GitHub (jeton garde dans ce navigateur), sinon dans ce navigateur.
 // Meme calcul d'etat que config.lot_state (Python).
 let J=null,JSHA=null,JBUSY=false,JOPEN=null;
-const JC=()=>window.JCFG||{tax:0.1,repo:null};
+const JC=()=>window.JCFG||{tax:0.1,fee:0.02,repo:null};
 const jEsc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function jNow(){const d=new Date(),p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes())}
 function jid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
 function jState(l){const ev=(l.ev||[]).filter(e=>!e.x).sort((a,b)=>(a.t||'').localeCompare(b.t||''));
- // frais = taxe de 10 % perdue : payee a chaque mise en vente, elle n'est recuperee (deduite de la vente) que si l'annonce
- // se vend ; relister ou retirer fait perdre celle de l'annonce retiree
- let prix=l.prix,qte=l.qte,cout=l.cout,src=l.src||null,sold=0,ret=0,frais=0,recu=0,rel=0,poste=null;
- ev.forEach(e=>{if(e.type==='poste'||e.type==='reliste'){prix=e.prix;frais+=e.frais||0;if(e.type==='reliste')rel++;else poste=e.t}
-  else if(e.type==='corrige'){prix=e.prix;qte=e.qte||qte}   // erreur de saisie du prix ou de la quantite : sans frais
-  else if(e.type==='vendu'){sold+=e.qte;recu+=e.recu||0}else if(e.type==='retire'){ret+=e.qte;frais+=e.frais||0}else if(e.type==='cout')cout=e.cout;else if(e.type==='src')src=e.src});
- return {prix,qte,cout,src,vendus:sold,retires:ret,reste:Math.max(0,qte-sold-ret),frais,recu,relistes:rel,poste,ev}}
+ // frais = frais d'enregistrement de chaque mise en vente (poste, reliste), perdus meme si l'annonce se vend ; la taxe de
+ // vente est retenue sur le reglement (recu) ; retirer ne coute rien de plus
+ // fe : frais de chaque mise en vente (id de l'evenement) ; une correction (erreur de saisie) recalcule ceux de la derniere
+ let prix=l.prix,qte=l.qte,cout=l.cout,src=l.src||null,sold=0,ret=0,frais=0,recu=0,rel=0,poste=null,mq=0,mid=null;const fe={};
+ ev.forEach(e=>{if(e.type==='poste'||e.type==='reliste'){prix=e.prix;mq=e.qte||0;mid=e.id;fe[mid]=lost(prix,mq);if(e.type==='reliste')rel++;else poste=e.t}
+  else if(e.type==='corrige'){mq+=(e.qte||qte)-qte;prix=e.prix;qte=e.qte||qte;if(mid)fe[mid]=lost(prix,Math.max(0,mq))}
+  else if(e.type==='vendu'){sold+=e.qte;recu+=e.recu||0}else if(e.type==='retire')ret+=e.qte;else if(e.type==='cout')cout=e.cout;else if(e.type==='src')src=e.src});
+ Object.values(fe).forEach(f=>frais+=f);
+ return {prix,qte,cout,src,vendus:sold,retires:ret,reste:Math.max(0,qte-sold-ret),frais,recu,relistes:rel,poste,ev,fe}}
 // « debut » : date de remise a zero du journal ; une copie plus ancienne (navigateur, autre appareil) est ignoree
 function jMerge(a,b){const lots={},order=[],debut=[(a&&a.debut)||'',(b&&b.debut)||''].sort().pop();
  [a,b].filter(x=>x&&(x.debut||'')===debut).forEach(x=>(x.lots||[]).forEach(l=>{let o=lots[l.id];
@@ -169,7 +171,8 @@ function jSetToken(){const v=document.getElementById('jtoken').value.trim();if(!
  try{localStorage.setItem('ghtoken',v)}catch(e){}document.getElementById('jtoken').value='••••••••';jInit()}
 function jForget(){try{localStorage.removeItem('ghtoken')}catch(e){}document.getElementById('jtoken').value='';jStatus('Jeton oublié dans ce navigateur.')}
 // ---------------------------------------------------------------- actions
-const lost=(p,q)=>Math.floor(JC().tax*p*q),net=(p,q)=>Math.floor(p*q*(1-JC().tax));
+// frais d'enregistrement (fee x prix total, arrondi a l'inferieur, perdus) et reglement d'une vente (taxe retenue)
+const lost=(p,q)=>Math.floor(JC().fee*p*q),net=(p,q)=>Math.floor(p*q*(1-JC().tax));
 function jLot(id){return J.lots.find(l=>l.id===id)}
 // origine d'une annonce : recolte -> craft ou vendue brute (cout 0), achat -> craft (cout = ingredients achetes), flip (cout = prix d'achat)
 const JSRC={recolte:'🌲 Récolte → craft',brut:'💰 Récolte vendue brute',achat:'🛒 Achat → craft',ravit:'📦 Ravitaillement',flip:'🔁 Flip'};
@@ -190,8 +193,8 @@ function jAct(id,kind){JOPEN=JOPEN&&JOPEN.id===id&&JOPEN.kind===kind?null:{id,ki
 function jDo(id,kind){const l=jLot(id),s=jState(l),g=k=>document.getElementById('ja'+k);
  if(kind==='vendu'){const q=Math.min(s.reste,+g('q').value||0),p=+g('p').value,t=(g('t').value||jNow()).replace('T',' ');
   if(!(q>0)||!(p>0))return;l.ev.push({id:jid(),t,type:'vendu',prix:p,qte:q,recu:net(p,q)})}
- else if(kind==='reliste'){const p=+g('p').value;if(!(p>0))return;l.ev.push({id:jid(),t:jNow(),type:'reliste',prix:p,qte:s.reste,frais:lost(s.prix,s.reste)})}
- else if(kind==='retire')l.ev.push({id:jid(),t:jNow(),type:'retire',qte:s.reste,frais:lost(s.prix,s.reste)});
+ else if(kind==='reliste'){const p=+g('p').value;if(!(p>0))return;l.ev.push({id:jid(),t:jNow(),type:'reliste',prix:p,qte:s.reste})}
+ else if(kind==='retire')l.ev.push({id:jid(),t:jNow(),type:'retire',qte:s.reste});
  else if(kind==='src'){const src=g('s').value,c=g('c').value;l.ev.push({id:jid(),t:jNow(),type:'src',src});
   if(c!==''&&+c!==s.cout)l.ev.push({id:jid(),t:jNow(),type:'cout',cout:+c})}
  else if(kind==='corrige'){const p=+g('p').value,q=+g('q').value;if(!(p>0)||!(q>=s.vendus+s.retires)||!(q>0))return;
@@ -228,19 +231,19 @@ async function jScan(file){if(!file||!(file.type||'').startsWith('image/'))retur
   URL.revokeObjectURL(url);if(added)jSync('capture : '+added+(hist?' vente(s)':' annonce(s)'));else jRender()}
  catch(e){msg.textContent='Lecture impossible : '+e+' (la lecture fonctionne sur le site en ligne)'}}
 // conseil pour une annonce en cours (f = JFLOOR : plus bas, annonces en vente, prix habituel, annonces vendues/h, taille) :
-// garder, relister 1 sous le plus bas (la taxe de l'annonce retiree est perdue) ou retirer pour liberer l'annonce
+// garder, relister 1 sous le plus bas (la nouvelle annonce repaye les frais d'enregistrement) ou retirer pour liberer l'annonce
 function jAdvice(s,f){if(!f)return '<span class="mut">pas en vente en ce moment</span>';
- const [fl,n,ref,dh,lot]=f,seuil=s.cout!=null?Math.ceil(s.cout/(1-JC().tax)):null,b=(c,t)=>'<span class="badge '+c+'">'+t+'</span> ';
+ const [fl,n,ref,dh,lot]=f,seuil=s.cout!=null?Math.ceil(s.cout/(1-JC().tax-JC().fee)):null,b=(c,t)=>'<span class="badge '+c+'">'+t+'</span> ';
  const ahead=fl<s.prix?n:0,wait=dh?(ahead+s.reste/(lot||1))/dh:null,w=wait!=null?'<span class="sub">vendu en ~'+fmtH(wait)+'</span>':'';
  if(!ahead)return b('b-ok','✅ Garder')+w;
  if(ref&&fl<0.85*ref)return b('b-warn','⏳ Attendre')+'<span class="sub">le plus bas ('+NF.format(fl)+') est sous le prix habituel ('+NF.format(ref)+')</span>';
- const to=fl-1,tax=lost(s.prix,s.reste);
+ const to=fl-1,tax=lost(to,s.reste);
  if(seuil&&to<seuil)return ref&&ref<seuil?b('b-bad','↩ Retirer')+'<span class="sub">le prix habituel ('+NF.format(ref)+') est passé sous ton seuil ('+NF.format(seuil)+') : libère l’annonce</span>'
   :b('b-warn','⏳ Garder')+'<span class="sub">baisser passerait sous ton seuil ('+NF.format(seuil)+')</span>';
  if(wait!=null&&n/dh<3)return b('b-ok','✅ Garder')+'<span class="sub">les '+n+' annonces devant partent en ~'+fmtH(n/dh)+'</span>';
  const gain=s.cout!=null?net(to,s.reste)-s.cout*s.reste-tax:null;
- if(gain!=null&&gain<=0)return b('b-warn','⏳ Garder')+'<span class="sub">relister à '+NF.format(to)+' coûterait plus (taxe '+NF.format(tax)+') que ça rapporte</span>';
- return b('b-bad','🔁 Relister à '+NF.format(to))+'<span class="sub">taxe perdue '+NF.format(tax)+(gain!=null?', gain restant '+NF.format(gain):'')+'</span>'}
+ if(gain!=null&&gain<=0)return b('b-warn','⏳ Garder')+'<span class="sub">relister à '+NF.format(to)+' coûterait plus (frais '+NF.format(tax)+') que ça rapporte</span>';
+ return b('b-bad','🔁 Relister à '+NF.format(to))+'<span class="sub">frais '+NF.format(tax)+(gain!=null?', gain restant '+NF.format(gain):'')+'</span>'}
 // ---------------------------------------------------------------- affichage
 function jRender(){if(!J)return;oppRender();const box=document.getElementById('jopen');if(!box)return;
  const F=window.JFLOOR||{},lots=J.lots.filter(l=>!l.del).map(l=>[l,jState(l)]);
@@ -250,7 +253,7 @@ function jRender(){if(!J)return;oppRender();const box=document.getElementById('j
   const row='<tr><td>'+nm(l.objet)+' <span class="badge b-mut" style="cursor:pointer" title="Changer l’origine" onclick="jAct(\''+l.id+'\',\'src\')">'
    +(JSRC[s.src]||'❔ origine ?')+'</span>'+(bat?' <span class="badge b-bad">battu : '+NF.format(f[0])+'</span>':f?' <span class="badge b-ok">le moins cher</span>':'')+'</td>'
    +'<td class="n">'+s.reste+(s.reste<s.qte?' / '+s.qte:'')+'</td><td class="n">'+NF.format(s.prix)+'</td>'
-   +'<td class="n">'+(s.cout!=null?NF.format(s.cout):'–')+'</td><td class="n '+(s.cout!=null?(net(s.prix,1)-s.cout>0?'pos':'neg'):'')+'">'+(s.cout!=null?NF.format(net(s.prix,1)-s.cout):'–')+'</td>'
+   +'<td class="n">'+(s.cout!=null?NF.format(s.cout):'–')+'</td><td class="n '+(s.cout!=null?(net(s.prix,1)-lost(s.prix,1)-s.cout>0?'pos':'neg'):'')+'">'+(s.cout!=null?NF.format(net(s.prix,1)-lost(s.prix,1)-s.cout):'–')+'</td>'
    +'<td>'+jAdvice(s,f)+'</td>'
    +'<td>'+(s.poste?s.poste.slice(8,10)+'/'+s.poste.slice(5,7)+' '+s.poste.slice(11):'<span class="mut">avant le journal</span>')+'</td>'
    +'<td class="n">'+(s.relistes||'–')+'</td><td class="n">'+(s.frais?NF.format(s.frais):'–')+'</td>'
@@ -265,8 +268,8 @@ function jRender(){if(!J)return;oppRender();const box=document.getElementById('j
   const go='<button class="mapbtn" onclick="jDo(\''+l.id+'\',\''+k+'\')">OK</button>';
   const f2=k==='vendu'?'Vendu '+inp('q',s.reste,80)+' à '+inp('p',s.prix,110)+' /u, le '+inp('t',jNow().replace(' ','T'),190,'datetime-local')+' '+go
    +' <span class="sub">reçu après taxe : '+NF.format(net(s.prix,s.reste))+'</span>'
-   :k==='reliste'?'Nouveau prix '+inp('p',f?Math.max(1,f[0]-1):s.prix,110)+' /u '+go+' <span class="sub">tu perds la taxe payée sur l’annonce retirée : <b class="neg">'+NF.format(lost(s.prix,s.reste))+'</b> ('+Math.round(JC().tax*100)+' % de '+s.reste+' × '+NF.format(s.prix)+') ; la nouvelle annonce repaye '+Math.round(JC().tax*100)+' %, déduits de la vente</span>'
-   :k==='retire'?'Retirer les '+s.reste+' restants : tu perds la taxe payée, <b class="neg">'+NF.format(lost(s.prix,s.reste))+'</b> '+go
+   :k==='reliste'?'Nouveau prix '+inp('p',f?Math.max(1,f[0]-1):s.prix,110)+' /u '+go+' <span class="sub">la nouvelle annonce repaye les frais d’enregistrement ('+Math.round(JC().fee*100)+' % du prix total, perdus), par ex. <b class="neg">'+NF.format(lost(f?Math.max(1,f[0]-1):s.prix,s.reste))+'</b> pour '+s.reste+' × '+NF.format(f?Math.max(1,f[0]-1):s.prix)+'</span>'
+   :k==='retire'?'Retirer les '+s.reste+' restants '+go+' <span class="sub">les frais d’enregistrement déjà payés ('+NF.format(lost(s.prix,s.reste))+') sont perdus</span>'
    :k==='corrige'?'Prix '+inp('p',s.prix,110)+' /u, quantité mise en vente '+inp('q',s.qte,80)+' '+go
     +' <span class="sub">corrige une erreur de saisie, sans frais (pour un vrai changement de prix en jeu, utilise 🔁 Relister)</span>'
    :k==='src'?'Origine <select id="jas" class="search" style="width:auto;display:inline-block" onchange="jSrcCost(\''+l.id+'\')">'+jSrcOpts(s.src||jSrcDefault(l.objet))+'</select> '
@@ -285,16 +288,16 @@ function jStats(lots){const per=+(document.getElementById('jper')||{}).value||0,
  lots.forEach(([l,s])=>{const a=s.src||'?',act=acts[a]||(acts[a]=z()),mine=!want||a===want;
   const o=mine?by[l.objet]||(by[l.objet]=z()):z();
   let cout=l.cout;(s.ev).forEach(e=>{if(e.type==='cout'){cout=e.cout;return}if(!e.t||e.t<lim)return;
-   if(e.type==='reliste'||e.type==='retire'){act.frais+=e.frais||0}
+   if(e.type==='poste'||e.type==='reliste'){act.frais+=s.fe[e.id]||0}
    else if(e.type==='vendu'){act.recu+=e.recu||0;act.vendus+=e.qte;act.ventes++;if(cout!=null)act.cout+=cout*e.qte;else act.sansCout+=e.qte}
-   if(e.type==='reliste'||e.type==='retire'||e.type==='poste'){o.frais+=e.frais||0;if(e.type==='reliste')o.relistes++;if(e.type==='retire')o.retraits++}
+   if(e.type==='reliste'||e.type==='retire'||e.type==='poste'){o.frais+=s.fe[e.id]||0;if(e.type==='reliste')o.relistes++;if(e.type==='retire')o.retraits++}
    else if(e.type==='vendu'){o.recu+=e.recu||0;o.brut+=e.prix*e.qte;o.vendus+=e.qte;o.ventes++;if(cout!=null)o.cout+=cout*e.qte;else o.sansCout+=e.qte}})});
  Object.values(by).forEach(o=>Object.keys(T).forEach(k=>T[k]+=o[k]));
  const ben=T.recu-T.cout-T.frais,kpi=(l,v,s,c)=>'<div class="kpi"><div class="l">'+l+'</div><div class="v '+(c||'')+'">'+v+'</div><div class="s">'+s+'</div></div>';
  document.getElementById('jkpi').innerHTML=kpi('Kinah reçus',kf(T.recu),T.ventes+' vente(s), '+NF.format(T.vendus)+' unités, après taxe','pos')
-  +kpi('Taxe perdue',kf(T.frais),T.relistes+' reliste(s), '+T.retraits+' retrait(s) : 10 % de l’annonce retirée',T.frais?'neg':'')
+  +kpi('Frais d’enregistrement',kf(T.frais),Math.round(JC().fee*100)+' % de chaque mise en vente, perdus ('+T.relistes+' reliste(s), '+T.retraits+' retrait(s))',T.frais?'neg':'')
   +kpi('Bénéfice',kf(ben),T.sansCout?NF.format(T.sansCout)+' unités vendues sans coût connu (comptées gratuites)':'reçu − coût − frais',ben>0?'pos':'neg')
-  +kpi('Perte due aux relistes',T.recu?(T.frais/T.recu*100).toFixed(1).replace('.',',')+' %':'–','taxe perdue / kinah reçus');
+  +kpi('Poids des frais',T.recu?(T.frais/T.recu*100).toFixed(1).replace('.',',')+' %':'–','frais d’enregistrement / kinah reçus');
  const rows=Object.entries(by).filter(([n,o])=>o.ventes||o.frais).sort((a,b)=>b[1].recu-a[1].recu);
  document.getElementById('jitems').innerHTML=rows.length?rows.map(([n,o])=>{const b=o.recu-o.cout-o.frais;
   return '<tr><td><span class="nm">'+jEsc(n)+'</span></td><td class="n">'+NF.format(o.vendus)+'</td><td class="n">'+(o.vendus?NF.format(Math.round(o.brut/o.vendus)):'–')+'</td>'
@@ -307,10 +310,10 @@ function jStats(lots){const per=+(document.getElementById('jper')||{}).value||0,
    +'<td class="n">'+(o.cout?NF.format(o.cout):'–')+'</td><td class="n neg">'+(o.frais?NF.format(o.frais):'–')+'</td>'
    +'<td class="n '+(b>0?'pos':'neg')+'">'+NF.format(b)+(o.sansCout?' *':'')+'</td><td class="n">'+(o.recu?Math.round(b/o.recu*100)+' %':'–')+'</td></tr>'}).join('')
   :'<tr><td colspan="8" class="mut">Rien sur cette période.</td></tr>'}
-function jLog(lots){const ev=[];lots.forEach(([l,s])=>s.ev.forEach(e=>e.t&&e.type!=='cout'&&ev.push([e,l,ev.length])));ev.sort((a,b)=>b[0].t.localeCompare(a[0].t)||b[2]-a[2]);
+function jLog(lots){const ev=[];lots.forEach(([l,s])=>s.ev.forEach(e=>e.t&&e.type!=='cout'&&ev.push([e,l,s,ev.length])));ev.sort((a,b)=>b[0].t.localeCompare(a[0].t)||b[3]-a[3]);
  const T={poste:'📦 posté',reliste:'🔁 relisté',vendu:'✅ vendu',retire:'↩ retiré',src:'🏷 origine',corrige:'✏ corrigé'};
- document.getElementById('jlog').innerHTML=ev.slice(0,40).map(([e,l])=>'<tr><td>'+e.t.slice(8,10)+'/'+e.t.slice(5,7)+' '+e.t.slice(11)+'</td><td>'+T[e.type]+'</td><td>'+jEsc(l.objet)+'</td>'
-  +'<td class="n">'+(e.qte||'')+'</td><td class="n">'+(e.prix?NF.format(e.prix):'')+'</td><td class="n '+(e.type==='vendu'?'pos':'neg')+'">'+(e.type==='vendu'?'+'+NF.format(e.recu||0):e.frais?'−'+NF.format(e.frais):'')+'</td>'
+ document.getElementById('jlog').innerHTML=ev.slice(0,40).map(([e,l,s])=>'<tr><td>'+e.t.slice(8,10)+'/'+e.t.slice(5,7)+' '+e.t.slice(11)+'</td><td>'+T[e.type]+'</td><td>'+jEsc(l.objet)+'</td>'
+  +'<td class="n">'+(e.qte||'')+'</td><td class="n">'+(e.prix?NF.format(e.prix):'')+'</td><td class="n '+(e.type==='vendu'?'pos':'neg')+'">'+(e.type==='vendu'?'+'+NF.format(e.recu||0):s.fe[e.id]?'−'+NF.format(s.fe[e.id]):'')+'</td>'
   +'<td><button class="mapbtn" title="Annuler ce mouvement (erreur de clic)" onclick="jUndoEv(\''+l.id+'\',\''+e.id+'\')">↶</button></td></tr>').join('')}
 // annule un mouvement precis de « Derniers mouvements » ; annuler la mise en vente supprime l'annonce du journal
 function jUndoEv(id,eid){const l=jLot(id),e=l&&l.ev.find(x=>x.id===eid);if(!e)return;
@@ -641,11 +644,11 @@ function supplyCalc(x,e,part){const n=v=>v==null?'–':NF.format(Math.round(v)),
   +tr('combo '+Math.round(c*100)+' % → '+k1(1/c)+' crafts réussis en moyenne',o=>o.S/c)
   +tr('− '+k1((1-c)/c)+' '+jEsc(R.n)+' obtenu(s) sans combo, revendu(s) <span class="sub">('+n(e.B)+' net ; prix modifiable sur sa ligne s’il est dans la capture)</span>',o=>-(1-c)/c*e.B)
   +tr('<b>= coût d’un '+jEsc(x.n)+'</b>',o=>o.per)
-  +tr('Vente après taxe',()=>e.P)
+  +tr('Vente après taxe et frais',()=>e.P)
   +tr('<b>Gain par objet</b>',o=>o.plain,pn);
  else h+='<thead><tr><th>'+jEsc(x.n)+' <span class="sub">· '+rtx+(cb?' · combo '+Math.round(c*100)+' % → '+jEsc(cb.n):'')+'</span></th>'
   +cols.map(o=>'<th class="n">'+o.t+'</th>').join('')+'</tr></thead><tbody>'+cost
-  +tr('Vente de l’objet normal après taxe',()=>e.P)
+  +tr('Vente de l’objet normal après taxe et frais',()=>e.P)
   +tr('<b>Gain par craft</b> <span class="sub">(objet normal, sans combo)</span>',o=>o.plain,pn)
   +(cb?tr('Résultat moyen avec combo <span class="sub">('+Math.round((1-c)*100)+' % objet normal, '+Math.round(c*100)+' % '+jEsc(cb.n)+' à '+n(cb.v)+' → '+n(V)+' net)</span>',o=>o.res)
    +tr('Gain moyen avec combo <span class="sub">(sur beaucoup de crafts : un pari)</span>',o=>o.gain,pn):'');
@@ -744,7 +747,7 @@ function aiSystem(){const A=window.ASSIST;
   +'and wikis, guides, Reddit, Korean or Taiwanese community sites when the global version lacks coverage), fetch a page when search snippets '
   +'are not enough, and say so when sources disagree, are old, or only cover the Korean version.\n\n'
   +'For item prices, crafting recipes and costs, profit, ingredients or gathering locations, call tracker_search first: it is live data '
-  +'from their own server (prices in kinah; the auction house keeps a 10% tax on sales). Item names there are French; give French names as they appear in game, with the English '
+  +'from their own server (prices in kinah; the auction house keeps a 10% tax on each sale, and each posting or relisting costs a 2% listing fee of the total price that is never refunded). Item names there are French; give French names as they appear in game, with the English '
   +'name in brackets when it helps.\n\n'
   +'Answer in the language of the question. Lead with the direct answer, then the details that matter: short sections, lists, '
   +'and a table when comparing options. Bold key item names and numbers. Be concrete (names, numbers, where, how many), skip filler.'

@@ -24,14 +24,14 @@ def journal_html(ctx, cfg, my):
                                                  f'style="width:{w}px;display:inline-block" {extra}>')
     return (
         '<p class="lead">Note ici ce que deviennent tes annonces : un clic quand tu postes, vends, relistes ou retires. '
-        f'Le site calcule ce que tu gagnes vraiment. La taxe de {cfg["fees"]:.0%} est payée à chaque mise en vente : elle est '
-        'déduite de la vente si l’annonce part, et <b>perdue si tu la relistes ou la retires</b> (relister = retirer puis '
-        'remettre en vente, donc repayer).</p>'
+        f'Le site calcule ce que tu gagnes vraiment. Chaque mise en vente coûte des <b>frais d’enregistrement de '
+        f'{cfg.get("listing_fee", 0.02):.0%} du prix total, perdus même si l’annonce se vend</b> (relister = repayer ces frais) ; '
+        f'la taxe de {cfg.get("sale_tax", cfg["fees"]):.0%} est retenue sur le règlement quand l’annonce part.</p>'
         '<span id="jsync" class="sub"></span>'
         '<h3>Mes annonces en cours</h3><div class="wrap"><table><thead><tr>'
         f'{_th("Objet")}{_th("Reste", None, True)}{_th("Prix /u", None, True)}{_th("Coût /u", "Coût de revient (clique « Coût » pour le changer)", True)}'
-        f'{_th("Gain /u", "Prix − taxe − coût", True)}'
-        f'{_th("Conseil", "Garder, relister moins cher (la taxe de l’annonce retirée est perdue) ou retirer pour libérer l’annonce")}'
+        f'{_th("Gain /u", "Prix − taxe − frais d’enregistrement − coût", True)}'
+        f'{_th("Conseil", "Garder, relister moins cher (la nouvelle annonce repaye les frais d’enregistrement) ou retirer pour libérer l’annonce")}'
         f'{_th("Posté le")}{_th("Relistes", None, True)}'
         f'{_th("Taxe perdue", "Taxe des annonces retirées pour relister", True)}{_th("Actions")}'
         '</tr></thead><tbody id="jopen"></tbody></table></div>'
@@ -68,7 +68,7 @@ def journal_html(ctx, cfg, my):
         '<div class="kpis" id="jkpi"></div><div class="wrap"><table><thead><tr>'
         f'{_th("Objet")}{_th("Unités vendues", None, True)}{_th("Prix moyen /u", None, True)}{_th("Reçu", "Après taxe", True)}'
         f'{_th("Coût", None, True)}{_th("Taxe perdue", "Relistes et retraits", True)}{_th("Relistes / retraits", None, True)}'
-        f'{_th("Bénéfice", "Reçu − coût − taxe perdue (* : une partie sans coût connu)", True)}'
+        f'{_th("Bénéfice", "Reçu − coût − frais d’enregistrement (* : une partie sans coût connu)", True)}'
         '</tr></thead><tbody id="jitems"></tbody></table></div>'
         '<h3>Derniers mouvements</h3><div class="wrap"><table><thead><tr>'
         f'{_th("Date")}{_th("Action")}{_th("Objet")}{_th("Qté", None, True)}{_th("Prix /u", None, True)}{_th("Kinah", None, True)}{_th("")}'
@@ -86,7 +86,7 @@ def journal_html(ctx, cfg, my):
         '<button class="mapbtn" onclick="jForget()">Oublier le jeton</button></div>'
         '<span class="sub">Sans jeton, le journal est gardé dans ce navigateur seulement.</span></details>'
         f'<script>window.JOURNAL={json.dumps(j, ensure_ascii=False)};'
-        f'window.JCFG={json.dumps(dict(tax=cfg["fees"], repo=cfg.get("_github_repo")))};'
+        f'window.JCFG={json.dumps(dict(tax=cfg.get("sale_tax", cfg["fees"]), fee=cfg.get("listing_fee", 0.02), repo=cfg.get("_github_repo")))};'
         f'window.JFLOOR={json.dumps(floor, ensure_ascii=False)};'
         f'window.HARVEST_ITEMS={json.dumps(sorted({e["objet"] for e in my["harvest"]}), ensure_ascii=False)};'
         f'window.RAW_ITEMS={json.dumps(m.gather_names(), ensure_ascii=False)};</script>')
@@ -134,7 +134,7 @@ def gains_tab(ctx, cfg, my):
         loss = [x for x in g["items"] if x["marge_u"] is not None and x["marge_u"] < 0]
         for x in loss:
             notes.append(f"<b class='neg'>⚠ {esc(x['objet'])} : vendu à perte</b> (reçu {fmt(round(x['recu_u']))} /u après "
-                         f"taxe, coût {fmt(x['cout'])} /u dans le journal, soit {fmt(round(x['marge_u']))} /u).")
+                         f"taxe et frais, coût {fmt(x['cout'])} /u dans le journal, soit {fmt(round(x['marge_u']))} /u).")
         rows = "".join(
             f"<tr><td>{ctx.label(x['item_id'], x['objet'])}</td>"
             f"{_num_td(x['lots'], color=False)}{_num_td(x['unites'], color=False)}{_num_td(x['recu'], color=False, k=True)}"

@@ -44,7 +44,7 @@ def build(con, cfg, results):
 
     share = my["market"].share if my else cfg["market_share"]
     calib = " (ta part réelle, mesurée sur tes ventes du journal)" if my and my["market"]._share["source"] == "journal" else ""
-    hyp = (f"Part de marché {share:.0%}{calib}, taxes et frais {cfg['fees']:.0%}. "
+    hyp = (f"Part de marché {share:.0%}{calib}, taxe et frais d’enregistrement {cfg['fees']:.0%}. "
            "« Vendre à » = prix réaliste : le prix affiché, ramené vers le prix habituel sur ton serveur (médiane 3 j) "
            "quand il est anormalement haut.")
     if my:

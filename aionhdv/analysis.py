@@ -150,7 +150,7 @@ class Market:
             it["lots"] += 1; it["unites"] += q; it["brut"] += s["prix"]; it["ts"].append(s["t"])
             if s.get("cout") is not None:                    # cout de revient note dans le journal pour cette vente
                 it["_c"] += s["cout"] * q; it["_cq"] += q
-            it["recu"] += s.get("recu") or math.floor(s["prix"] * (1 - fees))
+            it["recu"] += s.get("recu") or math.floor(s["prix"] * (1 - self.cfg.get("sale_tax", fees)))   # reglement : taxe seule
         out = []
         for it in items.values():
             iid, ts = it["item_id"], sorted(it.pop("ts"))
@@ -177,7 +177,7 @@ class Market:
             c, cq = it.pop("_c"), it.pop("_cq")
             cost = round(c / cq) if cq else costs.get(it["objet"])
             it["cout"] = cost
-            it["marge_u"] = it["recu_u"] - cost if cost else None
+            it["marge_u"] = it["recu_u"] - it["prix_u"] * self.cfg.get("listing_fee", 0) - cost if cost else None   # frais perdus
             out.append(it)
         out.sort(key=lambda x: -x["recu"])
         # calibrage, sur les objets vendus au moins 3 fois

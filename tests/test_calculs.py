@@ -272,7 +272,7 @@ class Journal(unittest.TestCase):
     LOT = dict(id="a", objet="Planche", src="achat", qte=20, prix=1000, cout=600, ev=[
         dict(id="1", t="2026-10-19 10:00", type="poste", prix=1000, qte=20),
         dict(id="2", t="2026-10-19 12:00", type="vendu", prix=1000, qte=8, recu=7200),
-        dict(id="3", t="2026-10-19 14:00", type="reliste", prix=900, qte=12, frais=1200),   # 10 % de 12 x 1000, perdus
+        dict(id="3", t="2026-10-19 14:00", type="reliste", prix=900, qte=12, frais=1200),   # frais stocke (ancien calcul) : ignore
         dict(id="4", t="2026-10-19 15:00", type="vendu", prix=900, qte=5, recu=4050),
         dict(id="5", t="2026-10-19 16:00", type="vendu", prix=900, qte=2, recu=1620, x=1),   # annule
         dict(id="6", t="2026-10-19 17:00", type="cout", cout=650),
@@ -282,21 +282,27 @@ class Journal(unittest.TestCase):
         s = lot_state(self.LOT)
         self.assertEqual(s["src"], "recolte")                       # origine changee apres coup
         self.assertEqual((s["prix"], s["cout"], s["vendus"], s["reste"], s["frais"], s["recu"], s["relistes"]),
-                         (900, 650, 13, 7, 1200, 11250, 1))
+                         (900, 650, 13, 7, 400 + 216, 11250, 1))              # 2 % de 20 x 1000 puis de 12 x 900
 
-    def test_correction_sans_frais(self):
+    def test_correction_recalcule_les_frais(self):
         lot = dict(id="c", objet="Planche", qte=10, prix=50, ev=[
             dict(id="1", t="2026-10-19 10:00", type="poste", prix=50, qte=10),     # 50 au lieu de 500 : erreur de clic
             dict(id="2", t="2026-10-19 10:05", type="corrige", prix=500, qte=12)])
         s = lot_state(lot)
-        self.assertEqual((s["prix"], s["reste"], s["frais"], s["relistes"]), (500, 12, 0, 0))
+        self.assertEqual((s["prix"], s["reste"], s["frais"], s["relistes"]), (500, 12, 120, 0))   # 2 % de 12 x 500, pas de 10 x 50
 
-    def test_retrait_perd_la_taxe(self):
+    def test_retrait_sans_frais_de_plus(self):
         lot = dict(id="r", objet="Planche", qte=10, prix=500, ev=[
             dict(id="1", t="2026-10-19 10:00", type="poste", prix=500, qte=10),
             dict(id="2", t="2026-10-19 11:00", type="retire", qte=10, frais=500)])
         s = lot_state(lot)
-        self.assertEqual((s["reste"], s["frais"]), (0, 500))
+        self.assertEqual((s["reste"], s["frais"]), (0, 100))           # seuls les frais de la mise en vente, perdus
+
+    def test_frais_arrondis_a_l_inferieur(self):
+        # releves en jeu : 1 x 9 497 -> 189, 3 x 13 333 -> 799
+        for prix, qte, frais in ((9497, 1, 189), (13333, 3, 799)):
+            lot = dict(id="f", objet="Bois", qte=qte, prix=prix, ev=[dict(id="1", t="2026-10-24 10:00", type="poste", prix=prix, qte=qte)])
+            self.assertEqual(lot_state(lot)["frais"], frais)
 
     def test_annonces_et_ventes_pour_l_analyse(self):
         listings, sales = from_journal({"lots": [self.LOT, dict(self.LOT, id="b", del_=0), dict(self.LOT, id="c", **{"del": 1})]})

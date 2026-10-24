@@ -106,7 +106,7 @@ def home(con, cfg, ctx, my, sname):
             for l in mine)
         mine_html = (f'<div class="wrap"><table><thead><tr>{_th("Mon annonce")}{_th("Mon prix", None, True)}'
                      f'{_th("Prix le plus bas", None, True)}{_th("Statut")}'
-                     f'{_th("Seuil de rentabilité", "Coût de revient + taxe de 10 % : ne vends pas en dessous", True)}'
+                     f'{_th("Seuil de rentabilité", "Coût de revient + taxe (10 %) et frais d’enregistrement (2 %) : ne vends pas en dessous", True)}'
                      f'{_th("Gain/u au plus bas", None, True)}{_th("Conseil")}</tr></thead><tbody>{rows}</tbody></table></div>')
     else:
         mine_html = ('<p class="mut">Aucune annonce en cours dans ton journal : note-les dans l’onglet 💰 Mes ventes pour être '

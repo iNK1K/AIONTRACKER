@@ -20,13 +20,13 @@ Onglet **Mon stock** : coller une capture de la réserve (Ctrl + V) remplit le s
 
 Onglet **Mes métiers** : niveaux de métier enregistrés dans le navigateur ; les crafts impossibles sont grisés partout et le profit tient compte du taux de réussite du jeu (tables extraites du client, mises à jour par le passage daily).
 
-Onglet **Mes ventes** : journal des annonces (`journal.json`) — un clic quand tu postes, vends (tout ou partie), relistes ou retires, ou une capture (fenêtre des annonces ou historique des ventes). Chaque annonce en cours a un conseil : ✅ garder, 🔁 relister à X (taxe perdue et gain restant comptés), ⏳ attendre (le plus bas est anormalement bas ou sous ton seuil), ↩ retirer (le prix habituel est passé sous ton seuil : libère l’annonce). Bilan réel : kinah reçus, taxe perdue en relistes et retraits, bénéfice ; comparaison avec les estimations de l’outil. Le site enregistre le journal sur GitHub, sur la branche `journal` (jamais sur `main`), avec un jeton à droits limités (gardé dans le navigateur) ; le workflow et `run.ps1` en prennent une copie avant chaque passage.
+Onglet **Mes ventes** : journal des annonces (`journal.json`) — un clic quand tu postes, vends (tout ou partie), relistes ou retires, ou une capture (fenêtre des annonces ou historique des ventes). Chaque annonce en cours a un conseil : ✅ garder, 🔁 relister à X (frais d’enregistrement de la nouvelle annonce et gain restant comptés), ⏳ attendre (le plus bas est anormalement bas ou sous ton seuil), ↩ retirer (le prix habituel est passé sous ton seuil : libère l’annonce). Bilan réel : kinah reçus (règlement après la taxe de 10 %), frais d’enregistrement (2 % de chaque mise en vente et reliste, perdus), bénéfice ; comparaison avec les estimations de l’outil. Le site enregistre le journal sur GitHub, sur la branche `journal` (jamais sur `main`), avec un jeton à droits limités (gardé dans le navigateur) ; le workflow et `run.ps1` en prennent une copie avant chaque passage.
 
 Onglet **🎯 Opportunités** : récolte (ressources blanches), achat → craft et flip dans une seule liste ; une opportunité occupe une annonce (relistée à chaque vente). La page garde les meilleures selon les annonces libres (`max_listings` moins mes annonces en cours du journal), les kinah disponibles et le temps de récolte saisis.
 
 Onglet **🌲 Récolte** : une section par grade. Seules les ressources blanches se récoltent sur les points (récolte/heure, kinah/heure) ; vertes, bleues et éclatantes sont des procs, non planifiés : la page dit seulement quoi en faire. Crafts triés par profit, avec le prix de chaque ressource. « Mes procs de récolte » : je note mes sessions (blancs récoltés, procs obtenus) pour mesurer mes taux de proc et ce qu’ils rapportent en plus.
 
-**Précision des alertes** (bas de l'onglet Opportunités, et résumé du dimanche) : chaque opportunité alertable (feu vert, pic, Unique bradé, flip à saisir) est notée puis jugée une fois sa fenêtre de vente passée (48 h, 6 h pour un pic) : prix réel = médiane du prix plancher sur la fenêtre, tenue = net réel > 0 après taxe.
+**Précision des alertes** (bas de l'onglet Opportunités, et résumé du dimanche) : chaque opportunité alertable (feu vert, pic, Unique bradé, flip à saisir) est notée puis jugée une fois sa fenêtre de vente passée (48 h, 6 h pour un pic) : prix réel = médiane du prix plancher sur la fenêtre, tenue = net réel > 0 après taxe et frais.
 
 Alerte Discord **données périmées** : aucun prix reçu depuis 3 h (source en panne), puis rappel toutes les 12 h. Le site affiche aussi un bandeau rouge si les prix ont plus de 3 h ou si la page n'a pas été régénérée depuis 2 h.
 
@@ -52,7 +52,8 @@ Python est **portable** (`.runtime\python`) : rien n'est installé sur le systè
 - `discord_webhook_unique_url`, `discord_webhook_news_url` : salons dédiés (facultatifs) aux Unique bradés et aux annonces officielles
 - `news` : tableaux du site officiel suivis (`update_fr` notes de version, `notice_fr` avis), mots exclus, Reddit et ses mots-clés
 - `alerts.unique_ratio`, `unique_min_median`, `unique_min_samples` : seuils de l'alerte « Unique bradé »
-- `market_share`, `fees`, `npc_reagent_price`, seuils `alerts`
+- `sale_tax` (10 %, retenue sur le règlement) et `listing_fee` (frais d'enregistrement, 2 % du prix total à chaque mise en vente, perdus même si l'annonce se vend) : coût d'une vente dans les calculs = 12 %
+- `market_share`, `npc_reagent_price`, seuils `alerts`
 - `brut_vendable_depuis` : date de la levée de la restriction sur le brut (prix et ventes du brut d'avant ignorés)
 
 ## Tâches planifiées (à activer quand tu veux)
@@ -73,8 +74,8 @@ Python est **portable** (`.runtime\python`) : rien n'est installé sur le systè
 - Ventes d'un item sur ton serveur = annonces disparues sur 24 h × taille estimée des annonces (le jeu ne publie pas les quantités pour Zemurru) : mesure de Kaisinel figée le 22/10 pour 65 objets (`aionhdv/lots_kaisinel.json`, objets élyséens et mesures trop maigres écartés), sinon 1 pour un objet non empilable (pile max 0 ou 1) ou un équipement, sinon `lots` dans config.json (récolte 200 / 50 / 10 / 3 selon le grade blanc, vert, bleu, éclatant ; matériau 20 ; consommable 20). Modifiable par objet dans l'onglet Opportunités (gardé dans le navigateur). Pour contrôler ces tailles sur Zemurru : l'onglet Mes ventes met côte à côte l'achat moyen de tes vraies ventes et la taille estimée (colonne « Annonce estimée »).
 - Délai de vente (Opportunités) : devant = 1 ÷ annonces vendues par heure (tu postes au prix le plus bas) ; à la file = annonces en vente ÷ annonces vendues par heure.
 - Prix réaliste = moyenne (prix affiché, prix habituel des ventes observées sur ton serveur) si l'affiché est plus haut.
-- Profit/u = prix × (1 − 10 %) − ingrédients achetés − réactifs PNJ (400 par défaut).
-- Brut vendable depuis la MaJ du 21/10/2026 : une ressource récoltée vaut au moins sa vente brute (prix réaliste − 10 %). La vente du brut est un usage comme un craft (Quoi récolter, Planning, Mon stock) ; « vs brut/u » = gain d'un craft face à la vente brute des mêmes ressources, un craft qui fait moins bien n'est plus conseillé. Prix et ventes du brut d'avant `brut_vendable_depuis` sont ignorés (autre régime de marché).
+- Profit/u = prix × (1 − 12 %) − ingrédients achetés − réactifs PNJ (400 par défaut) ; 12 % = taxe de vente 10 % + frais d'enregistrement 2 % (vérifiés en jeu le 24/10/2026 : règlement = 90 % du prix ; frais = 2 % du prix total arrondi à l'inférieur, jamais remboursés).
+- Brut vendable depuis la MaJ du 21/10/2026 : une ressource récoltée vaut au moins sa vente brute (prix réaliste − 12 %). La vente du brut est un usage comme un craft (Quoi récolter, Planning, Mon stock) ; « vs brut/u » = gain d'un craft face à la vente brute des mêmes ressources, un craft qui fait moins bien n'est plus conseillé. Prix et ventes du brut d'avant `brut_vendable_depuis` sont ignorés (autre régime de marché).
 - Profit/j = profit/u × ta part du marché : 20 % supposés (`market_share`), remplacés automatiquement par ta part réelle (journal : médiane des objets vendus au moins 3 fois, bornée 2-50 %) dès que 3 objets la mesurent.
 - Heures de vente = annonces disparues d'une heure à l'autre, tous items confondus (heure de Paris).
 - Unique bradé = prix actuel ≤ 60 % de la médiane des 7 derniers jours (au moins 12 relevés).
