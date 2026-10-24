@@ -1019,8 +1019,15 @@ let AISERVER=false,AINEWS=null,AIUSER='';
 async function aiServerProbe(){if(location.protocol==='file:')return false;
  try{const r=await fetch('api/health',{cache:'no-store',signal:AbortSignal.timeout(3000)});AISERVER=false;
   if(r.ok){const j=await r.json();AISERVER=!!j.ok;AIUSER=j.user||''}}catch(e){AISERVER=false}
+ if(AISERVER)aiUserSwitch();
  if(AISERVER&&!AINEWS)fetch('api/news',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{AINEWS=d&&d.items;if(AINEWS)aiHome()}).catch(()=>{});
  return AISERVER}
+// autre nom d'utilisateur que la dernière fois dans ce navigateur : ses conversations et sa fiche restent sur le serveur, sous son nom ;
+// on oublie la copie du navigateur, pour qu'elle ne monte pas sous le nouveau nom
+function aiUserSwitch(){let was=null;try{was=localStorage.getItem('aiuser');localStorage.setItem('aiuser',AIUSER)}catch(e){}
+ if(!was||was===AIUSER)return;
+ try{['aichat','aisession','aichat_perso','aisession_perso','aiperso'].forEach(k=>localStorage.removeItem(k))}catch(e){}
+ Object.values(AICH).forEach(C=>{if(C.busy)C.busy.abort();C.h=[];C.u=null;if(C.hello!=null)aiRenderAll(C)});PSHEET=null;PARM=null;pRender()}
 function aiMode(){if(AISERVER)return 'server';let m='';try{m=localStorage.getItem('aimode')||(localStorage.getItem('ailocal')?'local':'')}catch(e){}return m||'api'}
 function aiSetMode(m){try{localStorage.setItem('aimode',m);localStorage.removeItem('ailocal')}catch(e){}aiModeShow()}
 function aiReady(){const m=aiMode();return m==='server'?true:m==='local'?AILOCAL:!!aiKey()}
@@ -1383,8 +1390,9 @@ function aItemText(it){const d=it.d||{},x=[it.n+' +'+(it.e||0)+(d.maxEnchantLeve
 function aArmText(A){if(!A||!A.info)return '';const p=A.info.profile||{},st=(A.info.stat||{}).statList||[],G=aGear(A),E=A.equipment||{},pw=E.petwing||{};
  const il=(st.find(s=>s.type==='ItemLevel')||{}).value,num=n=>n==null?'?':NF.format(n);
  const L=['\n\nOfficial armory data (NCSOFT\'s official character page, read '+(A.fetched||'?')+' UTC). It is exact: trust it over screenshots and over '
-  +'your memory, use its exact item names, and do not write ```perso lines for anything it covers. If the player says something changed since then, '
-  +'tell them to press ↻ in the Personnage tab.',
+  +'your memory, use its exact item names, and do not write ```perso lines for anything it covers. Earlier messages of this conversation may '
+  +'predate it and come from screenshots: where they disagree with it, it is right, and say that you correct yourself. If the player says '
+  +'something changed since then, tell them to press ↻ in the Personnage tab.',
   'Character: '+p.characterName+', '+p.className+' level '+p.characterLevel+', '+p.raceName+', server '+p.serverName+'. Combat power '+num(p.combatPower)
    +'. Item level '+num(il)+'.'+(p.titleName?' Title shown: '+p.titleName+'.':''),
   'Attributes: '+st.filter(s=>PATTR.includes(s.type)).map(s=>s.name+' '+s.value).join(', ')+'.',
