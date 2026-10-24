@@ -60,4 +60,4 @@ patch notes) et consulte les prix et recettes du tracker.</p>
  onkeydown="if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();aiSend()}"></textarea>
 <button id="aigo" type="submit" title="Envoyer (Entrée)">➤</button></form>
 <div class="aifoot"><button onclick="aiNew()">＋ Nouvelle conversation</button><span id="aicost"></span>
-<button onclick="aiKeyForm(true)">🔑 Clé API</button></div></div>"""
+<span><button id="ailocal" onclick="aiLocalToggle()">💻 Mon abonnement Claude</button> · <button onclick="aiKeyForm(true)">🔑 Clé API</button></span></div></div>"""

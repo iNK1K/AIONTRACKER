@@ -674,14 +674,16 @@ function aiLoad(){const v=(document.getElementById('ai')||{dataset:{}}).dataset.
  return window.ASSIST?Promise.resolve():new Promise(ok=>{const sc=document.createElement('script');sc.src='assist.js?v='+v;sc.onload=ok;sc.onerror=ok;document.head.appendChild(sc)})}
 function aiInit(){const box=document.getElementById('aimsgs');if(!box)return;if(aiRenderAll.hello==null)aiRenderAll.hello=box.innerHTML;aiLoad();aiCostShow();
  if(!AIH.length){try{AIH=JSON.parse(localStorage.getItem('aichat')||'[]')}catch(e){AIH=[]}if(AIH.length)aiRenderAll()}
- if(!aiKey())aiKeyForm();else setTimeout(()=>document.getElementById('aiin').focus(),0)}
+ aiLocalProbe().then(()=>{if(!AILOCAL&&!aiKey())aiKeyForm();else setTimeout(()=>document.getElementById('aiin').focus(),0)})}
 function aiKeyForm(on){const box=document.getElementById('aikey');if(on===false){box.hidden=true;return}box.hidden=false;
  box.innerHTML='<b>Clé API Anthropic</b><div class="sub">Une clé qui commence par <code>sk-ant-api…</code>, créée sur '
   +'<a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a> (mets une limite de dépense '
   +'mensuelle, et active la recherche web dans les réglages de l’organisation). Elle reste dans ce navigateur, jamais sur GitHub.</div>'
   +'<input id="aikeyin" type="password" autocomplete="off" placeholder="sk-ant-api03-…" value="'+(aiKey()?'••••••••':'')+'">'
   +'<button onclick="aiKeySet()">Enregistrer</button>'+(aiKey()?'<button class="sec" onclick="aiKeyForget()">Oublier la clé</button>':'')
-  +'<button class="sec" onclick="aiKeyForm(false)">Fermer</button><div id="aikeymsg" class="sub"></div>'}
+  +'<button class="sec" onclick="aiKeyForm(false)">Fermer</button><div id="aikeymsg" class="sub"></div>'
+  +'<div class="sub" style="margin-top:10px">Ou avec ton abonnement Claude, sans clé : lance <code>py scripts\\assistant_local.py</code> sur ton PC '
+  +'(Claude Code installé et connecté), puis <button class="sec" onclick="aiLocalToggle(true)">Utiliser mon abonnement (ce PC)</button></div>'}
 function aiKeySet(){const v=document.getElementById('aikeyin').value.trim(),msg=document.getElementById('aikeymsg');if(!v||v.startsWith('•'))return;
  if(v.startsWith('sk-ant-oat')){msg.innerHTML='<span class="neg">C’est un jeton d’abonnement Claude (Pro/Max) : il ne marche que dans les applis Claude, pas sur un site. '
   +'Il faut une clé API de la console.</span>';return}
@@ -689,7 +691,7 @@ function aiKeySet(){const v=document.getElementById('aikeyin').value.trim(),msg=
  try{localStorage.setItem('aikey',v)}catch(e){}aiKeyForm(false);toast('Clé enregistrée dans ce navigateur');document.getElementById('aiin').focus()}
 function aiKeyForget(){try{localStorage.removeItem('aikey')}catch(e){}aiKeyForm();toast('Clé oubliée dans ce navigateur')}
 function aiGrow(t){t.style.height='auto';t.style.height=Math.min(t.scrollHeight,220)+'px'}
-function aiNew(){if(AIBUSY)AIBUSY.abort();AIH=[];aiSave();aiRenderAll();document.getElementById('aiin').focus()}
+function aiNew(){if(AIBUSY)AIBUSY.abort();AIH=[];aiSave();try{localStorage.removeItem('aisession')}catch(e){}aiRenderAll();document.getElementById('aiin').focus()}
 function aiAsk(q){document.getElementById('aiin').value=q;aiSend()}
 
 // ---------------------------------------------------------------- outil tracker_search (exécuté dans la page)
@@ -736,7 +738,7 @@ function aiSystem(){const A=window.ASSIST;
   +'and wikis, guides, Reddit, Korean or Taiwanese community sites when the global version lacks coverage), fetch a page when search snippets '
   +'are not enough, and say so when sources disagree, are old, or only cover the Korean version.\n\n'
   +'For item prices, crafting recipes and costs, profit, ingredients or gathering locations, call tracker_search first: it is live data '
-  +'from their own server (prices in kinah). Item names there are French; give French names as they appear in game, with the English '
+  +'from their own server (prices in kinah; the auction house keeps a 10% tax on sales). Item names there are French; give French names as they appear in game, with the English '
   +'name in brackets when it helps.\n\n'
   +'Answer in the language of the question. Lead with the direct answer, then the details that matter: short sections, lists, '
   +'and a table when comparing options. Bold key item names and numbers. Be concrete (names, numbers, where, how many), skip filler.'}
@@ -745,7 +747,7 @@ async function aiStream(signal,draw){
    'x-api-key':aiKey(),'anthropic-version':'2023-06-01','anthropic-beta':'server-side-fallback-2026-07-01',
    'anthropic-dangerous-direct-browser-access':'true'},
   body:JSON.stringify({model:AIMODEL,max_tokens:32000,stream:true,thinking:{type:'adaptive'},output_config:{effort:'medium'},
-   fallbacks:'default',cache_control:{type:'ephemeral'},system:aiSystem(),tools:AITOOLS,messages:AIH})});
+   fallbacks:'default',cache_control:{type:'ephemeral'},system:aiSystem(),tools:AITOOLS,messages:AIH.map(m=>({role:m.role,content:m.content}))})});
  if(!r.ok){let m='';try{const j=await r.json();m=(j.error&&j.error.message)||''}catch(e){}
   const e=new Error(r.status===401?'Clé API refusée ('+m+')':r.status===429?'Limite de débit ou de dépense atteinte, réessaie dans un moment ('+m+')'
    :r.status===529?'API surchargée, réessaie dans un moment':'Erreur '+r.status+' : '+m);e.status=r.status;throw e}
@@ -766,7 +768,8 @@ async function aiStream(signal,draw){
    else if(ev.type==='error')throw new Error((ev.error&&ev.error.message)||'erreur de l’API')}}
  msg.content=blocks.filter(Boolean);return msg}
 async function aiSend(){const inp=document.getElementById('aiin'),q=inp.value.trim();
- if(AIBUSY){AIBUSY.abort();return}if(!q)return;if(!aiKey()){aiKeyForm();return}
+ if(AIBUSY){AIBUSY.abort();return}if(!q)return;if(aiLocalWanted()&&!AILOCAL)await aiLocalProbe();
+ if(AILOCAL)return aiSendLocal(q);if(!aiKey()){aiKeyForm();return}
  await aiLoad();inp.value='';aiGrow(inp);
  const H=AIH,start=H.length;H.push({role:'user',content:q});const turn=aiTurn(q);AIBUSY=new AbortController();aiBusy(true);
  let note='';
@@ -790,8 +793,9 @@ function aiTurn(q){const box=document.getElementById('aimsgs'),h=box.querySelect
  const u=document.createElement('div');u.className='aiu';u.textContent=q;box.appendChild(u);
  const a=document.createElement('div');a.className='aia';a.innerHTML='<div class="aibody"></div><div class="aistat">Réflexion…</div><div class="aisrc"></div>';
  box.appendChild(a);u.scrollIntoView({block:'start',behavior:'smooth'});return a}
-function aiSteps(msgs){let s=0,f=0,t=0;msgs.forEach(m=>Array.isArray(m.content)&&m.content.forEach(b=>{
-  if(b.type==='server_tool_use'){if(b.name==='web_search')s++;else if(b.name==='web_fetch')f++}else if(b.type==='tool_use')t++}));
+function aiSteps(msgs){let s=0,f=0,t=0;msgs.forEach(m=>{Array.isArray(m.content)&&m.content.forEach(b=>{
+  if(b.type==='server_tool_use'){if(b.name==='web_search')s++;else if(b.name==='web_fetch')f++}else if(b.type==='tool_use')t++});
+  (m.steps||[]).forEach(n=>n==='WebSearch'?s++:n==='WebFetch'?f++:t++)});
  return[s&&s+' recherche'+(s>1?'s':'')+' web',f&&f+' page'+(f>1?'s':'')+' lue'+(f>1?'s':''),t&&t+' recherche'+(t>1?'s':'')+' tracker'].filter(Boolean).join(' · ')}
 let AIRAF=0;
 function aiDraw(turn,start,b,done,note){
@@ -812,6 +816,7 @@ function aiPaint(turn,start,done,note){
   const src=new Map();ms.forEach(c=>c.forEach(b=>(b.citations||[]).forEach(x=>x.url&&!src.has(x.url)&&src.set(x.url,x.title||x.url))));
   if(!src.size)ms.forEach(c=>c.forEach(b=>{const r=b.type==='web_fetch_tool_result'&&b.content;
    if(r&&r.type==='web_fetch_result'&&r.url&&!src.has(r.url))src.set(r.url,(r.content&&r.content.title)||r.url.replace(/^https?:\/\/(www\.)?/,''))}));
+  AIH.slice(start+1).forEach(m=>(m.src||[]).forEach(u=>!src.has(u)&&src.set(u,u.replace(/^https?:\/\/(www\.)?/,''))));
   turn.querySelector('.aisrc').innerHTML=[...src].slice(0,10).map(([u,t])=>'<a href="'+escH(u)+'" target="_blank" rel="noopener" title="'+escH(t)+'">'
    +escH(t)+'</a>').join('')+(meta?'<span class="sub" style="align-self:center">'+meta+'</span>':'');
   if(note){const e=document.createElement('div');e.className='aierr';e.textContent=note;turn.appendChild(e)}}
@@ -845,3 +850,42 @@ function aiMd(src){const L=escH(src||'').split('\n'),out=[];let i=0;
   const p=[];while(i<L.length&&L[i].trim()&&!/^(#{1,4}\s|```|\s*([-*•]|\d+[.)])\s|&gt;|\s*\|.*\|\s*$)/.test(L[i]))p.push(L[i++]);
   if(!p.length)p.push(L[i++]);out.push('<p>'+aiInline(p.join('<br>'))+'</p>')}
  return out.join('')}
+
+// ---------------------------------------------------------------- abonnement Claude : pont local (scripts/assistant_local.py)
+// Le chat passe par Claude Code sur ce PC (abonnement de la personne connectée) au lieu de l'API : activé à la main,
+// pour ne jamais sonder 127.0.0.1 chez quelqu'un qui n'a pas lancé le pont.
+const AILOCALURL='http://127.0.0.1:8787';let AILOCAL=false;
+function aiLocalWanted(){try{return !!localStorage.getItem('ailocal')}catch(e){return false}}
+async function aiLocalProbe(){AILOCAL=false;
+ if(aiLocalWanted())try{const r=await fetch(AILOCALURL+'/health',{signal:AbortSignal.timeout(2000)});AILOCAL=r.ok&&(await r.json()).ok}catch(e){}
+ aiLocalShow();return AILOCAL}
+function aiLocalShow(){const b=document.getElementById('ailocal');if(!b)return;const on=aiLocalWanted();
+ b.textContent=!on?'💻 Mon abonnement Claude':AILOCAL?'💻 Abonnement Claude : connecté':'💻 Abonnement Claude : pont arrêté';
+ b.style.color=on?(AILOCAL?'var(--ok)':'var(--warn)'):'';
+ b.title=on?'Clic : revenir à la clé API':'Passer par Claude Code sur ce PC (lance scripts\\assistant_local.py)'}
+async function aiLocalToggle(force){const on=force||!aiLocalWanted();try{on?localStorage.setItem('ailocal','1'):localStorage.removeItem('ailocal')}catch(e){}
+ await aiLocalProbe();
+ if(AILOCAL){aiKeyForm(false);toast('Le chat passe par ton abonnement Claude (Claude Code sur ce PC)')}
+ else if(on)toast('Pont local introuvable : lance « py scripts\\assistant_local.py » puis réessaie');
+ else{toast('Retour à la clé API');if(!aiKey())aiKeyForm()}}
+async function aiSendLocal(q){const inp=document.getElementById('aiin');inp.value='';aiGrow(inp);
+ const H=AIH,start=H.length;H.push({role:'user',content:q});const turn=aiTurn(q);AIBUSY=new AbortController();aiBusy(true);
+ let text='',note='',fin=null;const steps=[];
+ try{let session='';try{session=localStorage.getItem('aisession')||''}catch(e){}
+  const r=await fetch(AILOCALURL+'/ask',{method:'POST',signal:AIBUSY.signal,headers:{'content-type':'application/json'},body:JSON.stringify({q,session})});
+  if(!r.ok)throw new Error('Pont local : erreur '+r.status);
+  const rd=r.body.getReader(),dec=new TextDecoder();let buf='';
+  for(;;){const{done,value}=await rd.read();if(done)break;buf+=dec.decode(value,{stream:true});let i;
+   while((i=buf.indexOf('\n'))>=0){const ev=JSON.parse(buf.slice(0,i));buf=buf.slice(i+1);
+    if(ev.t==='text'){text+=ev.v;aiPaint.live=[{type:'text',text}];aiDraw(turn,start,null)}
+    else if(ev.t==='tool'){steps.push(ev.name);text='';aiPaint.live=null;          // texte d'attente avant un outil : remplacé par le statut
+     aiDraw(turn,start,ev.name==='WebSearch'?{type:'server_tool_use',name:'web_search',input:{query:ev.v}}
+      :ev.name==='WebFetch'?{type:'server_tool_use',name:'web_fetch',input:{url:ev.v}}:{type:'tool_use',name:'tracker_search',input:{query:ev.v}})}
+    else if(ev.t==='done')fin=ev;else if(ev.t==='error')throw new Error('Claude Code : '+ev.v)}}
+  if(!fin)throw new Error('Réponse interrompue (pont local arrêté ?)');
+  try{if(fin.session&&H===AIH)localStorage.setItem('aisession',fin.session)}catch(e){}
+  H.push({role:'assistant',content:[{type:'text',text:fin.text||text}],src:fin.sources||[],steps});if(H===AIH)aiSave()}
+ catch(e){if(H===AIH){AIH.length=start;aiSave()}
+  note=e.name==='AbortError'?'Interrompu.':e instanceof TypeError?'Pont local injoignable : lance « py scripts\\assistant_local.py ».':e.message;
+  if(e instanceof TypeError)aiLocalProbe()}
+ aiPaint.live=null;AIBUSY=null;aiBusy(false);aiDraw(turn,start,null,true,note)}
