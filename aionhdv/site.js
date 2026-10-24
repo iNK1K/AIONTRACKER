@@ -1183,8 +1183,9 @@ function chDetail(c,e,own,bud){const N=c.tiers.length,T=e.T,n=v=>v==null?'–':k
   ?'<p class="sub">Pour l’option « '+jEsc(chLabel(c,j))+' » :</p><ul>'+spk.sort((a,b)=>b.g-a.g).map(s=>'<li><b>'+jEsc(s.p.n)+'</b> à '+n(s.p.buy)+' (médiane 7 j '+n(s.p.med)+(s.p.below!==undefined?', dernier passage sous la médiane : '+when(s.p.below):'')+') : <b class="pos">'+n(s.g)+' de moins par base</b> si le prix revient à la normale ('+NF.format(Math.ceil(s.qty))+' unités en moyenne)</li>').join('')+'</ul>'
   :'<p class="sub">Aucun ingrédient de l’option « '+jEsc(chLabel(c,j))+' » au-dessus de sa médiane 7 j (+10 %).</p>');
  h+='<h3 style="margin:12px 0 4px">🔁 Transmutation</h3>'+(trs.length?'<ul>'+trs.map(s=>s.g!=null
-   ?'<li>Ne mets pas ton <b>'+jEsc(s.p.res)+'</b> : vends-le brut ('+n(s.p.rawres)+' net /u) et transmute du <b>'+jEsc(s.p.raws)+'</b> ('+n(s.u)+' /u) : <b class="pos">+'+n(s.g)+' par base</b> ('+NF.format(Math.ceil(s.qty))+' unités)</li>'
-   :'<li><b>'+jEsc(s.p.via||s.p.n)+'</b> : achète du <b>'+jEsc(s.p.n)+'</b> ('+n(s.p.buy)+' /u) et transmute-le, c’est moins cher que de l’acheter directement</li>').join('')+'</ul>'
+   ?'<li>Vends ton <b>'+jEsc(s.p.res)+'</b> récolté brut ('+n(s.p.rawres)+' net /u) et mets à sa place dans le craft du <b>'+jEsc(s.p.raws)+'</b> transmuté en '+jEsc(s.p.res)+' ('+n(s.u)+' /u, ce que ton '+jEsc(s.p.raws)+' rapporterait vendu) : <b class="pos">+'+n(s.g)+' par base</b> ('+NF.format(Math.ceil(s.qty))+' unités)'
+   +'<div class="sub">La ressource transmutée est liée : elle ne se revend pas, elle part dans le craft, c’est l’objet fabriqué qui se vend.</div></li>'
+   :'<li><b>'+jEsc(s.p.via||s.p.n)+'</b> : achète du <b>'+jEsc(s.p.n)+'</b> ('+n(s.p.buy)+' /u) et transmute-le pour le craft, c’est moins cher que d’acheter la ressource directement</li>').join('')+'</ul>'
   :'<p class="sub">Rien à transmuter de plus rentable.</p>');
  // detail des prix
  h+='<details style="margin-top:10px"><summary><b>Détail des prix de chaque palier</b></summary>'+c.tiers.map((t,i)=>{const e2=T[i],rt=e2.rt;
