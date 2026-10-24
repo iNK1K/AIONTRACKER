@@ -134,6 +134,7 @@ code{background:var(--card2);padding:1px 6px;border-radius:5px}
 .aikey input{width:100%;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg2);color:var(--txt);font:inherit;margin:8px 0}
 .aikey button{background:var(--acc);color:#111;border:0;border-radius:8px;padding:7px 14px;font:inherit;font-weight:700;cursor:pointer;margin-right:8px}
 .aikey button.sec{background:none;color:var(--mut);border:1px solid var(--line)}
+.aiopts{display:grid;gap:10px;margin-bottom:8px}.aiopt{border:1px solid var(--line);border-radius:10px;padding:10px 12px}.aiopt.on{border-color:var(--ok)}
 """
 
 

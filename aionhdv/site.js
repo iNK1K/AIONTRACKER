@@ -674,21 +674,30 @@ function aiLoad(){const v=(document.getElementById('ai')||{dataset:{}}).dataset.
  return window.ASSIST?Promise.resolve():new Promise(ok=>{const sc=document.createElement('script');sc.src='assist.js?v='+v;sc.onload=ok;sc.onerror=ok;document.head.appendChild(sc)})}
 function aiInit(){const box=document.getElementById('aimsgs');if(!box)return;if(aiRenderAll.hello==null)aiRenderAll.hello=box.innerHTML;aiLoad();aiCostShow();
  if(!AIH.length){try{AIH=JSON.parse(localStorage.getItem('aichat')||'[]')}catch(e){AIH=[]}if(AIH.length)aiRenderAll()}
- aiLocalProbe().then(()=>{if(!AILOCAL&&!aiKey())aiKeyForm();else setTimeout(()=>document.getElementById('aiin').focus(),0)})}
-function aiKeyForm(on){const box=document.getElementById('aikey');if(on===false){box.hidden=true;return}box.hidden=false;
- box.innerHTML='<b>Clé API Anthropic</b><div class="sub">Une clé qui commence par <code>sk-ant-api…</code>, créée sur '
-  +'<a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a> (mets une limite de dépense '
-  +'mensuelle, et active la recherche web dans les réglages de l’organisation). Elle reste dans ce navigateur, jamais sur GitHub.</div>'
-  +'<input id="aikeyin" type="password" autocomplete="off" placeholder="sk-ant-api03-…" value="'+(aiKey()?'••••••••':'')+'">'
-  +'<button onclick="aiKeySet()">Enregistrer</button>'+(aiKey()?'<button class="sec" onclick="aiKeyForget()">Oublier la clé</button>':'')
-  +'<button class="sec" onclick="aiKeyForm(false)">Fermer</button><div id="aikeymsg" class="sub"></div>'
-  +'<div class="sub" style="margin-top:10px">Ou avec ton abonnement Claude, sans clé : lance <code>py scripts\\assistant_local.py</code> sur ton PC '
-  +'(Claude Code installé et connecté), puis <button class="sec" onclick="aiLocalToggle(true)">Utiliser mon abonnement (ce PC)</button></div>'}
-function aiKeySet(){const v=document.getElementById('aikeyin').value.trim(),msg=document.getElementById('aikeymsg');if(!v||v.startsWith('•'))return;
- if(v.startsWith('sk-ant-oat')){msg.innerHTML='<span class="neg">C’est un jeton d’abonnement Claude (Pro/Max) : il ne marche que dans les applis Claude, pas sur un site. '
-  +'Il faut une clé API de la console.</span>';return}
+ (aiMode()==='local'?aiLocalProbe():Promise.resolve()).then(()=>{aiModeShow();if(!aiReady())aiKeyForm();else setTimeout(()=>document.getElementById('aiin').focus(),0)})}
+function aiKeyForm(on){const box=document.getElementById('aikey');if(on===false){box.hidden=true;return}box.hidden=false;const m=aiMode(),G=aiGH(),
+  sec=(id,title,sub,body)=>'<div class="aiopt'+(m===id?' on':'')+'"><b>'+title+'</b>'+(m===id?' <span class="badge b-ok">utilisé</span>':'')
+   +'<div class="sub">'+sub+'</div>'+body+'</div>';
+ box.innerHTML='<div class="aiopts">'
+  +sec('gh','AION Helper sur GitHub','Ton abonnement Claude, toujours en ligne : chaque question lance Claude Code sur GitHub (1 à 2 min par réponse). '
+   +'Jeton GitHub « fine-grained » limité au dépôt de l’assistant (Actions : lecture et écriture, Contents : lecture seule). Il reste dans ce navigateur.',
+   '<input id="aighrepo" placeholder="Dépôt, ex. Emikode/aion-helper" value="'+escH(G.repo||'')+'">'
+   +'<input id="aightok" type="password" autocomplete="off" placeholder="github_pat_…" value="'+(G.token?'••••••••':'')+'">'
+   +'<button onclick="aiGHSet()">Utiliser</button>')
+  +sec('local','Claude Code sur ce PC','Ton abonnement Claude, réponse en direct, seulement quand <code>py scripts\\assistant_local.py</code> tourne sur ce PC '
+   +'(Chrome demande une fois l’accès au réseau local : accepter).','<button onclick="aiLocalUse()">Utiliser</button>')
+  +sec('api','Clé API Anthropic','Payée à l’usage (≈ 0,10 à 0,40 $ par question) : clé <code>sk-ant-api…</code> créée sur '
+   +'<a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>, avec une limite de dépense mensuelle '
+   +'et la recherche web activée. Elle reste dans ce navigateur.',
+   '<input id="aikeyin" type="password" autocomplete="off" placeholder="sk-ant-api03-…" value="'+(aiKey()?'••••••••':'')+'">'
+   +'<button onclick="aiKeySet()">Utiliser</button>'+(aiKey()?'<button class="sec" onclick="aiKeyForget()">Oublier la clé</button>':''))
+  +'</div><div id="aikeymsg" class="sub"></div><button class="sec" onclick="aiKeyForm(false)">Fermer</button>'}
+function aiKeySet(){const v=document.getElementById('aikeyin').value.trim(),msg=document.getElementById('aikeymsg');
+ if(v.startsWith('•')&&aiKey()){aiSetMode('api');aiKeyForm(false);return}if(!v)return;
+ if(v.startsWith('sk-ant-oat')){msg.innerHTML='<span class="neg">C’est un jeton d’abonnement Claude (Pro/Max) : il ne marche pas comme clé API. '
+  +'Il va dans le dépôt AION Helper (secret GitHub), puis choisis « AION Helper sur GitHub ».</span>';return}
  if(!v.startsWith('sk-ant-')){msg.innerHTML='<span class="neg">Ce n’est pas une clé Anthropic (elle commence par sk-ant-api).</span>';return}
- try{localStorage.setItem('aikey',v)}catch(e){}aiKeyForm(false);toast('Clé enregistrée dans ce navigateur');document.getElementById('aiin').focus()}
+ try{localStorage.setItem('aikey',v)}catch(e){}aiSetMode('api');aiKeyForm(false);toast('Clé enregistrée dans ce navigateur');document.getElementById('aiin').focus()}
 function aiKeyForget(){try{localStorage.removeItem('aikey')}catch(e){}aiKeyForm();toast('Clé oubliée dans ce navigateur')}
 function aiGrow(t){t.style.height='auto';t.style.height=Math.min(t.scrollHeight,220)+'px'}
 function aiNew(){if(AIBUSY)AIBUSY.abort();AIH=[];aiSave();try{localStorage.removeItem('aisession')}catch(e){}aiRenderAll();document.getElementById('aiin').focus()}
@@ -768,8 +777,10 @@ async function aiStream(signal,draw){
    else if(ev.type==='error')throw new Error((ev.error&&ev.error.message)||'erreur de l’API')}}
  msg.content=blocks.filter(Boolean);return msg}
 async function aiSend(){const inp=document.getElementById('aiin'),q=inp.value.trim();
- if(AIBUSY){AIBUSY.abort();return}if(!q)return;if(aiLocalWanted()&&!AILOCAL)await aiLocalProbe();
- if(AILOCAL)return aiSendLocal(q);if(!aiKey()){aiKeyForm();return}
+ if(AIBUSY){AIBUSY.abort();return}if(!q)return;const mode=aiMode();
+ if(mode==='gh'){if(!aiGH().token){aiKeyForm();return}return aiSendGH(q)}
+ if(mode==='local'){if(!AILOCAL)await aiLocalProbe();if(AILOCAL)return aiSendLocal(q);aiKeyForm();aiLocalUse();return}
+ if(!aiKey()){aiKeyForm();return}
  await aiLoad();inp.value='';aiGrow(inp);
  const H=AIH,start=H.length;H.push({role:'user',content:q});const turn=aiTurn(q);AIBUSY=new AbortController();aiBusy(true);
  let note='';
@@ -855,19 +866,10 @@ function aiMd(src){const L=escH(src||'').split('\n'),out=[];let i=0;
 // Le chat passe par Claude Code sur ce PC (abonnement de la personne connectée) au lieu de l'API : activé à la main,
 // pour ne jamais sonder 127.0.0.1 chez quelqu'un qui n'a pas lancé le pont.
 const AILOCALURL='http://127.0.0.1:8787';let AILOCAL=false;
-function aiLocalWanted(){try{return !!localStorage.getItem('ailocal')}catch(e){return false}}
+function aiLocalWanted(){return aiMode()==='local'}
 async function aiLocalProbe(){AILOCAL=false;
  if(aiLocalWanted())try{const r=await fetch(AILOCALURL+'/health',{signal:AbortSignal.timeout(2000)});AILOCAL=r.ok&&(await r.json()).ok}catch(e){}
- aiLocalShow();return AILOCAL}
-function aiLocalShow(){const b=document.getElementById('ailocal');if(!b)return;const on=aiLocalWanted();
- b.textContent=!on?'💻 Mon abonnement Claude':AILOCAL?'💻 Abonnement Claude : connecté':'💻 Abonnement Claude : pont arrêté';
- b.style.color=on?(AILOCAL?'var(--ok)':'var(--warn)'):'';
- b.title=on?'Clic : revenir à la clé API':'Passer par Claude Code sur ce PC (lance scripts\\assistant_local.py)'}
-async function aiLocalToggle(force){const on=force||!aiLocalWanted();try{on?localStorage.setItem('ailocal','1'):localStorage.removeItem('ailocal')}catch(e){}
- await aiLocalProbe();
- if(AILOCAL){aiKeyForm(false);toast('Le chat passe par ton abonnement Claude (Claude Code sur ce PC)')}
- else if(on)toast('Pont local injoignable : lance « py scripts\\assistant_local.py », et si Chrome demande l’accès aux appareils du réseau local, accepte');
- else{toast('Retour à la clé API');if(!aiKey())aiKeyForm()}}
+ aiModeShow();return AILOCAL}
 async function aiSendLocal(q){const inp=document.getElementById('aiin');inp.value='';aiGrow(inp);
  const H=AIH,start=H.length;H.push({role:'user',content:q});const turn=aiTurn(q);AIBUSY=new AbortController();aiBusy(true);
  let text='',note='',fin=null;const steps=[];
@@ -889,3 +891,59 @@ async function aiSendLocal(q){const inp=document.getElementById('aiin');inp.valu
   note=e.name==='AbortError'?'Interrompu.':e instanceof TypeError?'Pont local injoignable : lance « py scripts\\assistant_local.py » (et accepte l’accès au réseau local si Chrome le demande).':e.message;
   if(e instanceof TypeError)aiLocalProbe()}
  aiPaint.live=null;AIBUSY=null;aiBusy(false);aiDraw(turn,start,null,true,note)}
+
+// ---------------------------------------------------------------- mode de réponse : clé API (api), Claude Code sur ce PC (local), AION Helper sur GitHub (gh)
+function aiMode(){let m='';try{m=localStorage.getItem('aimode')||(localStorage.getItem('ailocal')?'local':'')}catch(e){}return m||'api'}
+function aiSetMode(m){try{localStorage.setItem('aimode',m);localStorage.removeItem('ailocal')}catch(e){}aiModeShow()}
+function aiGH(){try{return JSON.parse(localStorage.getItem('aigh')||'{}')}catch(e){return{}}}
+function aiReady(){const m=aiMode();return m==='gh'?!!aiGH().token:m==='local'?AILOCAL:!!aiKey()}
+function aiModeShow(){const b=document.getElementById('aimode');if(!b)return;const m=aiMode();
+ b.textContent='⚙ '+(m==='gh'?'AION Helper (GitHub)':m==='local'?'Claude Code sur ce PC'+(AILOCAL?'':' : pont arrêté'):'Clé API');
+ b.style.color=m==='local'&&!AILOCAL?'var(--warn)':''}
+function aiStatus(turn,t){const st=turn.querySelector('.aistat');if(st){st.style.display='';st.textContent=t}}
+function aiSleep(ms,signal){return new Promise((ok,ko)=>{const t=setTimeout(ok,ms);
+ signal.addEventListener('abort',()=>{clearTimeout(t);ko(new DOMException('Interrompu','AbortError'))},{once:true})})}
+// conversation en paires [question, réponse] (texte seulement), pour les modes sans session côté serveur
+function aiPairs(H){const out=[];let q=null,a=[];
+ H.forEach(m=>{if(m.role==='user'&&typeof m.content==='string'){if(q!=null)out.push([q,a.join('\n\n')]);q=m.content;a=[]}
+  else if(m.role==='assistant')a.push(m.content.filter(b=>b.type==='text').map(b=>b.text).join(''))});
+ if(q!=null)out.push([q,a.join('\n\n')]);return out}
+async function aiLocalUse(){aiSetMode('local');await aiLocalProbe();
+ if(AILOCAL){aiKeyForm(false);toast('Le chat passe par Claude Code sur ce PC (ton abonnement Claude)')}
+ else document.getElementById('aikeymsg').innerHTML='<span class="neg">Pont local injoignable : lance « py scripts\\assistant_local.py », '
+  +'et si Chrome demande l’accès aux appareils du réseau local, accepte.</span>'}
+async function aiGHSet(){const msg=document.getElementById('aikeymsg'),G=aiGH(),t=document.getElementById('aightok').value.trim(),
+  repo=document.getElementById('aighrepo').value.trim().replace(/^https:\/\/github\.com\//,'').replace(/\/+$/,''),token=t&&!t.startsWith('•')?t:G.token;
+ if(!/^[\w.-]+\/[\w.-]+$/.test(repo)||!token){msg.innerHTML='<span class="neg">Indique le dépôt (propriétaire/nom) et le jeton GitHub.</span>';return}
+ msg.textContent='Vérification auprès de GitHub…';
+ try{const r=await fetch('https://api.github.com/repos/'+repo+'/actions/workflows/ask.yml',{headers:{Authorization:'Bearer '+token,Accept:'application/vnd.github+json'}});
+  if(!r.ok){msg.innerHTML='<span class="neg">GitHub refuse ('+r.status+') : vérifie le dépôt et les droits du jeton (Actions, Contents).</span>';return}}
+ catch(e){msg.innerHTML='<span class="neg">GitHub injoignable.</span>';return}
+ try{localStorage.setItem('aigh',JSON.stringify({repo,token}))}catch(e){}
+ aiSetMode('gh');aiKeyForm(false);toast('AION Helper (GitHub) activé');document.getElementById('aiin').focus()}
+
+// ---------------------------------------------------------------- AION Helper sur GitHub
+// La page lance le workflow ask.yml du dépôt de l'assistant (question + conversation), puis relit a/<id>.json sur la branche
+// answers : avancement (« Recherche web : … ») puis réponse. Claude Code y tourne avec l'abonnement Claude du propriétaire.
+async function aiSendGH(q){const inp=document.getElementById('aiin'),G=aiGH();inp.value='';aiGrow(inp);
+ const H=AIH,start=H.length,history=aiPairs(H);H.push({role:'user',content:q});const turn=aiTurn(q);AIBUSY=new AbortController();aiBusy(true);
+ const sig=AIBUSY.signal,id=Date.now().toString(36)+Math.random().toString(36).slice(2,6),t0=Date.now(),secs=()=>Math.round((Date.now()-t0)/1000)+' s';
+ const gh=(path,opt)=>fetch('https://api.github.com/repos/'+G.repo+path,Object.assign({signal:sig,cache:'no-store',
+  headers:{Authorization:'Bearer '+G.token,Accept:'application/vnd.github+json'}},opt));
+ let note='';
+ try{let prompt=JSON.stringify({q,history});
+  while(prompt.length>60000&&history.length){history.shift();prompt=JSON.stringify({q,history})}   // limite des entrées d'un workflow
+  const r=await gh('/actions/workflows/ask.yml/dispatches',{method:'POST',body:JSON.stringify({ref:'main',inputs:{id,prompt}})});
+  if(r.status!==204)throw new Error(r.status===401||r.status===403||r.status===404
+   ?'GitHub refuse la question (erreur '+r.status+') : vérifie le jeton et le dépôt dans ⚙':'GitHub : erreur '+r.status);
+  aiStatus(turn,'Question envoyée à GitHub, démarrage d’une machine…');
+  let fin=null;
+  while(!fin){await aiSleep(4000,sig);if(Date.now()-t0>15*6e4)throw new Error('Pas de réponse après 15 min : regarde l’onglet Actions du dépôt '+G.repo);
+   const a=await gh('/contents/a/'+id+'.json?ref=answers');
+   if(a.status===404){aiStatus(turn,'Démarrage d’une machine GitHub… '+secs());continue}
+   if(!a.ok)continue;
+   const d=JSON.parse(b64d((await a.json()).content));
+   if(d.status==='done')fin=d;else if(d.status==='error')throw new Error('AION Helper : '+d.error);else aiStatus(turn,(d.step||'Recherche…')+' · '+secs())}
+  H.push({role:'assistant',content:[{type:'text',text:fin.text||''}],src:fin.sources||[],steps:fin.steps||[]});if(H===AIH)aiSave()}
+ catch(e){if(H===AIH){AIH.length=start;aiSave()}note=e.name==='AbortError'?'Interrompu (la réponse en cours sur GitHub est abandonnée).':e.message}
+ AIBUSY=null;aiBusy(false);aiDraw(turn,start,null,true,note)}
