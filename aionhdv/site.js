@@ -1027,7 +1027,7 @@ async function aiServerProbe(){if(location.protocol==='file:')return false;
 function aiUserSwitch(){let was=null;try{was=localStorage.getItem('aiuser');localStorage.setItem('aiuser',AIUSER)}catch(e){}
  if(!was||was===AIUSER)return;
  try{['aichat','aisession','aichat_perso','aisession_perso','aiperso'].forEach(k=>localStorage.removeItem(k))}catch(e){}
- Object.values(AICH).forEach(C=>{if(C.busy)C.busy.abort();C.h=[];C.u=null;if(C.hello!=null)aiRenderAll(C)});PSHEET=null;PARM=null;pRender()}
+ Object.values(AICH).forEach(C=>{if(C.busy)C.busy.abort();C.h=[];C.u=null;if(C.hello!=null)aiRenderAll(C)});PSHEET=null;PARM=null;PVIEW=null;PFIND=false;pRender()}
 function aiMode(){if(AISERVER)return 'server';let m='';try{m=localStorage.getItem('aimode')||(localStorage.getItem('ailocal')?'local':'')}catch(e){}return m||'api'}
 function aiSetMode(m){try{localStorage.setItem('aimode',m);localStorage.removeItem('ailocal')}catch(e){}aiModeShow()}
 function aiReady(){const m=aiMode();return m==='server'?true:m==='local'?AILOCAL:!!aiKey()}
@@ -1169,6 +1169,7 @@ function aiPersoPrompt(C){const P=pGet(),arm=aArmText(PARM),secs=pSecs(P).filter
  else if(!arm)t+='\n\nThe player\'s character sheet is still empty: as soon as they share a screenshot or details of their character, fill it with a ```perso block.';
  if(C&&C.id==='perso')t+='\n\nThis conversation is in the Character tab of the site: the player talks about their own character, sends screenshots '
   +'to fill the sheet and asks how to progress. Base every answer on the sheet.';
+ if(PVIEW&&PVIEW.info&&PVIEW.id!==(PARM||{}).id)t+=aArmText(PVIEW,true);
  return t.slice(0,30000)}
 
 // ---------------------------------------------------------------- armurerie officielle (serveur AION Helper : api/armory)
@@ -1176,7 +1177,7 @@ function aiPersoPrompt(C){const P=pGet(),arm=aArmText(PARM),secs=pSecs(P).filter
 // avec la fiche de chaque objet (stats, bonus, pierres de mana, pierre divine), Arcanes, familier, ailes, attributs et divinités,
 // Daevanion, compétences, titres. Relue à l'ouverture de l'onglet si elle date de plus de 30 min, et avec ↻ ; ce qui a progressé entre
 // deux lectures va dans le journal de la fiche (côté serveur). Sans serveur (page GitHub), la fiche vient des seules captures.
-let PARM=null,PTAB=null,PTIPS=[];
+let PARM=null,PVIEW=null,PFIND=false,PTAB=null,PTIPS=[];   // PVIEW : un autre joueur ouvert depuis 🔍 (lu, pas gardé)
 const PARMSECS=['identite','equipement','daevanion','arcanes','familiers'];          // sections de la fiche que l'armurerie remplace
 const PSLOT={MainHand:'Arme',SubHand:'Garde-bras',Helmet:'Casque',Shoulder:'Épaulettes',Torso:'Torse',Gloves:'Gants',Belt:'Ceinture',
  Pants:'Bas',Boots:'Chaussures',Cape:'Cape',Necklace:'Collier',Amulet:'Amulette',Earring1:'Boucle d’oreille 1',Earring2:'Boucle d’oreille 2',
@@ -1248,8 +1249,10 @@ function pHead(A,P,secs){const kpi=(l,x)=>x?'<div class="kpi"><div class="l">'+l
   return '<div class="phead"><div class="who"><div class="pav">'+(p.profileImage?'<img src="'+escH(p.profileImage)+'" alt="">':escH((p.characterName||'?').charAt(0)))+'</div>'
    +'<div><h2>'+escH(p.characterName||'')+'</h2><div class="sub">'+escH([p.className,p.characterLevel&&'niveau '+p.characterLevel,p.raceName,p.serverName].filter(Boolean).join(' · '))+'</div>'
    +(p.titleName?'<div class="ptitle" style="color:'+(AIGRADE[p.titleGrade]||'var(--mut)')+'">« '+escH(p.titleName)+' »</div>':'')+'</div>'
-   +'<div class="pacts"><button class="pbtn" id="pref" onclick="aRefresh()" title="Relire l’armurerie officielle">↻ '+escH(pAge(A.fetched))+'</button>'
-   +'<button class="pbtn" onclick="pPick()" title="Ajouter des captures">📎</button></div></div>'
+   +'<div class="pacts">'+(A===PVIEW?'<button class="pbtn" onclick="aBack()">← Mon personnage</button>'
+    :'<button class="pbtn" id="pref" onclick="aRefresh()" title="Relire l’armurerie officielle">↻ '+escH(pAge(A.fetched))+'</button>'
+    +'<button class="pbtn" onclick="pFind()" title="Chercher un autre personnage">🔍</button>'
+    +'<button class="pbtn" onclick="pPick()" title="Ajouter des captures">📎</button>')+'</div></div>'
    +'<div class="kpis">'+kpi('Puissance de combat',p.combatPower!=null?NF.format(p.combatPower):'')+kpi('Niveau d’objet',il!=null?NF.format(il):'')+'</div>'+more+'</div>'}
  const idr=(secs.find(s=>s.k==='identite')||{r:[]}).r,top={},tags=[];
  idr.forEach(r=>{const t=PTOP[pKey(r[0])];if(t&&!top[t])top[t]=r[1];else tags.push(r)});
@@ -1260,11 +1263,17 @@ function pHead(A,P,secs){const kpi=(l,x)=>x?'<div class="kpi"><div class="l">'+l
    +'<div class="pacts"><button class="pbtn" onclick="pPick()" title="Ajouter des captures">📎 Captures</button></div></div>'
    +(top.cp||top.il?'<div class="kpis">'+kpi('Puissance de combat',top.cp)+kpi('Niveau d’objet',top.il)+'</div>':'')
    +(tags.length?'<div class="ptags">'+tags.map(([f,x])=>'<span>'+escH(f)+' <b>'+aiInline(escH(x))+'</b></span>').join('')+'</div>':'')+more+'</div>'}
-function pLinkCard(){return '<div class="plink"><b>🔗 Relie ton personnage officiel</b><div class="sub">Équipement exact avec la fiche de chaque objet, stats, Daevanion, '
- +'compétences et titres, lus sur l’armurerie officielle de NCSOFT (la même source que shugo.gg), puis relus tout seuls.</div>'
- +'<form onsubmit="aSearch(event)"><input id="plq" class="search" placeholder="Nom du personnage" value="'+escH(AIUSER||'')+'" autocomplete="off">'
+// find : 🔍 chercher n'importe quel joueur (son personnage s'ouvre à la place du tien, sans être gardé) ; sinon relier le sien
+function pLinkCard(find){return '<div class="plink">'+(find?'<b>🔍 Chercher un personnage</b><button class="pbtn pclose" onclick="pFind()" title="Fermer">✕</button>'
+  +'<div class="sub">N’importe quel joueur des serveurs mondiaux, lu sur l’armurerie officielle : équipement, stats, Daevanion et compétences. '
+  +'Tu peux ensuite comparer avec le tien en posant la question à l’assistant.</div>'
+  :'<b>🔗 Relie ton personnage officiel</b><div class="sub">Équipement exact avec la fiche de chaque objet, stats, Daevanion, '
+  +'compétences et titres, lus sur l’armurerie officielle de NCSOFT (la même source que shugo.gg), puis relus tout seuls.</div>')
+ +'<form onsubmit="aSearch(event)"><input id="plq" class="search" placeholder="Nom du personnage" value="'+(find?'':escH(AIUSER||''))+'" autocomplete="off">'
  +'<button class="pbtn">Chercher</button></form><div id="plres"></div></div>'}
-function pRender(){const box=document.getElementById('psheet');if(!box)return;const P=pGet(),A=PARM&&PARM.info?PARM:null,secs=pSecs(P);pTipHide();
+function pFind(){PFIND=!PFIND;pRender();const i=document.getElementById('plq');if(PFIND&&i){i.focus();document.getElementById('psheet').scrollTop=0}}
+function pRender(){const box=document.getElementById('psheet');if(!box)return;const view=!!(PVIEW&&PVIEW.info),
+  A=view?PVIEW:PARM&&PARM.info?PARM:null,P=view?{s:[],log:[]}:pGet(),secs=view?[]:pSecs(P);pTipHide();
  if(!A&&!secs.length&&!(P.log||[]).length){box.innerHTML=(aiMode()==='server'?pLinkCard():'')+'<div class="pempty"><div class="pav">🧙</div><h2>Ta fiche de personnage</h2>'
    +'<p class="lead">Envoie des captures de ton perso dans la conversation : l’assistant les lit et remplit la fiche tout seul. '
    +'Il la connaît ensuite dans toutes ses réponses, ici comme dans 💬 Assistant.</p><ul>'
@@ -1273,7 +1282,9 @@ function pRender(){const box=document.getElementById('psheet');if(!box)return;co
    +'</ul><button class="pbtn" onclick="pPick()">📎 Ajouter des captures</button><div class="sub">ou glisse-les ici, ou colle-les (Ctrl + V)</div></div>';return}
  PTIPS=[];if(!PTAB){try{PTAB=localStorage.getItem('ptab')}catch(e){}}if(!PTABS.some(t=>t[0]===PTAB))PTAB='gear';
  const body={gear:pTabGear,stats:pTabStats,daev:pTabDaev,skills:pTabSkills,more:pTabMore}[PTAB](A,P,secs);
- box.innerHTML=pHead(A,P,secs)+'<div class="pbody"><div class="ptabs" role="tablist">'+PTABS.map(([k,l])=>'<button role="tab" aria-selected="'+(k===PTAB)+'"'
+ box.innerHTML=(PFIND&&A?pLinkCard(true):'')+(view?'<div class="pview">👁 <span>Le personnage d’un autre joueur, lu sur l’armurerie officielle '
+   +escH(pAge(A.fetched))+'. L’assistant le voit aussi : demande-lui de comparer avec le tien.</span><button class="pbtn" onclick="aLinkView()">C’est moi : le relier</button></div>':'')
+  +pHead(A,P,secs)+'<div class="pbody"><div class="ptabs" role="tablist">'+PTABS.map(([k,l])=>'<button role="tab" aria-selected="'+(k===PTAB)+'"'
   +(k===PTAB?' class="on"':'')+' onclick="pTab(\''+k+'\')">'+l+'</button>').join('')+'</div><div class="ptab">'+body+'</div></div>';
  pTipBind(box)}
 function pTab(k){PTAB=k;try{localStorage.setItem('ptab',k)}catch(e){}pRender()}
@@ -1331,6 +1342,7 @@ function pTabMore(A,P,secs){const T=A?((A.info.title||{}).titleList||[]):[],TT=A
  secs.filter(s=>!['stats','equipement','daevanion','competences','arcanes','familiers'].includes(s.k)&&!(A&&s.k==='identite')).forEach(s=>h+=pCard(s));
  if((P.log||[]).length)h+='<div class="pcard"><h4>📈 Progression</h4><div class="plog">'+P.log.slice(-15).reverse()
   .map(([d,x])=>'<div><span>'+escH(d)+'</span>'+aiInline(escH(x))+'</div>').join('')+'</div></div>';
+ if(A&&A===PVIEW)return h;
  h+='<div class="ptools"><button class="pbtn" onclick="pEdit()">✎ Modifier les notes</button><button class="pbtn" onclick="pReset()">🗑 Effacer les notes</button>'
   +(A?'<button class="pbtn" onclick="aUnlink()">Délier le personnage</button>':'')
   +'<span class="sub">'+(P.d?'Notes mises à jour le '+escH(new Date(P.d.replace(' ','T')+'Z').toLocaleString('fr-FR',{dateStyle:'short',timeStyle:'short'})):'')
@@ -1359,15 +1371,26 @@ async function aSearch(e){e.preventDefault();const q=document.getElementById('pl
  try{const r=await fetch('api/armory/search?q='+encodeURIComponent(q),{cache:'no-store'});if(!r.ok)throw new Error(await r.text());
   const L=(await r.json()).list||[],srv=(window.ASSIST||{}).server||'',n=normName(q);
   L.sort((a,b)=>((b.server===srv)-(a.server===srv))||((normName(b.name)===n)-(normName(a.name)===n))||(b.level-a.level));
-  box.innerHTML=L.length?L.slice(0,12).map(c=>'<button class="plc" data-id="'+escH(c.id)+'" onclick="aLink(this.dataset.id,'+(+c.serverId)+')">'
+  box.innerHTML=L.length?L.slice(0,12).map(c=>'<button class="plc" data-id="'+escH(c.id)+'" onclick="aPick(this.dataset.id,'+(+c.serverId)+')">'
    +(c.img?'<img src="'+escH(c.img)+'" alt="">':'')+'<span><b>'+escH(c.name)+'</b><span class="sub">'
    +escH([c.cls,'niveau '+c.level,c.server,c.race].filter(Boolean).join(' · '))+'</span></span></button>').join('')
    :'<div class="sub">Aucun personnage à ce nom sur les serveurs mondiaux.</div>'}
  catch(err){box.innerHTML='<div class="sub neg">'+escH(err.message||'Erreur')+'</div>'}}
 async function aLink(id,sid){const box=document.getElementById('plres');if(box)box.innerHTML='<div class="sub">Lecture de l’armurerie officielle (une dizaine de secondes)…</div>';
  try{const r=await fetch('api/armory',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id,serverId:sid})});
-  if(!r.ok)throw new Error(await r.text());PARM=await r.json();PTAB='gear';pRender();toast('Personnage relié : '+(((PARM.info||{}).profile||{}).characterName||''))}
+  if(!r.ok)throw new Error(await r.text());PARM=await r.json();PVIEW=null;PFIND=false;PTAB='gear';pRender();
+  toast('Personnage relié : '+(((PARM.info||{}).profile||{}).characterName||''))}
  catch(e){if(box)box.innerHTML='<div class="sub neg">'+escH(e.message)+'</div>'}}
+// résultat de recherche : sans personnage relié, c'est le sien ; sinon on ouvre celui d'un autre joueur (ou on revient au sien)
+function aPick(id,sid){if(!PARM)return aLink(id,sid);if(id===PARM.id)return aBack();aView(id,sid)}
+async function aView(id,sid){const box=document.getElementById('plres');if(box)box.innerHTML='<div class="sub">Lecture de l’armurerie officielle (quelques secondes)…</div>';
+ try{const r=await fetch('api/armory/view?id='+encodeURIComponent(id)+'&server='+sid,{cache:'no-store'});if(!r.ok)throw new Error(await r.text());
+  PVIEW=await r.json();PFIND=false;PTAB='gear';pRender();const s=document.getElementById('psheet');if(s){s.scrollTop=0;s.classList.add('open')}}
+ catch(e){if(box)box.innerHTML='<div class="sub neg">'+escH(e.message)+'</div>'}}
+function aBack(){PVIEW=null;PFIND=false;pRender()}
+function aLinkView(){const p=((PVIEW||{}).info||{}).profile||{};
+ if(confirm('Relier '+(p.characterName||'ce personnage')+' comme TON personnage ? Il remplacera '+((((PARM||{}).info||{}).profile||{}).characterName||'l’actuel')+' dans ta fiche.'))
+  aLink(PVIEW.id,PVIEW.serverId)}
 async function aLoad(){if(aiMode()!=='server')return;
  try{const r=await fetch('api/armory',{cache:'no-store'});if(!r.ok)return;const a=await r.json();PARM=a&&a.id?a:null;pRender();
   if(PARM&&!(Date.now()-Date.parse(PARM.fetched+'Z')<18e5))aRefresh(true)}catch(e){}}
@@ -1387,9 +1410,12 @@ function aItemText(it){const d=it.d||{},x=[it.n+' +'+(it.e||0)+(d.maxEnchantLeve
  if((d.godStoneStat||[]).length)x.push('godstone '+d.godStoneStat.map(s=>s.name).join(', '));
  if(d.set&&d.set.name)x.push('set '+d.set.name+' ('+(d.set.equippedCount||0)+' equipped)');
  return x.join('; ')}
-function aArmText(A){if(!A||!A.info)return '';const p=A.info.profile||{},st=(A.info.stat||{}).statList||[],G=aGear(A),E=A.equipment||{},pw=E.petwing||{};
+// other : le personnage d'un autre joueur ouvert depuis 🔍, pour comparer (jamais dans la fiche)
+function aArmText(A,other){if(!A||!A.info)return '';const p=A.info.profile||{},st=(A.info.stat||{}).statList||[],G=aGear(A),E=A.equipment||{},pw=E.petwing||{};
  const il=(st.find(s=>s.type==='ItemLevel')||{}).value,num=n=>n==null?'?':NF.format(n);
- const L=['\n\nOfficial armory data (NCSOFT\'s official character page, read '+(A.fetched||'?')+' UTC). It is exact: trust it over screenshots and over '
+ const L=[other?'\n\nThe player is now looking at ANOTHER player\'s character in the Personnage tab (official armory data, read '+(A.fetched||'?')
+  +' UTC, exact). It is not their character: never write ```perso lines about it. Use it when they ask about this player or to compare with their own.'
+  :'\n\nOfficial armory data (NCSOFT\'s official character page, read '+(A.fetched||'?')+' UTC). It is exact: trust it over screenshots and over '
   +'your memory, use its exact item names, and do not write ```perso lines for anything it covers. Earlier messages of this conversation may '
   +'predate it and come from screenshots: where they disagree with it, it is right, and say that you correct yourself. If the player says '
   +'something changed since then, tell them to press ↻ in the Personnage tab.',
