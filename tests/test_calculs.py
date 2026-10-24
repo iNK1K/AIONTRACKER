@@ -332,3 +332,22 @@ class JavaScript(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Chaines(unittest.TestCase):
+    """Cout de la base selon le palier ou l'on commence (chains.option_costs, meme calcul que site.js chOpts)."""
+    CH = dict(tiers=[
+        dict(prof="A", m=0, cv=None, c=0.5, pq=None, pn=10, eb=150, parts=[dict(buy=100, q=1)]),
+        dict(prof="A", m=0, cv=None, c=0.25, pq=1, pn=100, eb=1000, parts=[dict(buy=50, raw=40, q=2)])])
+
+    def test_options(self):
+        from aionhdv.chains import option_costs
+        # palier 0 : (100 - 0,5 x 10 x 0,9) / 0,5 = 191 ; palier 1 : (80 + x - 0,75 x 90) / 0,25
+        self.assertEqual(option_costs(self.CH, lambda *a: 1.0, 0.10), [814, 650, 1000])
+        self.assertEqual(option_costs(self.CH, lambda *a: 1.0, 0.10, own=False)[1], 730)      # ressource achetee 50, pas 40
+
+    def test_echecs_et_niveau(self):
+        from aionhdv.chains import option_costs
+        # reussite 50 %, ingredients perdus : chaque craft reussi coute 2 fois ses ingredients
+        self.assertEqual(option_costs(self.CH, lambda *a: 0.5, 0.10)[1], round((2 * 230 - 67.5) / 0.25))
+        self.assertEqual(option_costs(self.CH, lambda *a: None, 0.10), [None, None, 1000])  # niveau trop bas : acheter

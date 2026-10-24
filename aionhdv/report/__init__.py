@@ -10,6 +10,7 @@ from ..config import REPORT_DIR
 from .accueil import home
 from .assistant import assistant_tab, write_assist_data
 from .base import CSS, Ctx, esc
+from .chaines import chains_tab
 from .fichiers import map_world_ids, write_map_data, write_price_data
 from .metiers import metiers_tab
 from .opportunites import opportunities_tab, planning_tab
@@ -52,6 +53,7 @@ def build(con, cfg, results):
         add("home", "🏠 Aujourd’hui", home(con, cfg, ctx, my, sname))
         add("opps", "🎯 Opportunités", opportunities_tab(cfg, my, precision(con)))
         add("planning", "📅 Planning", planning_tab(cfg, my))
+        add("chains", "⚖️ Acheter ou crafter", chains_tab(ctx, con, cfg, my))
         add("harvest", "🌲 Récolte", harvest_tab(ctx, my, hyp))
         direct, trans = my.get("buy_direct") or [], my.get("buy_trans") or []
         add("buy", "Achat → craft",

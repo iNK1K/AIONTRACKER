@@ -349,7 +349,7 @@ function applyLevels(){const st=lvState();
   // face a la vente du brut : un echec fait aussi perdre les ressources (1 / reussite par craft reussi)
   const vb=el.querySelector('.cvb');if(vb&&el.dataset.brut!=null){const d=Math.round(net-(st.lose?+el.dataset.brut/info.rate:+el.dataset.brut));
    vb.textContent=NF.format(d);vb.dataset.v=d;vb.classList.toggle('pos',d>0);vb.classList.toggle('neg',d<=0)}});
- calc();renderMetiers();todoBuys();if(window.PLANDATA)planSafe();oppRender();if(window.SUPPLY)supplyRender()}
+ calc();renderMetiers();todoBuys();if(window.PLANDATA)planSafe();oppRender();if(window.SUPPLY)supplyRender();if(window.CHAINS)chRender()}
 // « A faire maintenant » : achats -> craft que mes niveaux permettent (metier non renseigne = garde), 2 au plus,
 // avec le taux de reussite quand le niveau est connu
 function todoBuys(){let n=0;
@@ -1072,3 +1072,153 @@ async function aiMemForm(){const box=document.getElementById('aikey');box.hidden
   +'<button onclick="aiMemAdd()">Ajouter</button><button class="sec" onclick="aiKeyForm(false)">Fermer</button>'}
 async function aiMemDel(k){await aiMemPost({del:k});aiMemForm()}
 async function aiMemAdd(){const v=document.getElementById('aimemin').value.trim();if(!v)return;await aiMemPost({add:v});toast('Retenu');aiMemForm()}
+
+// ======================================================================== chaines : acheter ou crafter
+// Chaines d'amelioration (CHAINS, chains.py) : palier t = recette de l'objet normal t.n, dont le combo (t.c) donne
+// l'eclatant t.en, ingredient du palier suivant (t.pq par craft). Option j = j paliers achetes : j = 0 tout crafter
+// depuis l'objet blanc, 0 < j < n acheter l'eclatant du palier j - 1 puis crafter la suite, j = n acheter la base.
+// Meme calcul que chains.option_costs (Python), avec mes niveaux (Mes metiers) et mes options de cet onglet.
+const CHOPEN=new Set();
+function chSt(){const d={own:true,bud:0};try{return Object.assign(d,JSON.parse(localStorage.getItem('chains')||'{}'))}catch(e){return d}}
+function chOpt(k,v){const s=chSt();s[k]=v;try{localStorage.setItem('chains',JSON.stringify(s))}catch(e){}chRender()}
+const CHNET=v=>v==null?null:v*(1-CHAIN_CFG.fees);
+// cout unitaire d'un ingredient : l'acheter, ou utiliser ma recolte (ce qu'elle rapporterait vendue brute, ou l'Od a transmuter)
+function chPart(p,own){const v=[p.buy,own?p.raw:null].filter(x=>x!=null);return v.length?Math.min(...v):null}
+const chMine=(p,own)=>own&&p.raw!=null&&(p.buy==null||p.raw<=p.buy);
+function chSrc(p,own){if(chMine(p,own))return p.raws!==p.res?'ta récolte : '+p.raws+' transmuté':'ta récolte';
+ return p.k==='od'?'Od acheté, transmuté':p.k==='pnj'?'PNJ':p.k==='craft'?'à fabriquer':p.k==='introuvable'?'introuvable':'HDV'}
+// un palier avec mes niveaux : P = ingredients (sans l'eclatant d'avant), r = reussite (null : niveau trop bas)
+function chTier(t,own){const rt=sRate(t.prof,t.m,t.cv),cs=t.parts.map(p=>chPart(p,own));
+ const P=cs.includes(null)?null:cs.reduce((a,c,i)=>a+c*t.parts[i].q,0);
+ return {t,rt,r:rt.lock?null:rt.r,P,pn:CHNET(t.pn)||0,lose:lvState().lose}}
+// cout moyen d'un eclatant du palier « upto » en commencant au palier j (eclatant du palier j - 1 achete)
+function chCost(ch,T,j,upto){let x=j===0?0:ch.tiers[j-1].eb;
+ for(let t=j;t<=upto;t++){const e=T[t];if(x==null||e.P==null||e.r==null||!e.t.c)return null;
+  const K=e.P+(e.t.pq||0)*x,S=e.lose?K/e.r:K;x=(S-(1-e.t.c)*e.pn)/e.t.c}
+ return x}
+function chOpts(ch,T){const n=ch.tiers.length;return Array.from({length:n+1},(_,j)=>j===n?ch.tiers[n-1].eb:chCost(ch,T,j,n-1))}
+function chLabel(ch,j){const n=ch.tiers.length;return j===n?'Acheter la base':j===0?'Tout crafter depuis '+ch.tiers[0].n:'Acheter '+ch.tiers[j-1].en+', crafter la suite'}
+// nombre moyen de crafts (ingredients consommes) de chaque palier pour une base, en commencant au palier j
+function chCrafts(ch,T,j){const n=ch.tiers.length,M=new Array(n).fill(0);let need=1;
+ for(let t=n-1;t>=j;t--){const e=T[t];if(e.r==null)return null;M[t]=need/e.t.c/(e.lose?e.r:1);need=M[t]*(e.t.pq||0)}
+ return M}
+// tirages : cout d'une base (objets normaux revendus) sur N essais, en commencant au palier j
+function chSim(ch,T,j,N){const n=ch.tiers.length,out=[];if(j===n)return null;
+ for(let t=j;t<n;t++){const e=T[t];if(e.P==null||e.r==null||!(e.t.c>0)||!(e.r>0))return null}
+ if(j>0&&ch.tiers[j-1].eb==null)return null;
+ const get=t=>{if(t<j)return ch.tiers[t].eb;const e=T[t];let c=0;
+  for(let k=0;k<1e5;k++){c+=e.P;if(t>0)for(let u=0;u<Math.round(e.t.pq||1);u++)c+=get(t-1);
+   if(e.lose&&Math.random()>=e.r)continue;if(Math.random()<e.t.c)return c;c-=e.pn}return c};
+ for(let i=0;i<N;i++)out.push(get(n-1));return out.sort((a,b)=>a-b)}
+const chQ=(s,q)=>s[Math.min(s.length-1,Math.floor(q*s.length))];
+// vendre ou continuer : valeur d'un eclatant en main = le mieux entre le vendre et s'en servir au palier suivant
+// (dernier palier : l'equipement final le plus rentable)
+function chDP(ch,T){const n=ch.tiers.length,V=new Array(n),rows=[];
+ let best=null;ch.finals.forEach(f=>{const rt=sRate(f.prof,f.m,f.cv),sn=CHNET(f.sell);if(rt.lock||sn==null||f.rest==null)return;
+  const v=((lvState().lose?rt.r*sn:sn)-f.rest)/(f.q||1);if(!best||v>best.v)best={v,f}});
+ for(let t=n-1;t>=0;t--){const sell=CHNET(ch.tiers[t].es);let cont=null,via=null;
+  if(t===n-1){if(best){cont=best.v;via=best.f.n}}
+  else{const e=T[t+1];if(e.P!=null&&e.r!=null&&V[t+1]!=null){const a=e.t.c*V[t+1]+(1-e.t.c)*e.pn;cont=((e.lose?e.r*a:a)-e.P)/(e.t.pq||1);via=e.t.n}}
+  V[t]=Math.max(sell??-Infinity,cont??-Infinity);if(!isFinite(V[t]))V[t]=null;rows.unshift({t,sell,cont,via})}
+ return rows}
+function chEval(ch,own){const T=ch.tiers.map(t=>chTier(t,own)),o=chOpts(ch,T),n=ch.tiers.length;
+ let b=null;o.forEach((v,j)=>{if(v!=null&&(b==null||v<o[b]))b=j});
+ let bc=null;o.forEach((v,j)=>{if(j<n&&v!=null&&(bc==null||v<o[bc]))bc=j});   // meilleure option avec du craft
+ return {T,o,b,bc,lock:T.some(e=>e.rt.lock),unk:T.some(e=>e.rt.u)}}
+function chRender(){const box=document.getElementById('chbox');if(!box||!window.CHAINS)return;const st=chSt(),own=st.own;
+ const o1=document.getElementById('chown');if(o1)o1.checked=own;const o2=document.getElementById('chbud');if(o2&&st.bud&&!o2.value)o2.value=st.bud;
+ const q=(document.getElementById('chq')||{}).value||'',ql=q.toLowerCase();
+ const list=CHAINS.filter(c=>!ql||c.n.toLowerCase().includes(ql)||c.finals.some(f=>f.n.toLowerCase().includes(ql))).map(c=>[c,chEval(c,own)]);
+ const n=c=>c.tiers.length,gap=([c,e])=>e.b!=null&&e.o[n(c)]!=null?e.o[n(c)]-e.o[e.b]:-1;
+ list.sort((a,b)=>gap(b)-gap(a));
+ if(!list.length){box.innerHTML='<p class="mut">Aucune chaîne.</p>';return}
+ box.innerHTML=(list.some(([c,e])=>e.unk)?'<p class="sub">⚠ Niveaux de métier non renseignés (🛠️ Mes métiers) : réussite comptée 100 %.</p>':'')
+  +list.map(([c,e])=>{const N=n(c),buy=e.o[N],best=e.b,op=CHOPEN.has(c.i);
+   const head=best==null?'<span class="badge b-mut">pas de prix</span>':best===N?'<span class="badge b-ok">① Acheter la base</span> <span class="sub">'+kf(buy)+'</span>'
+    :'<span class="badge b-ok">'+jEsc(chLabel(c,best))+'</span> <span class="sub">'+kf(e.o[best])+(buy!=null?' · <b class="pos">'+kf(buy-e.o[best])+' de moins</b> que la base à '+kf(buy):'')+'</span>';
+   return '<div class="card" style="margin:0 0 10px"><div style="display:flex;gap:10px;align-items:center;cursor:pointer;flex-wrap:wrap" onclick="chToggle('+c.i+')">'
+    +(c.s?'<img src="'+c.s+'" width="36" height="36" style="border-radius:6px">':'')
+    +'<div style="flex:1;min-width:220px"><b>'+jEsc(c.n)+'</b>'+(e.lock?' <span class="badge b-bad">🔒 niveau trop bas pour un palier</span>':'')
+    +'<div class="sub">'+c.finals.map(f=>jEsc(f.n)).join(' · ')+'</div></div><div>'+head+'</div><span class="mut">'+(op?'▲':'▼')+'</span></div>'
+    +(op?chDetail(c,e,own,st.bud):'')+'</div>'}).join('');
+ if(list.some(([c])=>CHOPEN.has(c.i)))chHistDraw()}
+function chToggle(id){CHOPEN.has(id)?CHOPEN.delete(id):CHOPEN.add(id);chRender()}
+function chDetail(c,e,own,bud){const N=c.tiers.length,T=e.T,n=v=>v==null?'–':kf(Math.round(v)),pct=v=>Math.round(v*100)+' %';
+ const sims={};e.o.forEach((v,j)=>{if(v!=null&&j<N)sims[j]=chSim(c,T,j,1500)});
+ // 1. options
+ let h='<h3 style="margin:8px 0 4px">Les options</h3><div class="wrap"><table><thead><tr><th>Option</th><th class="n">Coût moyen</th><th class="n">Écart</th>'
+  +'<th class="n" title="9 fois sur 10, la base te coûte moins que ça (objets normaux revendus)">Budget 9 fois sur 10</th>'
+  +(bud?'<th class="n" title="Chance d’obtenir la base sans dépasser ton budget">Chance avec '+kf(bud)+'</th>':'')+'</tr></thead><tbody>'
+  +e.o.map((v,j)=>{const s=sims[j];return '<tr'+(j===e.b?' style="background:var(--card2)"':'')+'><td>'+(j===e.b?'✅ ':'')+jEsc(chLabel(c,j))
+   +'<div class="sub">'+(j===N?(c.tiers[N-1].el||0)+' annonce(s) à l’HDV':'crafts : '+c.tiers.slice(j).map(t=>jEsc(t.n)).join(' → ')+(j>0?' · '+jEsc(c.tiers[j-1].en)+' acheté '+n(c.tiers[j-1].eb):''))+'</div></td>'
+   +'<td class="n big">'+n(v)+'</td><td class="n '+(v!=null&&e.b!=null&&v>e.o[e.b]?'neg':'')+'">'+(v!=null&&e.b!=null&&j!==e.b?'+'+n(v-e.o[e.b]):'–')+'</td>'
+   +'<td class="n">'+(j===N?n(v):s?n(chQ(s,.9)):'–')+'</td>'
+   +(bud?'<td class="n">'+(j===N?(v!=null?(v<=bud?'100 %':'0 %'):'–'):s?pct(s.filter(x=>x<=bud).length/s.length):'–')+'</td>':'')+'</tr>'}).join('')+'</tbody></table></div>'
+  +'<p class="sub">Coût moyen sur beaucoup de tentatives ; avec 25 % de combo à chaque palier, une tentative peut coûter bien plus : regarde le budget 9 fois sur 10.</p>';
+ // 2. prix maximum d'achat de chaque eclatant (au-dessus, le crafter revient moins cher)
+ h+='<h3 style="margin:12px 0 4px">Prix maximum d’achat</h3><div class="wrap"><table><thead><tr><th>Objet éclatant</th><th class="n">Le crafter</th><th class="n">Prix HDV</th><th>Conseil</th></tr></thead><tbody>'
+  +c.tiers.map((t,i)=>{let m=null;for(let j=0;j<=i;j++){const v=chCost(c,T,j,i);if(v!=null&&(m==null||v<m))m=v}
+   const ok=t.eb!=null&&(m==null||t.eb<=m);
+   return '<tr><td>'+jEsc(t.en)+(i===N-1?' <span class="badge b-mut">base</span>':'')+'</td><td class="n">'+n(m)+'</td><td class="n">'+n(t.eb)+' <span class="sub">('+(t.el||0)+' ann.)</span></td>'
+    +'<td>'+(m==null?'<span class="mut">pas de craft possible</span>':ok?'<span class="badge b-ok">achète-le</span> <span class="sub">tant qu’il est sous '+n(m)+'</span>'
+     :'<span class="badge b-warn">crafte-le</span> <span class="sub">achète-le seulement sous '+n(m)+'</span>')+'</td></tr>'}).join('')+'</tbody></table></div>';
+ // 3. vendre ou continuer
+ const dp=chDP(c,T);
+ h+='<h3 style="margin:12px 0 4px">Combo obtenu : vendre ou continuer ?</h3><div class="wrap"><table><thead><tr><th>Tu obtiens</th><th class="n">Le vendre</th><th class="n">Continuer</th><th>Conseil</th></tr></thead><tbody>'
+  +dp.map(d=>{const t=c.tiers[d.t],s=d.sell,k=d.cont,goS=s!=null&&(k==null||s>=k);
+   return '<tr><td>'+jEsc(t.en)+'</td><td class="n">'+n(s)+' <span class="sub">('+(t.el||0)+' ann.)</span></td><td class="n">'+n(k)+(d.via?'<div class="sub">en craftant '+jEsc(d.via)+'</div>':'')+'</td>'
+    +'<td>'+(s==null&&k==null?'<span class="mut">pas de prix</span>':goS?'<span class="badge b-warn">💰 vends-le</span>'+(k!=null?' <span class="sub">+'+n(s-k)+'</span>':'')
+     :'<span class="badge b-ok">➡ continue</span>'+(s!=null?' <span class="sub">+'+n(k-s)+'</span>':''))+'</td></tr>'}).join('')+'</tbody></table></div>'
+  +'<p class="sub">Vendre = prix réaliste après taxe et frais. Continuer = ce que l’objet rapporte en moyenne en t’en servant au palier suivant (lui-même vendu ou utilisé au mieux), ingrédients déduits ; dernier palier : l’équipement final le plus rentable, combo non compté.</p>';
+ // 4. pics de prix et 5. transmutation, sur la meilleure option avec du craft
+ const j=e.bc,M=j!=null?chCrafts(c,T,j):null,spk=[],trs=[];
+ if(M)for(let t=j;t<N;t++)c.tiers[t].parts.forEach(p=>{const qty=M[t]*p.q,u=chPart(p,own);if(u==null)return;
+  if(!chMine(p,own)&&p.med&&p.buy>1.1*p.med)spk.push({p,qty,g:(p.buy-p.med)*qty});
+  if(p.res&&p.rawres!=null&&p.raws!==p.res&&chMine(p,own)&&p.rawres>u)trs.push({p,qty,u,g:(p.rawres-u)*qty});
+  else if(p.k==='od'&&!chMine(p,own))trs.push({p,qty,u,g:null})});
+ if(j!=null&&j>0){const t=c.tiers[j-1];if(t.emd&&t.eb>1.1*t.emd)spk.push({p:{n:t.en,buy:t.eb,med:t.emd},qty:M?M[j]*(c.tiers[j].pq||1):1,g:(t.eb-t.emd)*(M?M[j]*(c.tiers[j].pq||1):1)})}
+ const when=s=>s?new Date(s.endsWith('Z')||s.includes('+')?s:s+'Z').toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'pas sur 7 j';
+ h+='<h3 style="margin:12px 0 4px">⏳ Prix en pic</h3>'+(j==null?'<p class="mut">Pas d’option avec du craft.</p>':spk.length
+  ?'<p class="sub">Pour l’option « '+jEsc(chLabel(c,j))+' » :</p><ul>'+spk.sort((a,b)=>b.g-a.g).map(s=>'<li><b>'+jEsc(s.p.n)+'</b> à '+n(s.p.buy)+' (médiane 7 j '+n(s.p.med)+(s.p.below!==undefined?', dernier passage sous la médiane : '+when(s.p.below):'')+') : <b class="pos">'+n(s.g)+' de moins par base</b> si le prix revient à la normale ('+NF.format(Math.ceil(s.qty))+' unités en moyenne)</li>').join('')+'</ul>'
+  :'<p class="sub">Aucun ingrédient de l’option « '+jEsc(chLabel(c,j))+' » au-dessus de sa médiane 7 j (+10 %).</p>');
+ h+='<h3 style="margin:12px 0 4px">🔁 Transmutation</h3>'+(trs.length?'<ul>'+trs.map(s=>s.g!=null
+   ?'<li>Ne mets pas ton <b>'+jEsc(s.p.res)+'</b> : vends-le brut ('+n(s.p.rawres)+' net /u) et transmute du <b>'+jEsc(s.p.raws)+'</b> ('+n(s.u)+' /u) : <b class="pos">+'+n(s.g)+' par base</b> ('+NF.format(Math.ceil(s.qty))+' unités)</li>'
+   :'<li><b>'+jEsc(s.p.via||s.p.n)+'</b> : achète du <b>'+jEsc(s.p.n)+'</b> ('+n(s.p.buy)+' /u) et transmute-le, c’est moins cher que de l’acheter directement</li>').join('')+'</ul>'
+  :'<p class="sub">Rien à transmuter de plus rentable.</p>');
+ // detail des prix
+ h+='<details style="margin-top:10px"><summary><b>Détail des prix de chaque palier</b></summary>'+c.tiers.map((t,i)=>{const e2=T[i],rt=e2.rt;
+  return '<h4 style="margin:10px 0 4px">'+(i+1)+'. '+jEsc(t.n)+' <span class="sub">· '+(PROF[t.prof]||t.prof)+' '+lvTxt(Math.max(1,t.m))
+   +(rt.lock?' · 🔒 niveau trop bas':rt.u?' · réussite ? (niveau non renseigné)':' · réussite '+(rt.r*100).toFixed(1).replace('.',',')+' %')+' · combo '+Math.round(t.c*100)+' % → '+jEsc(t.en)+'</span></h4>'
+   +'<div class="wrap"><table><thead><tr><th>Ingrédient</th><th class="n">Qté</th><th class="n">Achat réaliste</th><th class="n">Plus bas</th><th class="n">Médiane 7 j</th><th class="n">Annonces</th><th class="n">Ta récolte</th><th>Pris en compte</th></tr></thead><tbody>'
+   +(i>0?'<tr><td>'+jEsc(c.tiers[i-1].en)+'</td><td class="n">'+(t.pq||1)+'</td><td class="n">'+n(c.tiers[i-1].eb)+'</td><td class="n">'+n(c.tiers[i-1].ea)+'</td><td class="n">'+n(c.tiers[i-1].emd)+'</td><td class="n">'+(c.tiers[i-1].el||0)+'</td><td></td><td class="sub">palier d’avant</td></tr>':'')
+   +t.parts.map(p=>'<tr><td>'+jEsc(p.via?p.via:p.n)+(p.via?'<div class="sub">via '+jEsc(p.n)+'</div>':'')+'</td><td class="n">'+NF.format(p.q)+'</td><td class="n">'+n(p.buy)+'</td><td class="n">'+n(p.ask)+'</td><td class="n">'+n(p.med)+'</td><td class="n">'+(p.l??'–')+'</td>'
+    +'<td class="n">'+(p.raw!=null?n(p.raw):'–')+'</td><td class="sub">'+jEsc(chSrc(p,own))+' · '+n(chPart(p,own))+'</td></tr>').join('')
+   +'</tbody></table></div><p class="sub">Objet normal ('+jEsc(t.n)+') revendu '+n(t.pn)+' → '+n(CHNET(t.pn))+' net ('+(t.pl||0)+' annonces) · '+jEsc(t.en)+' : achat '+n(t.eb)+', vente '+n(t.es)+' ('+(t.el||0)+' annonces)</p>'}).join('')
+  +'<h4 style="margin:10px 0 4px">Équipements finaux (avec la base)</h4><div class="wrap"><table><thead><tr><th>Équipement</th><th class="n">Autres ingrédients</th><th class="n">Vente</th><th class="n">Annonces</th><th class="n">Gain moyen</th></tr></thead><tbody>'
+  +c.finals.map(f=>{const rt=sRate(f.prof,f.m,f.cv),sn=CHNET(f.sell),base=e.b!=null?e.o[e.b]:null;
+   const g=rt.lock||sn==null||f.rest==null||base==null?null:(lvState().lose?rt.r*sn:sn)-f.rest-base*(f.q||1);
+   return '<tr><td>'+jEsc(f.n)+(rt.lock?' <span class="badge b-bad">🔒</span>':'')+(f.l===0||f.stale?' <span class="badge b-warn" title="Aucune annonce en ce moment : prix peu fiable">⚠ prix peu fiable</span>':'')
+    +'<div class="sub">'+(PROF[f.prof]||f.prof)+' '+lvTxt(Math.max(1,f.m))+(rt.lock||rt.u?'':' · réussite '+(rt.r*100).toFixed(1).replace('.',',')+' %')+(f.cn?' · combo possible : '+jEsc(f.cn)+' (non compté)':'')+'</div></td>'
+    +'<td class="n">'+n(f.rest)+'</td><td class="n">'+n(f.sell)+'</td><td class="n">'+(f.l||0)+'</td><td class="n '+(g==null?'':g>0?'pos':'neg')+'">'+n(g)+'</td></tr>'}).join('')
+  +'</tbody></table></div><p class="sub">Gain moyen = vente après taxe et frais (× réussite si les ingrédients sont perdus en cas d’échec) − autres ingrédients − base au coût de la meilleure option.</p></details>';
+ // 9. historique
+ h+='<h3 style="margin:12px 0 4px">📈 Historique du coût de chaque option ('+CHAIN_CFG.days+' j)</h3><div class="chhist" data-id="'+c.i+'"></div>'
+  +'<p class="sub">Calculé à chaque passage horaire avec les niveaux de config.json (masteries), ta récolte comptée à sa vente brute et les ingrédients perdus en cas d’échec : sert à repérer les moments où une option passe devant l’autre.</p>';
+ return h}
+const CHCOL=['var(--acc)','var(--ok)','var(--warn)','var(--bad)','var(--mut)','var(--txt)'];
+function chHistDraw(){document.querySelectorAll('.chhist').forEach(box=>{const id=box.dataset.id,c=CHAINS.find(x=>String(x.i)===id),H=window.CHAINS_HIST;
+ const rows=(H&&H.s[id])||[];if(rows.length<2){box.innerHTML='<p class="mut">Pas encore assez de passages enregistrés (un par heure).</p>';return}
+ const N=c.tiers.length,W=Math.max(320,box.clientWidth||800),L=64,R=12,Hh=200,pw=W-L-R,t0=rows[0][0],t1=rows[rows.length-1][0];
+ const vals=rows.flatMap(r=>r[1].filter(v=>v!=null));if(!vals.length){box.innerHTML='<p class="mut">Pas de prix.</p>';return}
+ const lo=Math.min(...vals),hi=Math.max(...vals),pad=(hi-lo)*.08||hi*.05||1,y0=lo-pad,y1=hi+pad;
+ const x=t=>L+(t1>t0?(t-t0)/(t1-t0):0)*pw,y=v=>8+(1-(v-y0)/(y1-y0))*(Hh-30);
+ const lines=Array.from({length:N+1},(_,j)=>{let d='',pen=false;rows.forEach((r,i)=>{const v=r[1][j],gap=i&&r[0]-rows[i-1][0]>3;
+   if(v==null){pen=false;return}d+=(!pen||gap?'M':'L')+x(r[0]).toFixed(1)+' '+y(v).toFixed(1);pen=true});
+  return d?'<path d="'+d+'" fill="none" stroke="'+CHCOL[j%CHCOL.length]+'" stroke-width="2" stroke-linejoin="round"/>':''}).join('');
+ const grid=[lo,(lo+hi)/2,hi].map(v=>'<line x1="'+L+'" x2="'+(W-R)+'" y1="'+y(v)+'" y2="'+y(v)+'" stroke="var(--line2)"/><text x="'+(L-8)+'" y="'+(y(v)+4)+'" text-anchor="end" fill="var(--mut)" font-size="11">'+kf(v)+'</text>').join('');
+ const days=[];const d0=new Date((H.t0+t0*3600)*1000);d0.setHours(24,0,0,0);for(let d=d0.getTime();d<=(H.t0+t1*3600)*1000;d+=864e5)days.push(d);
+ const xl=days.map(d=>{const X=x(d/1000/3600-H.t0/3600);return '<line x1="'+X+'" x2="'+X+'" y1="4" y2="'+(Hh-22)+'" stroke="var(--line2)"/><text x="'+X+'" y="'+(Hh-6)+'" text-anchor="middle" fill="var(--mut)" font-size="11">'+new Date(d).toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'})+'</text>'}).join('');
+ const last=rows[rows.length-1][1];
+ box.innerHTML='<svg viewBox="0 0 '+W+' '+Hh+'" height="'+Hh+'" style="width:100%">'+grid+xl+lines+'</svg>'
+  +'<div class="sub" style="display:flex;flex-wrap:wrap;gap:4px 14px">'+Array.from({length:N+1},(_,j)=>'<span><span style="display:inline-block;width:12px;height:3px;background:'+CHCOL[j%CHCOL.length]+';vertical-align:middle"></span> '+jEsc(chLabel(c,j))+' : '+(last[j]!=null?kf(last[j]):'–')+'</span>').join('')+'</div>'})}
+document.addEventListener('DOMContentLoaded',()=>chRender());

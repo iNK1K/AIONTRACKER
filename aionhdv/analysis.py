@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from .catalog import node_name
+from .chains import build_chains, save_history
 from .collect import PARIS, paris
 
 # types d'equipement (harmonisation : meme rang et meme type)
@@ -836,7 +837,9 @@ def run_all(con, cfg, server=None):
     con.execute("INSERT INTO analyses VALUES (?,?,?,?,?,?,?)",
                 (run_ts, server, "plan", None, None, None, json.dumps(plan, ensure_ascii=False)))
     con.commit()
+    chains = build_chains(m)                        # acheter ou crafter les chaines d'amelioration (+ historique)
+    save_history(con, cfg, server, chains, run_ts)
     return add_safety(con, dict(run_ts=run_ts, server=server, as_of=m.as_of, harvest=harvest, buy=buy, raw=raw,
                 targets=targets, plan=plan, hours=m.hourly_profile(), uniques=m.uniques(),
                 flips=m.flips(), listings=m.my_listings(), gains=m.real_gains() if server == str(cfg["my_server"]) else None, spikes=m.spikes(buy),
-                buy_direct=buy_direct, buy_trans=buy_trans, market=m))
+                buy_direct=buy_direct, buy_trans=buy_trans, chains=chains, market=m))
