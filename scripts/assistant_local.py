@@ -8,6 +8,7 @@ Puis sur le site, onglet 💬 Assistant : bouton « Abonnement Claude (ce PC) »
 - Claude Code tourne en lecture seule (recherche web, lecture de pages, recherche dans le catalogue), dans .runtime/assistant/.
 - Le catalogue du tracker (prix, recettes, récolte) vient du site publié (assist.js), relu toutes les 30 min.
 """
+import base64
 import json
 import re
 import shutil
@@ -16,6 +17,7 @@ import sys
 import threading
 import time
 import urllib.request
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -47,7 +49,7 @@ brackets when it helps.
 
 Answer in the language of the question. Lead with the direct answer, then the details that matter: short sections, lists, and a \
 table when comparing options. Bold key item names and numbers. Be concrete (names, numbers, where, how many), skip filler. \
-End with the main sources as Markdown links."""
+Give the main sources as Markdown links."""
 
 
 def log(msg):
@@ -86,6 +88,22 @@ def tracker_markdown(data):
     return "\n".join(out) + "\n"
 
 
+def attach(q, files):
+    """Pièces jointes de la page (images réduites, PDF, texte) : écrites dans uploads/<id>/ du dossier de travail, où Claude
+    Code peut les lire (sa lecture est limitée à ce dossier) ; la question indique quoi lire."""
+    if not files:
+        return q
+    d = WORK / "uploads" / uuid.uuid4().hex[:12]
+    d.mkdir(parents=True)
+    names = []
+    for f in files[:6]:
+        name = re.sub(r"[^\w.-]", "_", str(f.get("name") or "fichier"))[:80] or "fichier"
+        (d / name).write_bytes(base64.b64decode(f.get("data") or ""))
+        names.append(f"uploads/{d.name}/{name}")
+    return (q + "\n\n[The player attached these files, in your working directory: " + ", ".join(names)
+            + ". Read each one with the Read tool before answering.]")
+
+
 def refresh():
     """tracker-data.md depuis le site publié (assist.js), sinon depuis reports/ ; garde l'ancien en cas d'échec."""
     path = WORK / "tracker-data.md"
@@ -102,7 +120,7 @@ def refresh():
         text = local.read_text(encoding="utf-8")
     data = json.loads(text[text.index("=") + 1:].strip().rstrip(";"))
     path.write_text(tracker_markdown(data), encoding="utf-8")
-    meta = dict(server=data["server"], asof=data["asof"])
+    meta = dict(server=data["server"], asof=data["asof"], fmt=data.get("fmt", ""))
     (WORK / "meta.json").write_text(json.dumps(meta), encoding="utf-8")
     log(f"catalogue : {len(data['items'])} objets, prix du {data['asof']}")
     return meta
@@ -151,6 +169,7 @@ class Handler(BaseHTTPRequestHandler):
         q, session = str(body.get("q") or "").strip(), str(body.get("session") or "")
         if not q:
             return self.send_error(400)
+        q = attach(q, body.get("files") or [])
         self._head(200, o, "application/x-ndjson")
         try:
             self.ask(q, session)
@@ -164,8 +183,10 @@ class Handler(BaseHTTPRequestHandler):
     def ask(self, q, session):
         meta = refresh()
         cmd = [CLAUDE, "-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--model", "opus",
-               "--tools", ",".join(TOOLS), "--allowedTools", *TOOLS, "--strict-mcp-config", "--setting-sources", "local",
-               "--system-prompt", SYSTEM.format(server=meta.get("server", "?"), asof=meta.get("asof", "?"))]
+               "--tools", ",".join(TOOLS), "--allowedTools", "WebSearch", "WebFetch", "--strict-mcp-config",
+               "--setting-sources", "local",              # lecture (Read, Grep, Glob) : dossier de travail seulement, par défaut
+               "--system-prompt", SYSTEM.format(server=meta.get("server", "?"), asof=meta.get("asof", "?"))
+               + ("\n\n" + meta["fmt"] if meta.get("fmt") else "")]
         if re.fullmatch(r"[0-9a-f-]{36}", session):
             cmd += ["--resume", session]                                       # suite de la conversation
         log(f"question : {q[:80]}")

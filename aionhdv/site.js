@@ -672,7 +672,7 @@ function aiCostAdd(u){if(!u)return;const s=u.server_tool_use||{},c=((u.input_tok
 function aiCostShow(){const el=document.getElementById('aicost');if(el)el.textContent=aiCostGet()?'≈ '+aiCostGet().toFixed(2).replace('.',',')+' $ dépensés depuis ce navigateur':''}
 function aiLoad(){const v=(document.getElementById('ai')||{dataset:{}}).dataset.v||'';
  return window.ASSIST?Promise.resolve():new Promise(ok=>{const sc=document.createElement('script');sc.src='assist.js?v='+v;sc.onload=ok;sc.onerror=ok;document.head.appendChild(sc)})}
-function aiInit(){const box=document.getElementById('aimsgs');if(!box)return;if(aiRenderAll.hello==null)aiRenderAll.hello=box.innerHTML;aiLoad();aiCostShow();
+function aiInit(){const box=document.getElementById('aimsgs');if(!box)return;if(aiRenderAll.hello==null)aiRenderAll.hello=box.innerHTML;aiLoad().then(()=>{if(AIH.length)aiRenderAll();else aiHome()});aiCostShow();
  if(!AIH.length){try{AIH=JSON.parse(localStorage.getItem('aichat')||'[]')}catch(e){AIH=[]}if(AIH.length)aiRenderAll()}
  aiServerProbe().then(()=>aiMode()==='local'?aiLocalProbe():0).then(()=>{aiModeShow();if(!aiReady())aiKeyForm();else setTimeout(()=>document.getElementById('aiin').focus(),0)})}
 function aiKeyForm(on){const box=document.getElementById('aikey');if(on===false){box.hidden=true;return}box.hidden=false;const m=aiMode(),
@@ -698,7 +698,7 @@ function aiKeySet(){const v=document.getElementById('aikeyin').value.trim(),msg=
 function aiKeyForget(){try{localStorage.removeItem('aikey')}catch(e){}aiKeyForm();toast('Clé oubliée dans ce navigateur')}
 function aiGrow(t){t.style.height='auto';t.style.height=Math.min(t.scrollHeight,220)+'px'}
 function aiNew(){if(AIBUSY)AIBUSY.abort();AIH=[];aiSave();try{localStorage.removeItem('aisession')}catch(e){}aiRenderAll();document.getElementById('aiin').focus()}
-function aiAsk(q){document.getElementById('aiin').value=q;aiSend()}
+function aiAsk(q){if(AIBUSY)return;document.getElementById('aiin').value=q;aiSend()}
 
 // ---------------------------------------------------------------- outil tracker_search (exécuté dans la page)
 const AITOOLS=[{type:'web_search_20260209',name:'web_search',max_uses:8},
@@ -747,7 +747,8 @@ function aiSystem(){const A=window.ASSIST;
   +'from their own server (prices in kinah; the auction house keeps a 10% tax on sales). Item names there are French; give French names as they appear in game, with the English '
   +'name in brackets when it helps.\n\n'
   +'Answer in the language of the question. Lead with the direct answer, then the details that matter: short sections, lists, '
-  +'and a table when comparing options. Bold key item names and numbers. Be concrete (names, numbers, where, how many), skip filler.'}
+  +'and a table when comparing options. Bold key item names and numbers. Be concrete (names, numbers, where, how many), skip filler.'
+  +(A&&A.fmt?'\n\n'+A.fmt:'')}
 async function aiStream(signal,draw){
  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',signal,headers:{'content-type':'application/json',
    'x-api-key':aiKey(),'anthropic-version':'2023-06-01','anthropic-beta':'server-side-fallback-2026-07-01',
@@ -774,12 +775,13 @@ async function aiStream(signal,draw){
    else if(ev.type==='error')throw new Error((ev.error&&ev.error.message)||'erreur de l’API')}}
  msg.content=blocks.filter(Boolean);return msg}
 async function aiSend(){const inp=document.getElementById('aiin'),q=inp.value.trim();
- if(AIBUSY){AIBUSY.abort();return}if(!q)return;const mode=aiMode();
+ if(AIBUSY){AIBUSY.abort();return}if(!q&&!AIATT.length)return;const mode=aiMode();
  if(mode==='server')return aiSendLocal(q,'api');
  if(mode==='local'){if(!AILOCAL)await aiLocalProbe();if(AILOCAL)return aiSendLocal(q);aiKeyForm();aiLocalUse();return}
  if(!aiKey()){aiKeyForm();return}
- await aiLoad();inp.value='';aiGrow(inp);
- const H=AIH,start=H.length;H.push({role:'user',content:q});const turn=aiTurn(q);AIBUSY=new AbortController();aiBusy(true);
+ await aiLoad();inp.value='';aiGrow(inp);const att=aiAttTake(),qt=q||'Regarde la pièce jointe.';
+ const H=AIH,start=H.length;H.push(att.length?{role:'user',content:[...aiAttBlocks(att),{type:'text',text:qt}],q:qt,att:aiAttMeta(att)}:{role:'user',content:q});
+ const turn=aiTurn(qt,aiAttMeta(att));AIBUSY=new AbortController();aiBusy(true);
  let note='';
  try{for(let step=0;step<15;step++){
    const msg=await aiStream(AIBUSY.signal,(b,blocks)=>{aiPaint.live=blocks;aiDraw(turn,start,b)});
@@ -797,8 +799,10 @@ async function aiSend(){const inp=document.getElementById('aiin'),q=inp.value.tr
 function aiBusy(on){const b=document.getElementById('aigo');b.textContent=on?'■':'➤';b.title=on?'Arrêter':'Envoyer (Entrée)'}
 
 // ---------------------------------------------------------------- affichage
-function aiTurn(q){const box=document.getElementById('aimsgs'),h=box.querySelector('.aihello');if(h)h.remove();
+function aiTurn(q,att){const box=document.getElementById('aimsgs'),h=box.querySelector('.aihello');if(h)h.remove();
  const u=document.createElement('div');u.className='aiu';u.textContent=q;box.appendChild(u);
+ if(att&&att.length){const t=document.createElement('div');t.className='aiuatt';
+  t.innerHTML=att.map(a=>a.thumb?'<img src="'+a.thumb+'" alt="'+escH(a.name)+'" title="'+escH(a.name)+'">':'<span>📄 '+escH(a.name)+'</span>').join('');u.prepend(t)}
  const a=document.createElement('div');a.className='aia';a.innerHTML='<div class="aibody"></div><div class="aistat">Réflexion…</div><div class="aisrc"></div>';
  box.appendChild(a);u.scrollIntoView({block:'start',behavior:'smooth'});return a}
 function aiSteps(msgs){let s=0,f=0,t=0;msgs.forEach(m=>{Array.isArray(m.content)&&m.content.forEach(b=>{
@@ -817,7 +821,7 @@ function aiPaint(turn,start,done,note){
  // le message en cours n'est dans AIH qu'une fois fini : on lit aussi ses blocs en direct
  if(!done&&aiPaint.live)ms.push(aiPaint.live.filter(Boolean));
  const text=ms.map(c=>c.filter(b=>b.type==='text').map(b=>b.text).join('')).filter(t=>t.trim()).join('\n\n');
- turn.querySelector('.aibody').innerHTML=aiMd(text);
+ turn.querySelector('.aibody').innerHTML=aiMd(text);aiSparks(turn);
  const st=turn.querySelector('.aistat');
  if(done){if(st)st.remove();const meta=aiSteps(AIH.slice(start+1));
   // sources : passages cités, sinon pages lues (la recherche filtrée par code ne renvoie pas de citations)
@@ -830,17 +834,53 @@ function aiPaint(turn,start,done,note){
   if(note){const e=document.createElement('div');e.className='aierr';e.textContent=note;turn.appendChild(e)}}
  else if(st&&text)st.style.display='none'}
 function aiRenderAll(){const box=document.getElementById('aimsgs');box.innerHTML='';
- if(!AIH.length){box.innerHTML=aiRenderAll.hello||'';return}
- AIH.forEach((m,i)=>{if(m.role==='user'&&typeof m.content==='string'){const t=aiTurn(m.content);aiPaint(t,i,true)}})}
+ if(!AIH.length){box.innerHTML=aiRenderAll.hello||'';aiHome();return}
+ AIH.forEach((m,i)=>{if(m.role==='user'&&(typeof m.content==='string'||m.q!=null)){const t=aiTurn(m.q!=null?m.q:m.content,m.att);aiPaint(t,i,true)}})}
 
-// mini Markdown : titres, listes, tableaux, citations, code, gras, italique, liens (http seulement)
-function aiInline(s){return s.replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>').replace(/(^|[^*\w])\*([^*\s][^*]*)\*/g,'$1<i>$2</i>')
- .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>')
- .replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g,'$1<a href="$2" target="_blank" rel="noopener">$2</a>')}
-function aiMd(src){const L=escH(src||'').split('\n'),out=[];let i=0;
+// ---------------------------------------------------------------- réponses en blocs visuels
+// Markdown (titres, listes, tableaux, citations, gras, liens http) + blocs que l'assistant écrit d'après aionhdv/assistant_format.md :
+// [[objet]] (pastille icône + prix, ouvre la fiche), ```items (cartes avec courbe 3 j), ```stats (chiffres clés), ```steps (étapes),
+// ```chart (barres), ```suggest (questions suivantes), citations 💡/⚠️/✅ (encadrés), ![légende](https://…) (images des pages lues).
+const AIGRADE={Common:'#c8ccd4',Rare:'#3ecf8e',Legend:'#4ea8ff',Unique:'#f0c050',Epic:'#f08c3e',Mythic:'#e05cf0'};
+const aiUnesc=s=>String(s).replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&amp;/g,'&');
+function aiFind(name){const X=aiIdx();if(!X||!name)return null;const n=normName(aiUnesc(name));
+ let best=null;for(const [r,fr,en] of X.list){if(fr===n||en===n){if(!best||(r[6]&&!best[6]))best=r}}
+ if(best)return best;for(const [r,fr,en] of X.list)if(n.length>3&&(fr.startsWith(n)||en.startsWith(n)))return r;return null}
+function aiChip(name){const r=aiFind(name);if(!r)return '<b>'+name+'</b>';
+ return '<span class="aichip" onclick="aiItemCard('+r[0]+')" title="Fiche de l’objet">'+(r[9]?'<img src="'+escH(r[9])+'" alt="" loading="lazy">':'')
+  +'<span style="color:'+(AIGRADE[r[3]]||'inherit')+'">'+escH(r[1])+'</span>'+(r[6]?'<em>'+kf(r[6])+'</em>':'')+'</span>'}
+function aiInline(s){return s.replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\[\[([^\]]+)\]\]/g,(m,n)=>aiChip(n))
+ .replace(/!\[([^\]]*)\]\((https:\/\/[^)\s]+)\)/g,'<figure class="aiimg"><a href="$2" target="_blank" rel="noopener"><img src="$2" alt="$1" loading="lazy" '
+  +'referrerpolicy="no-referrer" onerror="this.closest(\'figure\').remove()"></a><figcaption>$1</figcaption></figure>')
+ .replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>').replace(/(^|[^*\w])\*([^*\s][^*]*)\*/g,'$1<i>$2</i>')
+ .replace(/(^|[^!])\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,'$1<a href="$3" target="_blank" rel="noopener">$2</a>')
+ .replace(/(^|[\s(])(https?:\/\/[^\s<)"]+)/g,'$1<a href="$2" target="_blank" rel="noopener">$2</a>')}
+function aiNum(v){const n=+String(v).replace(/[\s  ]/g,'').replace(',','.');return isFinite(n)?n:null}
+function aiCards(names){return '<div class="aicards">'+names.map(n=>{const r=aiFind(n);if(!r)return '';
+  const d=r[6]&&r[8]?r[6]/r[8]-1:null;
+  return '<div class="aicard" onclick="aiItemCard('+r[0]+')">'+(r[9]?'<img src="'+escH(r[9])+'" alt="" loading="lazy">':'<span></span>')
+   +'<div><div class="nm" style="color:'+(AIGRADE[r[3]]||'inherit')+'">'+escH(r[1])+'</div><div class="sub">'+escH([r[3],r[4],r[5]?'niv. '+r[5]:''].filter(Boolean).join(' · '))+'</div>'
+   +'<div class="pr">'+(r[6]?kf(r[6])+' <small>kinah</small>':'<span class="mut">pas en vente</span>')
+   +(d!=null&&Math.abs(d)>=.03?' <span class="'+(d>0?'pos':'neg')+'">'+(d>0?'+':'')+Math.round(d*100)+' %</span>':'')+'</div>'
+   +'<svg class="aispark" data-id="'+r[0]+'" viewBox="0 0 100 26" preserveAspectRatio="none"></svg></div></div>'}).join('')+'</div>'}
+function aiWidget(kind,raw){const rows=raw.map(l=>l.trim()).filter(Boolean),cols=l=>l.split('|').map(c=>c.trim());
+ if(kind==='items')return aiCards(rows.map(l=>l.replace(/^\[\[|\]\]$/g,'').replace(/^[-*•]\s*/,'')));
+ if(kind==='stats')return '<div class="kpis aistats">'+rows.map(l=>{const [a,b,c]=cols(l);
+  return '<div class="kpi"><div class="l">'+escH(a||'')+'</div><div class="v">'+aiInline(escH(b||''))+'</div>'+(c?'<div class="s">'+aiInline(escH(c))+'</div>':'')+'</div>'}).join('')+'</div>';
+ if(kind==='steps')return '<ol class="aisteps">'+rows.map(l=>{const [a,...b]=cols(l);
+  return '<li><b>'+aiInline(escH(a))+'</b>'+(b.length?'<div>'+aiInline(escH(b.join(' | ')))+'</div>':'')+'</li>'}).join('')+'</ol>';
+ if(kind==='chart'){let title='';const bars=[];rows.forEach(l=>{const t=l.match(/^title\s*:\s*(.*)/i);if(t){title=t[1];return}
+   const c=cols(l),v=aiNum(c[c.length-1]);if(c.length>1&&v!=null)bars.push([c.slice(0,-1).join(' | '),v])});
+  const max=Math.max(...bars.map(b=>Math.abs(b[1])),1);
+  return '<div class="aichart">'+(title?'<div class="t">'+aiInline(escH(title))+'</div>':'')+bars.map(([a,v])=>'<div class="r"><span>'+aiInline(escH(a))
+   +'</span><i><b style="width:'+Math.max(2,Math.abs(v)/max*100)+'%"'+(v<0?' class="neg"':'')+'></b></i><em>'+kf(v)+'</em></div>').join('')+'</div>'}
+ if(kind==='suggest')return '<div class="aifollow">'+rows.map(l=>{const q=l.replace(/^[-*•\d.)\s]+/,'');
+  return '<button data-q="'+escH(q)+'" onclick="aiAsk(this.dataset.q)">'+escH(q)+'</button>'}).join('')+'</div>';
+ return '<pre><code>'+raw.map(escH).join('\n')+'</code></pre>'}
+function aiMd(src){const R=(src||'').split('\n'),L=R.map(escH),out=[];let i=0;
  const cells=l=>l.trim().replace(/^\||\|$/g,'').split('|').map(c=>c.trim());
  while(i<L.length){const l=L[i];
-  if(/^```/.test(l)){const c=[];i++;while(i<L.length&&!/^```/.test(L[i]))c.push(L[i++]);i++;out.push('<pre><code>'+c.join('\n')+'</code></pre>');continue}
+  if(/^```/.test(l)){const kind=l.slice(3).trim().toLowerCase(),c=[];i++;while(i<L.length&&!/^```/.test(L[i]))c.push(R[i++]);i++;out.push(aiWidget(kind,c));continue}
   let m=l.match(/^(#{1,4})\s+(.*)/);if(m){out.push('<h'+(m[1].length+1)+'>'+aiInline(m[2])+'</h'+(m[1].length+1)+'>');i++;continue}
   if(/^\s*\|.*\|\s*$/.test(l)&&i+1<L.length&&/^\s*\|?\s*:?-{2,}/.test(L[i+1])){const h=cells(l);i+=2;const rows=[];
    while(i<L.length&&/^\s*\|.*\|\s*$/.test(L[i]))rows.push(cells(L[i++]));
@@ -852,12 +892,55 @@ function aiMd(src){const L=escH(src||'').split('\n'),out=[];let i=0;
     const x=L[i].match(/^(\s*)(?:[-*•]|\d+[.)])\s+(.*)/);if(x)items.push([x[1].length>=2,x[2]]);else items[items.length-1][1]+=' '+L[i].trim();i++}
    let h='<'+(ol?'ol':'ul')+'>',sub=false;items.forEach(([n,t])=>{if(n&&!sub){h+='<ul>';sub=true}if(!n&&sub){h+='</ul>';sub=false}h+='<li>'+aiInline(t)+'</li>'});
    out.push(h+(sub?'</ul>':'')+'</'+(ol?'ol':'ul')+'>');continue}
-  if(/^&gt;\s?/.test(l)){const q=[];while(i<L.length&&/^&gt;\s?/.test(L[i]))q.push(L[i++].replace(/^&gt;\s?/,''));out.push('<blockquote>'+aiInline(q.join('<br>'))+'</blockquote>');continue}
+  if(/^&gt;\s?/.test(l)){const q=[];while(i<L.length&&/^&gt;\s?/.test(L[i]))q.push(L[i++].replace(/^&gt;\s?/,''));
+   const t=q.join(' ').trim(),k=/^💡/.test(t)?'tip':/^⚠/.test(t)?'warn':/^✅/.test(t)?'ok':'';
+   out.push(k?'<div class="aicall '+k+'">'+aiInline(q.join('<br>'))+'</div>':'<blockquote>'+aiInline(q.join('<br>'))+'</blockquote>');continue}
   if(/^\s*(---|\*\*\*)\s*$/.test(l)){i++;continue}
   if(!l.trim()){i++;continue}
   const p=[];while(i<L.length&&L[i].trim()&&!/^(#{1,4}\s|```|\s*([-*•]|\d+[.)])\s|&gt;|\s*\|.*\|\s*$)/.test(L[i]))p.push(L[i++]);
   if(!p.length)p.push(L[i++]);out.push('<p>'+aiInline(p.join('<br>'))+'</p>')}
  return out.join('')}
+// courbes des cartes : prices.js (historique horaire du serveur) chargé à la première carte
+function aiSparks(root){const svgs=[...(root||document).querySelectorAll('svg.aispark:not([data-done])')];if(!svgs.length)return;
+ const draw=()=>svgs.forEach(s=>{s.dataset.done='1';const pts=((window.PRICES&&PRICES.s[s.dataset.id])||[]).slice(-72).filter(p=>p[1]>0);
+  if(pts.length<2){s.remove();return}const ys=pts.map(p=>p[1]),lo=Math.min(...ys),hi=Math.max(...ys),x0=pts[0][0],x1=pts[pts.length-1][0]||x0+1;
+  const d=pts.map((p,k)=>(k?'L':'M')+((p[0]-x0)/(x1-x0||1)*100).toFixed(1)+' '+(24-(hi>lo?(p[1]-lo)/(hi-lo)*22:11)).toFixed(1)).join('');
+  s.innerHTML='<path d="'+d+'" fill="none" stroke="var(--acc)" stroke-width="1.6" vector-effect="non-scaling-stroke"/>'});
+ if(window.PRICES)return draw();if(aiSparks.wait)return aiSparks.wait.then(draw);
+ aiSparks.wait=new Promise(ok=>{const sc=document.createElement('script');sc.src='prices.js';sc.onload=ok;sc.onerror=ok;document.head.appendChild(sc)});aiSparks.wait.then(draw)}
+// fiche d'un objet : prix, recette, utilisations, récolte, courbe, carte
+function aiItemCard(id){const X=aiIdx(),r=X&&X.by[id];if(!r)return;let box=document.getElementById('aimodal');
+ if(!box){box=document.createElement('div');box.id='aimodal';box.onclick=e=>{if(e.target===box)box.classList.remove('on')};document.body.appendChild(box)}
+ const nm=i=>(X.by[i]||[0,'#'+i])[1],chip=i=>X.by[i]?aiChip(escH(nm(i))):escH(nm(i)),rs=ASSIST.recipes[id]||[],nd=ASSIST.nodes[id],uses=X.uses[id];
+ box.innerHTML='<div class="box"><div class="aihead">'+(r[9]?'<img src="'+escH(r[9])+'" alt="">':'')+'<div><b style="color:'+(AIGRADE[r[3]]||'inherit')+'">'+escH(r[1])+'</b>'
+  +'<div class="sub">'+escH([r[2],r[3],r[4],r[5]?'niv. '+r[5]:''].filter(Boolean).join(' · '))+'</div></div>'
+  +'<button class="mapbtn" style="margin-left:auto" onclick="document.getElementById(\'aimodal\').classList.remove(\'on\')">Fermer ✕</button></div>'
+  +'<div class="kpis"><div class="kpi"><div class="l">Prix le plus bas</div><div class="v">'+(r[6]?kf(r[6]):'–')+'</div><div class="s">'+(r[7]!=null?r[7]+' annonces':'pas en vente')+'</div></div>'
+  +'<div class="kpi"><div class="l">Prix habituel</div><div class="v">'+(r[8]?kf(r[8]):'–')+'</div><div class="s">ce qu’il se vend vraiment</div></div></div>'
+  +'<div class="aiacts">'+(r[6]?'<button class="mapbtn" onclick="openChart('+id+',this.dataset.n)" data-n="'+escH(r[1])+'">📈 Courbe de prix</button>':'')
+  +(nd?'<button class="mapbtn" onclick="openMap(this.dataset.n)" data-n="'+escH(r[1])+'">MAP</button>':'')
+  +'<button class="mapbtn" data-q="'+escH('Parle-moi de '+r[1]+' : où l’obtenir, à quoi il sert, est-ce rentable ?')+'" onclick="document.getElementById(\'aimodal\').classList.remove(\'on\');aiAsk(this.dataset.q)">💬 Demander à l’assistant</button></div>'
+  +rs.map(([p,m,q,ing])=>'<h4>Recette · '+escH((window.PROF&&PROF[p])||p)+' (maîtrise '+m+', donne '+q+')</h4><div class="chips">'
+   +ing.map(([i,n])=>'<span>'+n+' ×</span> '+chip(i)).join(' ')+'</div>').join('')
+  +(uses?'<h4>Sert à crafter</h4><div class="chips">'+[...uses].slice(0,12).map(chip).join(' ')+'</div>':'')
+  +(nd?'<h4>Récolte</h4><div class="chips">'+Object.entries(nd).map(([z,c])=>'<span class="chip">'+escH(z)+' · '+c+' points</span>').join(' ')+'</div>':'')+'</div>';
+ box.classList.add('on')}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){const b=document.getElementById('aimodal');if(b)b.classList.remove('on')}});
+// accueil du chat : marché du serveur (prix anormalement hauts ou bas par rapport au prix habituel) et dernières annonces
+function aiHome(){const box=document.getElementById('aihome');if(!box||!window.ASSIST)return;
+ const it=ASSIST.items.filter(r=>r[6]&&r[8]&&(r[7]||0)>=2),by=f=>it.map(r=>[r[6]/r[8],r]).filter(([q])=>f(q));
+ // écarts de 20 % à x3 : au-delà, c'est presque toujours une annonce isolée ou un prix aberrant
+ const up=by(q=>q>=1.2&&q<=3).sort((a,b)=>b[0]-a[0]).slice(0,4),dn=by(q=>q<=.8&&q>=.35).sort((a,b)=>a[0]-b[0]).slice(0,4);
+ let h='';
+ if(up.length||dn.length)h+='<h3>Ton marché maintenant · '+escH(ASSIST.server)+'</h3>'
+  +(up.length?'<div class="sub">Au-dessus du prix habituel : bon moment pour vendre</div>'+aiCards(up.map(([q,r])=>r[1])):'')
+  +(dn.length?'<div class="sub">En dessous du prix habituel : bonnes affaires à l’achat</div>'+aiCards(dn.map(([q,r])=>r[1])):'');
+ if(ASSIST.news&&ASSIST.news.length)h+='<h3>Dernières annonces</h3><div class="ainews">'+ASSIST.news.slice(0,6).map(([d,src,t,u])=>
+  '<a href="'+escH(u)+'" target="_blank" rel="noopener"><span class="sub">'+escH(src)+' · '+escH((d||'').slice(0,10))+'</span>'+escH(t)+'</a>').join('')+'</div>';
+ if(AINEWS&&AINEWS.length)h+='<h3>Quoi de neuf sur Aion 2 · résumé par AION Helper</h3><div class="aiposts">'+AINEWS.slice(0,6).map(n=>
+  '<a href="'+escH(n.url||'#')+'" target="_blank" rel="noopener">'+(n.image?'<img src="'+escH(n.image)+'" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">':'')
+  +'<span class="sub">'+escH([n.kind,n.date].filter(Boolean).join(' · '))+'</span><b>'+escH(n.title||'')+'</b><span>'+escH(n.summary||'')+'</span></a>').join('')+'</div>';
+ box.innerHTML=h;aiSparks(box)}
 
 // ---------------------------------------------------------------- abonnement Claude : pont local (scripts/assistant_local.py)
 // Le chat passe par Claude Code sur ce PC (abonnement de la personne connectée) au lieu de l'API : activé à la main,
@@ -868,11 +951,14 @@ async function aiLocalProbe(){AILOCAL=false;
  if(aiLocalWanted())try{const r=await fetch(AILOCALURL+'/health',{signal:AbortSignal.timeout(2000)});AILOCAL=r.ok&&(await r.json()).ok}catch(e){}
  aiModeShow();return AILOCAL}
 async function aiSendLocal(q,base){base=base||AILOCALURL;const srv=base!==AILOCALURL,inp=document.getElementById('aiin');inp.value='';aiGrow(inp);
- const H=AIH,start=H.length;H.push({role:'user',content:q});const turn=aiTurn(q);AIBUSY=new AbortController();aiBusy(true);
+ const att=aiAttTake(),qt=q||'Regarde la pièce jointe.';
+ const H=AIH,start=H.length;H.push(att.length?{role:'user',content:qt,q:qt,att:aiAttMeta(att)}:{role:'user',content:q});
+ const turn=aiTurn(qt,aiAttMeta(att));AIBUSY=new AbortController();aiBusy(true);
  let text='',note='',fin=null;const steps=[];
  try{let session='';try{session=localStorage.getItem('aisession')||''}catch(e){}
-  const r=await fetch(base+'/ask',{method:'POST',signal:AIBUSY.signal,headers:{'content-type':'application/json'},body:JSON.stringify({q,session})});
-  if(!r.ok)throw new Error(r.status===401?'Mot de passe demandé : recharge la page.':(srv?'Serveur':'Pont local')+' : erreur '+r.status);
+  const r=await fetch(base+'/ask',{method:'POST',signal:AIBUSY.signal,headers:{'content-type':'application/json'},body:JSON.stringify({q:qt,session,files:att.map(a=>({name:a.name,kind:a.kind,data:a.data}))})});
+  if(!r.ok)throw new Error(r.status===401?'Mot de passe demandé : recharge la page.':r.status===413?'Pièces jointes trop lourdes.'
+   :(srv?'Serveur':'Pont local')+' : erreur '+r.status);
   const rd=r.body.getReader(),dec=new TextDecoder();let buf='';
   for(;;){const{done,value}=await rd.read();if(done)break;buf+=dec.decode(value,{stream:true});let i;
    while((i=buf.indexOf('\n'))>=0){const ev=JSON.parse(buf.slice(0,i));buf=buf.slice(i+1);
@@ -891,17 +977,64 @@ async function aiSendLocal(q,base){base=base||AILOCALURL;const srv=base!==AILOCA
 
 // ---------------------------------------------------------------- mode de réponse : serveur AION Helper (server, automatique quand la page
 // est servie par un serveur qui répond à api/health, même protocole que le pont local), Claude Code sur ce PC (local), clé API (api)
-let AISERVER=false;
+let AISERVER=false,AINEWS=null;
 async function aiServerProbe(){if(location.protocol==='file:')return false;
  try{const r=await fetch('api/health',{cache:'no-store',signal:AbortSignal.timeout(3000)});AISERVER=r.ok&&!!(await r.json()).ok}catch(e){AISERVER=false}
+ if(AISERVER&&!AINEWS)fetch('api/news',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{AINEWS=d&&d.items;if(AINEWS)aiHome()}).catch(()=>{});
  return AISERVER}
 function aiMode(){if(AISERVER)return 'server';let m='';try{m=localStorage.getItem('aimode')||(localStorage.getItem('ailocal')?'local':'')}catch(e){}return m||'api'}
 function aiSetMode(m){try{localStorage.setItem('aimode',m);localStorage.removeItem('ailocal')}catch(e){}aiModeShow()}
 function aiReady(){const m=aiMode();return m==='server'?true:m==='local'?AILOCAL:!!aiKey()}
+async function aiRefresh(btn){btn.disabled=true;btn.textContent='↻ Relevé en cours…';
+ try{const r=await fetch('api/refresh',{method:'POST'});const d=await r.json();
+  toast(d.started?'Relevé des prix lancé : la page se met à jour dans 1 à 2 min':'Un relevé est déjà en cours');
+  const t0=Date.now(),wait=async()=>{const h=await (await fetch('api/health',{cache:'no-store'})).json();
+   if(!h.building&&h.last_build!==d.last_build)return location.reload();if(Date.now()-t0<6e5)setTimeout(wait,8000)};setTimeout(wait,8000)}
+ catch(e){toast('Serveur injoignable');btn.disabled=false;btn.textContent='↻ Actualiser les prix'}}
 function aiModeShow(){const b=document.getElementById('aimode');if(!b)return;const m=aiMode();
+ const rf=document.getElementById('airefresh');if(rf)rf.hidden=m!=='server';
  b.textContent='⚙ '+(m==='server'?'Serveur AION Helper':m==='local'?'Claude Code sur ce PC'+(AILOCAL?'':' : pont arrêté'):'Clé API');
  b.style.color=m==='local'&&!AILOCAL?'var(--warn)':''}
 async function aiLocalUse(){aiSetMode('local');await aiLocalProbe();
  if(AILOCAL){aiKeyForm(false);toast('Le chat passe par Claude Code sur ce PC (ton abonnement Claude)')}
  else document.getElementById('aikeymsg').innerHTML='<span class="neg">Pont local injoignable : lance « py scripts\\assistant_local.py », '
   +'et si Chrome demande l’accès aux appareils du réseau local, accepte.</span>'}
+
+// ---------------------------------------------------------------- pièces jointes : coller (Ctrl + V), glisser-déposer ou 📎
+// Images réduites à 1568 px (JPEG) avant l'envoi, PDF et fichiers texte tels quels. Mode clé API : blocs image/document de l'API ;
+// serveur et pont local : fichiers envoyés avec la question, que Claude Code lit dans son dossier de travail.
+let AIATT=[];
+const AITEXT=/\.(txt|md|csv|json|log|ini|cfg|xml|html?)$/i;
+function aiB64(blob){return new Promise((ok,ko)=>{const r=new FileReader();r.onload=()=>ok(String(r.result).split(',')[1]);r.onerror=ko;r.readAsDataURL(blob)})}
+function aiShrink(img,max,q){const k=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight)),c=document.createElement('canvas');
+ c.width=Math.round(img.naturalWidth*k);c.height=Math.round(img.naturalHeight*k);const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);
+ g.drawImage(img,0,0,c.width,c.height);return c.toDataURL('image/jpeg',q).split(',')[1]}
+async function aiAddFiles(files){for(const f of files){
+  if(AIATT.length>=6){toast('6 pièces jointes au plus');break}
+  const name=(f.name||'capture.png').slice(0,80);
+  try{if((f.type||'').startsWith('image/')){const url=URL.createObjectURL(f),img=new Image();
+     await new Promise((ok,ko)=>{img.onload=ok;img.onerror=ko;img.src=url});
+     AIATT.push({name:name.replace(/\.\w+$/,'')+'.jpg',kind:'image',type:'image/jpeg',data:aiShrink(img,1568,.88),thumb:'data:image/jpeg;base64,'+aiShrink(img,160,.7)});
+     URL.revokeObjectURL(url)}
+   else if(f.type==='application/pdf'||/\.pdf$/i.test(name)){if(f.size>15e6){toast('PDF trop lourd (15 Mo max)');continue}
+     AIATT.push({name,kind:'pdf',type:'application/pdf',data:await aiB64(f)})}
+   else if((f.type||'').startsWith('text/')||AITEXT.test(name)){if(f.size>5e5){toast('Fichier texte trop lourd (500 Ko max)');continue}
+     AIATT.push({name,kind:'text',type:'text/plain',data:await aiB64(f)})}
+   else toast('Type de fichier non pris en charge : '+name)}
+  catch(e){toast('Impossible de lire '+name)}}
+ aiAttShow()}
+function aiAttShow(){const box=document.getElementById('aiatt');if(!box)return;box.hidden=!AIATT.length;
+ box.innerHTML=AIATT.map((a,i)=>'<span class="aiattc">'+(a.thumb?'<img src="'+a.thumb+'" alt="">':'<b>'+(a.kind==='pdf'?'PDF':'TXT')+'</b>')
+  +'<span>'+escH(a.name)+'</span><button type="button" title="Retirer" onclick="AIATT.splice('+i+',1);aiAttShow()">✕</button></span>').join('')}
+function aiAttTake(){const a=AIATT;AIATT=[];aiAttShow();return a}
+// ce que l'historique garde d'une pièce jointe (vignette pour l'affichage, pas le fichier)
+function aiAttMeta(att){return att.map(a=>({name:a.name,kind:a.kind,thumb:a.thumb||''}))}
+// blocs de contenu pour l'API Anthropic
+function aiAttBlocks(att){return att.map(a=>a.kind==='image'?{type:'image',source:{type:'base64',media_type:a.type,data:a.data}}
+ :a.kind==='pdf'?{type:'document',title:a.name,source:{type:'base64',media_type:'application/pdf',data:a.data}}
+ :{type:'document',title:a.name,source:{type:'text',media_type:'text/plain',data:new TextDecoder().decode(Uint8Array.from(atob(a.data),c=>c.charCodeAt(0)))}})}
+document.addEventListener('DOMContentLoaded',()=>{const ai=document.getElementById('ai'),inp=document.getElementById('aiin');if(!ai)return;
+ inp.addEventListener('paste',e=>{const fs=[...(e.clipboardData||{}).files||[]];if(fs.length){e.preventDefault();aiAddFiles(fs)}});
+ ai.addEventListener('dragover',e=>{if([...e.dataTransfer.types].includes('Files')){e.preventDefault();ai.classList.add('drop')}});
+ ai.addEventListener('dragleave',e=>{if(!ai.contains(e.relatedTarget))ai.classList.remove('drop')});
+ ai.addEventListener('drop',e=>{ai.classList.remove('drop');if(e.dataTransfer.files.length){e.preventDefault();aiAddFiles([...e.dataTransfer.files])}})});
