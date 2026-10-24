@@ -1,6 +1,6 @@
 function show(id){document.querySelectorAll('section').forEach(s=>s.classList.toggle('on',s.id===id));
  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===id));
- const b=document.querySelector('nav button[data-t="'+id+'"]');if(b&&b.classList.contains('tool'))document.querySelector('nav').classList.add('tools');try{localStorage.setItem('tab',id)}catch(e){};scrollTo(0,0);if(id==='chat')aiInit()}
+ const b=document.querySelector('nav button[data-t="'+id+'"]');if(b&&b.classList.contains('tool'))document.querySelector('nav').classList.add('tools');try{localStorage.setItem('tab',id)}catch(e){};scrollTo(0,0);if(id==='chat'||id==='perso')aiInit(AICH[id])}
 // menu « Outils » : onglets secondaires, deplies au clic ou quand l'un d'eux est ouvert
 function toggleTools(){document.querySelector('nav').classList.toggle('tools')}
 function openMap(name){document.getElementById('mtitle').textContent='Carte : '+name;
@@ -665,10 +665,27 @@ document.addEventListener('DOMContentLoaded',()=>{staleCheck();setInterval(stale
 // Chat Claude, appelé depuis le navigateur (API Anthropic) : recherche web et lecture de pages côté Anthropic, plus l'outil
 // tracker_search sur le catalogue du tracker (assist.js : objets, prix du serveur, recettes, récolte, chargé à l'ouverture).
 // La clé API reste dans ce navigateur. La conversation (blocs bruts de l'API, renvoyés tels quels) aussi.
+// Deux conversations : 💬 Assistant (chat) et 🧙 Personnage (perso), chacune avec ses éléments dans la page (id + suffixe), son
+// historique, sa session Claude Code, ses pièces jointes et sa réponse en cours ; aiC() = celle de l'onglet ouvert.
 const AIMODEL='claude-opus-5-5',AIPRICE={in:4,out:20,cw:5,cr:.2,search:.01};   // $ par million de jetons, $ par recherche
-let AIH=[],AIBUSY=null,AIX=null;
+let AIX=null;
+const AICH={chat:{id:'chat',sfx:'',h:[],busy:null,att:[]},perso:{id:'perso',sfx:'2',h:[],busy:null,att:[]}};
+function aiC(id){return AICH[id]||AICH[(document.querySelector('main>section.on')||{}).id==='perso'?'perso':'chat']}
+function aiEl(C,id){return document.getElementById(id+C.sfx)}
+function aiLS(C,k){return C.id==='chat'?k:k+'_perso'}          // clés du navigateur : aichat, aisession / aichat_perso, aisession_perso
 function aiKey(){try{return localStorage.getItem('aikey')||''}catch(e){return ''}}
-function aiSave(){try{localStorage.setItem('aichat',JSON.stringify(AIH))}catch(e){try{localStorage.removeItem('aichat')}catch(e2){}}}
+function aiSave(C){const k=aiLS(C,'aichat');try{localStorage.setItem(k,JSON.stringify(C.h))}catch(e){try{localStorage.removeItem(k)}catch(e2){}}aiPush(C)}
+function aiSession(C){try{return localStorage.getItem(aiLS(C,'aisession'))||''}catch(e){return ''}}
+function aiSessionSet(C,s){try{if(s)localStorage.setItem(aiLS(C,'aisession'),s);else localStorage.removeItem(aiLS(C,'aisession'))}catch(e){}}
+// serveur AION Helper : chaque conversation est aussi gardée sur le serveur, par nom d'utilisateur (la même sur le PC et le téléphone)
+async function aiPull(C){if(C.push)await C.push;if(C.busy)return;
+ try{const r=await fetch('api/chat?c='+C.id,{cache:'no-store'});if(!r.ok)return;const d=await r.json();
+  if(!d.u){if(C.h.length)aiPush(C);return}                              // rien sur le serveur : la conversation de ce navigateur y monte
+  if(d.u===C.u||C.busy)return;C.u=d.u;C.h=Array.isArray(d.h)?d.h:[];aiSessionSet(C,d.session||'');
+  try{localStorage.setItem(aiLS(C,'aichat'),JSON.stringify(C.h))}catch(e){}aiRenderAll(C)}catch(e){}}
+function aiPush(C){if(aiMode()!=='server')return;
+ C.push=fetch('api/chat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({c:C.id,h:C.h,session:aiSession(C)})})
+  .then(r=>r.ok?r.json():null).then(d=>{if(d&&d.u)C.u=d.u}).catch(()=>{}).then(()=>{C.push=null})}
 function aiCostGet(){try{return +localStorage.getItem('aicost')||0}catch(e){return 0}}
 function aiCostAdd(u){if(!u)return;const s=u.server_tool_use||{},c=((u.input_tokens||0)*AIPRICE.in+(u.output_tokens||0)*AIPRICE.out
  +(u.cache_creation_input_tokens||0)*AIPRICE.cw+(u.cache_read_input_tokens||0)*AIPRICE.cr)/1e6+(s.web_search_requests||0)*AIPRICE.search;
@@ -676,10 +693,16 @@ function aiCostAdd(u){if(!u)return;const s=u.server_tool_use||{},c=((u.input_tok
 function aiCostShow(){const el=document.getElementById('aicost');if(el)el.textContent=aiCostGet()?'≈ '+aiCostGet().toFixed(2).replace('.',',')+' $ dépensés depuis ce navigateur':''}
 function aiLoad(){const v=(document.getElementById('ai')||{dataset:{}}).dataset.v||'';
  return window.ASSIST?Promise.resolve():new Promise(ok=>{const sc=document.createElement('script');sc.src='assist.js?v='+v;sc.onload=ok;sc.onerror=ok;document.head.appendChild(sc)})}
-function aiInit(){const box=document.getElementById('aimsgs');if(!box)return;if(aiRenderAll.hello==null)aiRenderAll.hello=box.innerHTML;aiLoad().then(()=>{if(AIH.length)aiRenderAll();else aiHome()});aiCostShow();
- if(!AIH.length){try{AIH=JSON.parse(localStorage.getItem('aichat')||'[]')}catch(e){AIH=[]}if(AIH.length)aiRenderAll()}
- aiServerProbe().then(()=>aiMode()==='local'?aiLocalProbe():0).then(()=>{aiModeShow();if(!aiReady())aiKeyForm();else setTimeout(()=>document.getElementById('aiin').focus(),0)})}
-function aiKeyForm(on){const box=document.getElementById('aikey');if(on===false){box.hidden=true;return}box.hidden=false;const m=aiMode(),
+// première ouverture d'un onglet de conversation : historique de ce navigateur, puis celui du serveur ; ensuite (retour sur l'onglet)
+// rien n'est redessiné, pour ne pas perdre une réponse en cours d'écriture
+function aiInit(C){C=C||aiC();const box=aiEl(C,'aimsgs');if(!box)return;
+ if(C.hello==null){C.hello=box.innerHTML;try{C.h=JSON.parse(localStorage.getItem(aiLS(C,'aichat'))||'[]')}catch(e){C.h=[]}
+  if(C.h.length)aiRenderAll(C);aiLoad().then(()=>{if(!C.busy)aiRenderAll(C);pRender()})}
+ aiCostShow();
+ aiServerProbe().then(()=>aiMode()==='server'?Promise.all([aiPull(C),pLoad()]):aiMode()==='local'?aiLocalProbe():0).then(()=>{aiModeShow();
+  if(aiC()!==C)return;if(!aiReady()){if(C.id==='chat')aiKeyForm()}else setTimeout(()=>aiEl(C,'aiin').focus(),0)})}
+function aiKeyForm(on){if(on!==false&&aiC().id!=='chat')show('chat');                // réglages : dans l'onglet 💬 Assistant
+ const box=document.getElementById('aikey');if(on===false){box.hidden=true;return}box.hidden=false;const m=aiMode(),
   sec=(id,title,sub,body)=>'<div class="aiopt'+(m===id?' on':'')+'"><b>'+title+'</b>'+(m===id?' <span class="badge b-ok">utilisé</span>':'')
    +'<div class="sub">'+sub+'</div>'+body+'</div>';
  box.innerHTML='<div class="aiopts">'
@@ -701,8 +724,8 @@ function aiKeySet(){const v=document.getElementById('aikeyin').value.trim(),msg=
  try{localStorage.setItem('aikey',v)}catch(e){}aiSetMode('api');aiKeyForm(false);toast('Clé enregistrée dans ce navigateur');document.getElementById('aiin').focus()}
 function aiKeyForget(){try{localStorage.removeItem('aikey')}catch(e){}aiKeyForm();toast('Clé oubliée dans ce navigateur')}
 function aiGrow(t){t.style.height='auto';t.style.height=Math.min(t.scrollHeight,220)+'px'}
-function aiNew(){if(AIBUSY)AIBUSY.abort();AIH=[];aiSave();try{localStorage.removeItem('aisession')}catch(e){}aiRenderAll();document.getElementById('aiin').focus()}
-function aiAsk(q){if(AIBUSY)return;document.getElementById('aiin').value=q;aiSend()}
+function aiNew(C){C=C||aiC();if(C.busy)C.busy.abort();C.h=[];aiSessionSet(C,'');aiSave(C);aiRenderAll(C);aiEl(C,'aiin').focus()}
+function aiAsk(q){const C=aiC();if(C.busy)return;aiEl(C,'aiin').value=q;aiSend(C)}
 
 // ---------------------------------------------------------------- outil tracker_search (exécuté dans la page)
 const AITOOLS=[{type:'web_search_20260209',name:'web_search',max_uses:8},
@@ -739,7 +762,7 @@ function aiTool(b){if(b.name!=='tracker_search')return{content:'outil inconnu : 
  return{content:JSON.stringify(aiSearch(b.input.query))}}
 
 // ---------------------------------------------------------------- appel de l'API (streaming SSE, blocs reconstitués tels quels)
-function aiSystem(){const A=window.ASSIST;
+function aiSystem(C){const A=window.ASSIST;
  return 'You are the Aion 2 assistant inside AION HDV, a private tool used by two friends who play Aion 2 (NCSOFT\'s MMORPG) '
   +'on the server '+(A?A.server:'Zemurru')+', with a French game client. They ask anything about the game: loot and drops, dungeons, bosses, '
   +'classes and builds, gear progression, crafting, gathering, quests, the auction house (HDV), events and patches.\n\n'
@@ -752,13 +775,13 @@ function aiSystem(){const A=window.ASSIST;
   +'name in brackets when it helps.\n\n'
   +'Answer in the language of the question. Lead with the direct answer, then the details that matter: short sections, lists, '
   +'and a table when comparing options. Bold key item names and numbers. Be concrete (names, numbers, where, how many), skip filler.'
-  +(A&&A.fmt?'\n\n'+A.fmt:'')+aiMemPrompt(aiMemLocal())}
-async function aiStream(signal,draw){
+  +(A&&A.fmt?'\n\n'+A.fmt:'')+aiMemPrompt(aiMemLocal())+aiPersoPrompt(C)}
+async function aiStream(signal,C,H,draw){
  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',signal,headers:{'content-type':'application/json',
    'x-api-key':aiKey(),'anthropic-version':'2023-06-01','anthropic-beta':'server-side-fallback-2026-07-01',
    'anthropic-dangerous-direct-browser-access':'true'},
   body:JSON.stringify({model:AIMODEL,max_tokens:32000,stream:true,thinking:{type:'adaptive'},output_config:{effort:'medium'},
-   fallbacks:'default',cache_control:{type:'ephemeral'},system:aiSystem(),tools:AITOOLS,messages:AIH.map(m=>({role:m.role,content:m.content}))})});
+   fallbacks:'default',cache_control:{type:'ephemeral'},system:aiSystem(C),tools:AITOOLS,messages:H.map(m=>({role:m.role,content:m.content}))})});
  if(!r.ok){let m='';try{const j=await r.json();m=(j.error&&j.error.message)||''}catch(e){}
   const e=new Error(r.status===401?'Clé API refusée ('+m+')':r.status===429?'Limite de débit ou de dépense atteinte, réessaie dans un moment ('+m+')'
    :r.status===529?'API surchargée, réessaie dans un moment':'Erreur '+r.status+' : '+m);e.status=r.status;throw e}
@@ -778,33 +801,34 @@ async function aiStream(signal,draw){
    else if(ev.type==='message_delta'){Object.assign(msg,ev.delta);msg.usage=Object.assign({},msg.usage,ev.usage)}
    else if(ev.type==='error')throw new Error((ev.error&&ev.error.message)||'erreur de l’API')}}
  msg.content=blocks.filter(Boolean);return msg}
-async function aiSend(){const inp=document.getElementById('aiin'),q=inp.value.trim();
- if(AIBUSY){AIBUSY.abort();return}if(!q&&!AIATT.length)return;const mode=aiMode();
- if(mode==='server')return aiSendLocal(q,'api');
- if(mode==='local'){if(!AILOCAL)await aiLocalProbe();if(AILOCAL)return aiSendLocal(q);aiKeyForm();aiLocalUse();return}
+async function aiSend(C){C=C||aiC();const inp=aiEl(C,'aiin'),q=inp.value.trim();
+ if(C.busy){C.busy.abort();return}if(!q&&!C.att.length)return;const mode=aiMode();
+ if(mode==='server')return aiSendLocal(C,q,'api');
+ if(mode==='local'){if(!AILOCAL)await aiLocalProbe();if(AILOCAL)return aiSendLocal(C,q);aiKeyForm();aiLocalUse();return}
  if(!aiKey()){aiKeyForm();return}
- await aiLoad();inp.value='';aiGrow(inp);const att=aiAttTake(),qt=q||'Regarde la pièce jointe.';
- const H=AIH,start=H.length;H.push(att.length?{role:'user',content:[...aiAttBlocks(att),{type:'text',text:qt}],q:qt,att:aiAttMeta(att)}:{role:'user',content:q});
- const turn=aiTurn(qt,aiAttMeta(att));AIBUSY=new AbortController();aiBusy(true);
+ await aiLoad();inp.value='';aiGrow(inp);const att=aiAttTake(C),qt=q||aiAttQ(C);
+ const H=C.h,start=H.length;H.push(att.length?{role:'user',content:[...aiAttBlocks(att),{type:'text',text:qt}],q:qt,att:aiAttMeta(att)}:{role:'user',content:q});
+ const turn=aiTurn(C,qt,aiAttMeta(att)),ctl=C.busy=new AbortController();aiBusy(C,true);
  let note='';
  try{for(let step=0;step<15;step++){
-   const msg=await aiStream(AIBUSY.signal,(b,blocks)=>{aiPaint.live=blocks;aiDraw(turn,start,b)});
-   aiPaint.live=null;H.push({role:'assistant',content:msg.content});aiCostAdd(msg.usage);
+   const msg=await aiStream(ctl.signal,C,H,(b,blocks)=>{turn.live=blocks;aiDraw(turn,H,start,b)});
+   turn.live=null;H.push({role:'assistant',content:msg.content});aiCostAdd(msg.usage);
    if(msg.stop_reason==='tool_use'){const calls=msg.content.filter(b=>b.type==='tool_use');
     H.push({role:'user',content:calls.map(b=>Object.assign({type:'tool_result',tool_use_id:b.id},aiTool(b)))});continue}
    if(msg.stop_reason==='pause_turn')continue;
    if(msg.stop_reason==='max_tokens')note='Réponse coupée (trop longue).';
    if(msg.stop_reason==='refusal')note='L’assistant a refusé de répondre à cette question.';
    break}
-  if(H===AIH)aiSave()}
- catch(e){if(H===AIH){AIH.length=start;aiSave()}                              // tour annule : l'historique reste valide pour la suite
+  if(H===C.h)aiSave(C)}
+ catch(e){if(H===C.h){H.length=start;aiSave(C)}                              // tour annule : l'historique reste valide pour la suite
   note=e.name==='AbortError'?'Interrompu.':e.message;if(e.status===401)aiKeyForm()}
- if(!note&&H===AIH)aiMemKeep(H.slice(start+1).filter(m=>m.role==='assistant').map(m=>m.content.filter(b=>b.type==='text').map(b=>b.text).join('')).join('\n'));
- aiPaint.live=null;AIBUSY=null;aiBusy(false);aiDraw(turn,start,null,true,note)}
-function aiBusy(on){const b=document.getElementById('aigo');b.textContent=on?'■':'➤';b.title=on?'Arrêter':'Envoyer (Entrée)'}
+ if(!note&&H===C.h){const t=aiSpan(H,start).filter(m=>m.role==='assistant').map(m=>m.content.filter(b=>b.type==='text').map(b=>b.text).join('')).join('\n');
+  aiMemKeep(t);pKeep(t)}
+ turn.live=null;if(C.busy===ctl){C.busy=null;aiBusy(C,false)}aiDraw(turn,H,start,null,true,note)}
+function aiBusy(C,on){const b=aiEl(C,'aigo');b.textContent=on?'■':'➤';b.title=on?'Arrêter':'Envoyer (Entrée)'}
 
 // ---------------------------------------------------------------- affichage
-function aiTurn(q,att){const box=document.getElementById('aimsgs'),h=box.querySelector('.aihello');if(h)h.remove();
+function aiTurn(C,q,att){const box=aiEl(C,'aimsgs'),h=box.querySelector('.aihello');if(h)h.remove();
  const u=document.createElement('div');u.className='aiu';u.textContent=q;box.appendChild(u);
  if(att&&att.length){const t=document.createElement('div');t.className='aiuatt';
   t.innerHTML=att.map(a=>a.thumb?'<img src="'+a.thumb+'" alt="'+escH(a.name)+'" title="'+escH(a.name)+'">':'<span>📄 '+escH(a.name)+'</span>').join('');u.prepend(t)}
@@ -814,33 +838,34 @@ function aiSteps(msgs){let s=0,f=0,t=0;msgs.forEach(m=>{Array.isArray(m.content)
   if(b.type==='server_tool_use'){if(b.name==='web_search')s++;else if(b.name==='web_fetch')f++}else if(b.type==='tool_use')t++});
   (m.steps||[]).forEach(n=>n==='WebSearch'?s++:n==='WebFetch'?f++:t++)});
  return[s&&s+' recherche'+(s>1?'s':'')+' web',f&&f+' page'+(f>1?'s':'')+' lue'+(f>1?'s':''),t&&t+' recherche'+(t>1?'s':'')+' tracker'].filter(Boolean).join(' · ')}
-let AIRAF=0;
-function aiDraw(turn,start,b,done,note){
+// messages d'un tour : de la question (start) à la question suivante
+function aiSpan(H,start){let e=start+1;while(e<H.length&&!(H[e].role==='user'&&(typeof H[e].content==='string'||H[e].q!=null)))e++;return H.slice(start+1,e)}
+function aiDraw(turn,H,start,b,done,note){
  if(b&&b.type==='server_tool_use'&&b.input&&!('_j' in b)){const st=turn.querySelector('.aistat');
   if(st){st.style.display='';st.textContent=b.name==='web_search'?'Recherche web'+(b.input.query?' : '+b.input.query:'…'):b.name==='web_fetch'?'Lecture'+(b.input.url?' : '+b.input.url:'…'):'Analyse des résultats…'}}
  if(b&&b.type==='tool_use'&&b.input&&!('_j' in b)){const st=turn.querySelector('.aistat');if(st){st.style.display='';st.textContent='Données du tracker : '+(b.input.query||'…')}}
- if(done){cancelAnimationFrame(AIRAF);aiPaint(turn,start,true,note);return}
- if(!AIRAF)AIRAF=requestAnimationFrame(()=>{AIRAF=0;aiPaint(turn,start,false)})}
-function aiPaint(turn,start,done,note){
- const ms=AIH.slice(start+1).filter(m=>m.role==='assistant').map(m=>m.content);
- // le message en cours n'est dans AIH qu'une fois fini : on lit aussi ses blocs en direct
- if(!done&&aiPaint.live)ms.push(aiPaint.live.filter(Boolean));
+ if(done){cancelAnimationFrame(turn.raf);turn.raf=0;aiPaint(turn,H,start,true,note);return}
+ if(!turn.raf)turn.raf=requestAnimationFrame(()=>{turn.raf=0;aiPaint(turn,H,start,false)})}
+function aiPaint(turn,H,start,done,note){
+ const span=aiSpan(H,start),ms=span.filter(m=>m.role==='assistant').map(m=>m.content);
+ // le message en cours n'est dans l'historique qu'une fois fini : on lit aussi ses blocs en direct
+ if(!done&&turn.live)ms.push(turn.live.filter(Boolean));
  const text=ms.map(c=>c.filter(b=>b.type==='text').map(b=>b.text).join('')).filter(t=>t.trim()).join('\n\n');
  turn.querySelector('.aibody').innerHTML=aiMd(text);aiSparks(turn);
  const st=turn.querySelector('.aistat');
- if(done){if(st)st.remove();const meta=aiSteps(AIH.slice(start+1));
+ if(done){if(st)st.remove();const meta=aiSteps(span);
   // sources : passages cités, sinon pages lues (la recherche filtrée par code ne renvoie pas de citations)
   const src=new Map();ms.forEach(c=>c.forEach(b=>(b.citations||[]).forEach(x=>x.url&&!src.has(x.url)&&src.set(x.url,x.title||x.url))));
   if(!src.size)ms.forEach(c=>c.forEach(b=>{const r=b.type==='web_fetch_tool_result'&&b.content;
    if(r&&r.type==='web_fetch_result'&&r.url&&!src.has(r.url))src.set(r.url,(r.content&&r.content.title)||r.url.replace(/^https?:\/\/(www\.)?/,''))}));
-  AIH.slice(start+1).forEach(m=>(m.src||[]).forEach(u=>!src.has(u)&&src.set(u,u.replace(/^https?:\/\/(www\.)?/,''))));
+  span.forEach(m=>(m.src||[]).forEach(u=>!src.has(u)&&src.set(u,u.replace(/^https?:\/\/(www\.)?/,''))));
   turn.querySelector('.aisrc').innerHTML=[...src].slice(0,10).map(([u,t])=>'<a href="'+escH(u)+'" target="_blank" rel="noopener" title="'+escH(t)+'">'
    +escH(t)+'</a>').join('')+(meta?'<span class="sub" style="align-self:center">'+meta+'</span>':'');
   if(note){const e=document.createElement('div');e.className='aierr';e.textContent=note;turn.appendChild(e)}}
  else if(st&&text)st.style.display='none'}
-function aiRenderAll(){const box=document.getElementById('aimsgs');box.innerHTML='';
- if(!AIH.length){box.innerHTML=aiRenderAll.hello||'';aiHome();return}
- AIH.forEach((m,i)=>{if(m.role==='user'&&(typeof m.content==='string'||m.q!=null)){const t=aiTurn(m.q!=null?m.q:m.content,m.att);aiPaint(t,i,true)}})}
+function aiRenderAll(C){C=C||aiC();const box=aiEl(C,'aimsgs');box.innerHTML='';
+ if(!C.h.length){box.innerHTML=C.hello||'';aiHome();return}
+ C.h.forEach((m,i)=>{if(m.role==='user'&&(typeof m.content==='string'||m.q!=null)){const t=aiTurn(C,m.q!=null?m.q:m.content,m.att);aiPaint(t,C.h,i,true)}})}
 
 // ---------------------------------------------------------------- réponses en blocs visuels
 // Markdown (titres, listes, tableaux, citations, gras, liens http) + blocs que l'assistant écrit d'après aionhdv/assistant_format.md :
@@ -881,6 +906,10 @@ function aiWidget(kind,raw){const rows=raw.map(l=>l.trim()).filter(Boolean),cols
    +'</span><i><b style="width:'+Math.max(2,Math.abs(v)/max*100)+'%"'+(v<0?' class="neg"':'')+'></b></i><em>'+kf(v)+'</em></div>').join('')+'</div>'}
  if(kind==='memo')return '<div class="aimemo">🧠 <b>Retenu pour la suite</b>'+rows.map(l=>'<div>'+aiInline(escH(l.replace(/^[-*•]\s*/,'')))+'</div>').join('')
   +'<button onclick="aiMemForm()">Voir la mémoire</button></div>';
+ if(kind==='perso'){const L=rows.map(l=>l.replace(/^[-*•]\s*/,'').split('|').map(c=>c.trim())).filter(c=>c.length>1);
+  return '<div class="aiperso">🧙 <b>Fiche du personnage mise à jour</b>'+L.slice(0,8).map(c=>'<div>'+(pSecKey(c[0])==='progression'
+    ?'📈 '+aiInline(escH(c.slice(1).join(' | '))):'<span class="sub">'+escH(c[1])+'</span> '+aiInline(escH(c.slice(2).join(' | '))))+'</div>').join('')
+   +(L.length>8?'<div class="sub">et '+(L.length-8)+' autres champs</div>':'')+'<button onclick="show(\'perso\')">Voir ma fiche</button></div>'}
  if(kind==='suggest')return '<div class="aifollow">'+rows.map(l=>{const q=l.replace(/^[-*•\d.)\s]+/,'');
   return '<button data-q="'+escH(q)+'" onclick="aiAsk(this.dataset.q)">'+escH(q)+'</button>'}).join('')+'</div>';
  return '<pre><code>'+raw.map(escH).join('\n')+'</code></pre>'}
@@ -957,36 +986,39 @@ function aiLocalWanted(){return aiMode()==='local'}
 async function aiLocalProbe(){AILOCAL=false;
  if(aiLocalWanted())try{const r=await fetch(AILOCALURL+'/health',{signal:AbortSignal.timeout(2000)});AILOCAL=r.ok&&(await r.json()).ok}catch(e){}
  aiModeShow();return AILOCAL}
-async function aiSendLocal(q,base){base=base||AILOCALURL;const srv=base!==AILOCALURL,inp=document.getElementById('aiin');inp.value='';aiGrow(inp);
- const att=aiAttTake(),qt=q||'Regarde la pièce jointe.';
- const H=AIH,start=H.length;H.push(att.length?{role:'user',content:qt,q:qt,att:aiAttMeta(att)}:{role:'user',content:q});
- const turn=aiTurn(qt,aiAttMeta(att));AIBUSY=new AbortController();aiBusy(true);
+async function aiSendLocal(C,q,base){base=base||AILOCALURL;const srv=base!==AILOCALURL,inp=aiEl(C,'aiin');inp.value='';aiGrow(inp);
+ const att=aiAttTake(C),qt=q||aiAttQ(C);
+ const H=C.h,start=H.length;H.push(att.length?{role:'user',content:qt,q:qt,att:aiAttMeta(att)}:{role:'user',content:q});
+ const turn=aiTurn(C,qt,aiAttMeta(att)),ctl=C.busy=new AbortController();aiBusy(C,true);
  let text='',note='',fin=null;const steps=[];
- try{let session='';try{session=localStorage.getItem('aisession')||''}catch(e){}
-  const r=await fetch(base+'/ask',{method:'POST',signal:AIBUSY.signal,headers:{'content-type':'application/json'},body:JSON.stringify({q:qt,session,files:att.map(a=>({name:a.name,kind:a.kind,data:a.data}))})});
+ try{const session=aiSession(C);
+  const r=await fetch(base+'/ask',{method:'POST',signal:ctl.signal,headers:{'content-type':'application/json'},
+   body:JSON.stringify({q:qt,session,perso:aiPersoPrompt(C),files:att.map(a=>({name:a.name,kind:a.kind,data:a.data}))})});
   if(!r.ok)throw new Error(r.status===401?'Mot de passe demandé : recharge la page.':r.status===413?'Pièces jointes trop lourdes.'
    :(srv?'Serveur':'Pont local')+' : erreur '+r.status);
   const rd=r.body.getReader(),dec=new TextDecoder();let buf='';
   for(;;){const{done,value}=await rd.read();if(done)break;buf+=dec.decode(value,{stream:true});let i;
    while((i=buf.indexOf('\n'))>=0){const ev=JSON.parse(buf.slice(0,i));buf=buf.slice(i+1);
-    if(ev.t==='text'){text+=ev.v;aiPaint.live=[{type:'text',text}];aiDraw(turn,start,null)}
-    else if(ev.t==='tool'){steps.push(ev.name);text='';aiPaint.live=null;          // texte d'attente avant un outil : remplacé par le statut
-     aiDraw(turn,start,ev.name==='WebSearch'?{type:'server_tool_use',name:'web_search',input:{query:ev.v}}
+    if(ev.t==='text'){text+=ev.v;turn.live=[{type:'text',text}];aiDraw(turn,H,start,null)}
+    else if(ev.t==='tool'){steps.push(ev.name);text='';turn.live=null;          // texte d'attente avant un outil : remplacé par le statut
+     aiDraw(turn,H,start,ev.name==='WebSearch'?{type:'server_tool_use',name:'web_search',input:{query:ev.v}}
       :ev.name==='WebFetch'?{type:'server_tool_use',name:'web_fetch',input:{url:ev.v}}:{type:'tool_use',name:'tracker_search',input:{query:ev.v}})}
     else if(ev.t==='done')fin=ev;else if(ev.t==='error')throw new Error('Claude Code : '+ev.v)}}
   if(!fin)throw new Error('Réponse interrompue'+(srv?'.':' (pont local arrêté ?)'));
-  try{if(fin.session&&H===AIH)localStorage.setItem('aisession',fin.session)}catch(e){}
-  H.push({role:'assistant',content:[{type:'text',text:fin.text||text}],src:fin.sources||[],steps});if(H===AIH)aiSave()}
- catch(e){if(H===AIH){AIH.length=start;aiSave()}
+  if(fin.session&&H===C.h)aiSessionSet(C,fin.session);
+  H.push({role:'assistant',content:[{type:'text',text:fin.text||text}],src:fin.sources||[],steps});if(H===C.h)aiSave(C);
+  if(!srv)pKeep(fin.text);else if(pLines(fin.text).length)pLoad()}        // fiche : le serveur l'a déjà mise à jour
+ catch(e){if(H===C.h){H.length=start;aiSave(C)}
   note=e.name==='AbortError'?'Interrompu.':e instanceof TypeError&&srv?'Serveur AION Helper injoignable, réessaie dans un moment.':e instanceof TypeError?'Pont local injoignable : lance « py scripts\\assistant_local.py » (et accepte l’accès au réseau local si Chrome le demande).':e.message;
   if(e instanceof TypeError&&!srv)aiLocalProbe()}
- aiPaint.live=null;AIBUSY=null;aiBusy(false);aiDraw(turn,start,null,true,note)}
+ turn.live=null;if(C.busy===ctl){C.busy=null;aiBusy(C,false)}aiDraw(turn,H,start,null,true,note)}
 
 // ---------------------------------------------------------------- mode de réponse : serveur AION Helper (server, automatique quand la page
 // est servie par un serveur qui répond à api/health, même protocole que le pont local), Claude Code sur ce PC (local), clé API (api)
-let AISERVER=false,AINEWS=null;
+let AISERVER=false,AINEWS=null,AIUSER='';
 async function aiServerProbe(){if(location.protocol==='file:')return false;
- try{const r=await fetch('api/health',{cache:'no-store',signal:AbortSignal.timeout(3000)});AISERVER=r.ok&&!!(await r.json()).ok}catch(e){AISERVER=false}
+ try{const r=await fetch('api/health',{cache:'no-store',signal:AbortSignal.timeout(3000)});AISERVER=false;
+  if(r.ok){const j=await r.json();AISERVER=!!j.ok;AIUSER=j.user||''}}catch(e){AISERVER=false}
  if(AISERVER&&!AINEWS)fetch('api/news',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{AINEWS=d&&d.items;if(AINEWS)aiHome()}).catch(()=>{});
  return AISERVER}
 function aiMode(){if(AISERVER)return 'server';let m='';try{m=localStorage.getItem('aimode')||(localStorage.getItem('ailocal')?'local':'')}catch(e){}return m||'api'}
@@ -1000,7 +1032,7 @@ async function aiRefresh(btn){btn.disabled=true;btn.textContent='↻ Relevé en 
  catch(e){toast('Serveur injoignable');btn.disabled=false;btn.textContent='↻ Actualiser les prix'}}
 function aiModeShow(){const b=document.getElementById('aimode');if(!b)return;const m=aiMode();
  const rf=document.getElementById('airefresh');if(rf)rf.hidden=m!=='server';
- b.textContent='⚙ '+(m==='server'?'Serveur AION Helper':m==='local'?'Claude Code sur ce PC'+(AILOCAL?'':' : pont arrêté'):'Clé API');
+ b.textContent='⚙ '+(m==='server'?'Serveur AION Helper'+(AIUSER?' · '+AIUSER:''):m==='local'?'Claude Code sur ce PC'+(AILOCAL?'':' : pont arrêté'):'Clé API');
  b.style.color=m==='local'&&!AILOCAL?'var(--warn)':''}
 async function aiLocalUse(){aiSetMode('local');await aiLocalProbe();
  if(AILOCAL){aiKeyForm(false);toast('Le chat passe par Claude Code sur ce PC (ton abonnement Claude)')}
@@ -1010,41 +1042,47 @@ async function aiLocalUse(){aiSetMode('local');await aiLocalProbe();
 // ---------------------------------------------------------------- pièces jointes : coller (Ctrl + V), glisser-déposer ou 📎
 // Images réduites à 1568 px (JPEG) avant l'envoi, PDF et fichiers texte tels quels. Mode clé API : blocs image/document de l'API ;
 // serveur et pont local : fichiers envoyés avec la question, que Claude Code lit dans son dossier de travail.
-let AIATT=[];
 const AITEXT=/\.(txt|md|csv|json|log|ini|cfg|xml|html?)$/i;
 function aiB64(blob){return new Promise((ok,ko)=>{const r=new FileReader();r.onload=()=>ok(String(r.result).split(',')[1]);r.onerror=ko;r.readAsDataURL(blob)})}
 function aiShrink(img,max,q){const k=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight)),c=document.createElement('canvas');
  c.width=Math.round(img.naturalWidth*k);c.height=Math.round(img.naturalHeight*k);const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);
  g.drawImage(img,0,0,c.width,c.height);return c.toDataURL('image/jpeg',q).split(',')[1]}
-async function aiAddFiles(files){for(const f of files){
-  if(AIATT.length>=6){toast('6 pièces jointes au plus');break}
+async function aiAddFiles(files,C){C=C||aiC();for(const f of files){
+  if(C.att.length>=6){toast('6 pièces jointes au plus');break}
   const name=(f.name||'capture.png').slice(0,80);
   try{if((f.type||'').startsWith('image/')){const url=URL.createObjectURL(f),img=new Image();
      await new Promise((ok,ko)=>{img.onload=ok;img.onerror=ko;img.src=url});
-     AIATT.push({name:name.replace(/\.\w+$/,'')+'.jpg',kind:'image',type:'image/jpeg',data:aiShrink(img,1568,.88),thumb:'data:image/jpeg;base64,'+aiShrink(img,160,.7)});
+     C.att.push({name:name.replace(/\.\w+$/,'')+'.jpg',kind:'image',type:'image/jpeg',data:aiShrink(img,1568,.88),thumb:'data:image/jpeg;base64,'+aiShrink(img,160,.7)});
      URL.revokeObjectURL(url)}
    else if(f.type==='application/pdf'||/\.pdf$/i.test(name)){if(f.size>15e6){toast('PDF trop lourd (15 Mo max)');continue}
-     AIATT.push({name,kind:'pdf',type:'application/pdf',data:await aiB64(f)})}
+     C.att.push({name,kind:'pdf',type:'application/pdf',data:await aiB64(f)})}
    else if((f.type||'').startsWith('text/')||AITEXT.test(name)){if(f.size>5e5){toast('Fichier texte trop lourd (500 Ko max)');continue}
-     AIATT.push({name,kind:'text',type:'text/plain',data:await aiB64(f)})}
+     C.att.push({name,kind:'text',type:'text/plain',data:await aiB64(f)})}
    else toast('Type de fichier non pris en charge : '+name)}
   catch(e){toast('Impossible de lire '+name)}}
- aiAttShow()}
-function aiAttShow(){const box=document.getElementById('aiatt');if(!box)return;box.hidden=!AIATT.length;
- box.innerHTML=AIATT.map((a,i)=>'<span class="aiattc">'+(a.thumb?'<img src="'+a.thumb+'" alt="">':'<b>'+(a.kind==='pdf'?'PDF':'TXT')+'</b>')
-  +'<span>'+escH(a.name)+'</span><button type="button" title="Retirer" onclick="AIATT.splice('+i+',1);aiAttShow()">✕</button></span>').join('')}
-function aiAttTake(){const a=AIATT;AIATT=[];aiAttShow();return a}
+ aiAttShow(C);if(C.att.length)aiEl(C,'aiin').focus()}
+function aiAttShow(C){const box=aiEl(C,'aiatt');if(!box)return;box.hidden=!C.att.length;
+ box.innerHTML=C.att.map((a,i)=>'<span class="aiattc">'+(a.thumb?'<img src="'+a.thumb+'" alt="">':'<b>'+(a.kind==='pdf'?'PDF':'TXT')+'</b>')
+  +'<span>'+escH(a.name)+'</span><button type="button" title="Retirer" onclick="AICH.'+C.id+'.att.splice('+i+',1);aiAttShow(AICH.'+C.id+')">✕</button></span>').join('')}
+function aiAttTake(C){const a=C.att;C.att=[];aiAttShow(C);return a}
+// question envoyée avec des pièces jointes seules
+function aiAttQ(C){return C.id==='perso'?'Mets à jour ma fiche avec ces captures.':'Regarde la pièce jointe.'}
 // ce que l'historique garde d'une pièce jointe (vignette pour l'affichage, pas le fichier)
 function aiAttMeta(att){return att.map(a=>({name:a.name,kind:a.kind,thumb:a.thumb||''}))}
 // blocs de contenu pour l'API Anthropic
 function aiAttBlocks(att){return att.map(a=>a.kind==='image'?{type:'image',source:{type:'base64',media_type:a.type,data:a.data}}
  :a.kind==='pdf'?{type:'document',title:a.name,source:{type:'base64',media_type:'application/pdf',data:a.data}}
  :{type:'document',title:a.name,source:{type:'text',media_type:'text/plain',data:new TextDecoder().decode(Uint8Array.from(atob(a.data),c=>c.charCodeAt(0)))}})}
-document.addEventListener('DOMContentLoaded',()=>{const ai=document.getElementById('ai'),inp=document.getElementById('aiin');if(!ai)return;
- inp.addEventListener('paste',e=>{const fs=[...(e.clipboardData||{}).files||[]];if(fs.length){e.preventDefault();aiAddFiles(fs)}});
- ai.addEventListener('dragover',e=>{if([...e.dataTransfer.types].includes('Files')){e.preventDefault();ai.classList.add('drop')}});
- ai.addEventListener('dragleave',e=>{if(!ai.contains(e.relatedTarget))ai.classList.remove('drop')});
- ai.addEventListener('drop',e=>{ai.classList.remove('drop');if(e.dataTransfer.files.length){e.preventDefault();aiAddFiles([...e.dataTransfer.files])}})});
+// glisser-déposer : sur la conversation, et sur tout l'onglet 🧙 Personnage (fiche comprise) ; coller : dans la saisie, ou n'importe où
+// dans l'onglet hors des champs de texte
+document.addEventListener('DOMContentLoaded',()=>Object.values(AICH).forEach(C=>{const ai=aiEl(C,'ai'),inp=aiEl(C,'aiin');if(!ai)return;
+ const zone=C.id==='perso'&&document.getElementById('perso')||ai;
+ inp.addEventListener('paste',e=>{const fs=[...(e.clipboardData||{}).files||[]];if(fs.length){e.preventDefault();aiAddFiles(fs,C)}});
+ zone.addEventListener('dragover',e=>{if([...e.dataTransfer.types].includes('Files')){e.preventDefault();ai.classList.add('drop')}});
+ zone.addEventListener('dragleave',e=>{if(!zone.contains(e.relatedTarget))ai.classList.remove('drop')});
+ zone.addEventListener('drop',e=>{ai.classList.remove('drop');if(e.dataTransfer.files.length){e.preventDefault();aiAddFiles([...e.dataTransfer.files],C)}})}));
+document.addEventListener('paste',e=>{const C=AICH[(document.querySelector('main>section.on')||{}).id],t=e.target;
+ if(!C||t&&t.closest&&t.closest('textarea,input'))return;const fs=[...(e.clipboardData||{}).files||[]];if(fs.length){e.preventDefault();aiAddFiles(fs,C)}});
 
 // ---------------------------------------------------------------- mémoire des corrections
 // Quand le joueur corrige l'assistant (ou lui dit quoi retenir), la réponse contient un bloc ```memo : le serveur ou le pont local
@@ -1063,7 +1101,7 @@ async function aiMemGet(){const b=aiMemBase();if(!b)return aiMemLocal();
 async function aiMemPost(body){const b=aiMemBase();
  if(!b){const L=aiMemLocal();if(body.del!=null)L.splice(body.del,1);if(body.add)L.push({t:body.add.slice(0,500),d:new Date().toISOString().slice(0,10)});aiMemLocalSet(L);return}
  await fetch(b+'/memory',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)})}
-async function aiMemForm(){const box=document.getElementById('aikey');box.hidden=false;box.innerHTML='<b>🧠 Ce que l’assistant a retenu</b><div class="sub">Chargement…</div>';
+async function aiMemForm(){if(aiC().id!=='chat')show('chat');const box=document.getElementById('aikey');box.hidden=false;box.innerHTML='<b>🧠 Ce que l’assistant a retenu</b><div class="sub">Chargement…</div>';
  box.scrollIntoView({block:'nearest'});let L=[];try{L=await aiMemGet()}catch(e){}
  box.innerHTML='<b>🧠 Ce que l’assistant a retenu</b><div class="sub">Tes corrections, ajoutées à chaque question. Quand tu le reprends dans le chat, il '
   +'les retient tout seul ; retire ici ce qui est faux.</div><div class="aimemlist">'
@@ -1073,6 +1111,92 @@ async function aiMemForm(){const box=document.getElementById('aikey');box.hidden
   +'<button onclick="aiMemAdd()">Ajouter</button><button class="sec" onclick="aiKeyForm(false)">Fermer</button>'}
 async function aiMemDel(k){await aiMemPost({del:k});aiMemForm()}
 async function aiMemAdd(){const v=document.getElementById('aimemin').value.trim();if(!v)return;await aiMemPost({add:v});toast('Retenu');aiMemForm()}
+
+// ---------------------------------------------------------------- fiche du personnage (onglet 🧙 Personnage)
+// L'assistant remplit la fiche depuis les captures et ce que le joueur dit, avec un bloc ```perso (une ligne « section | champ | valeur »
+// par champ vu, valeur - : champ retiré, « progression | texte » : journal daté), et la reçoit dans les consignes de chaque question,
+// dans les deux conversations. Serveur AION Helper : fiche gardée sur le serveur par nom d'utilisateur (la même sur le PC et le
+// téléphone, le serveur lit lui-même les blocs des réponses) ; sinon dans ce navigateur. pMerge() = perso_merge() du serveur (helper.py).
+const PSECS=[['identite','Identité','🪪'],['stats','Statistiques','📊'],['equipement','Équipement','⚔️'],['daevanion','Daevanion','✴️'],
+ ['competences','Compétences et stigmas','📜'],['arcanes','Arcanes','🃏'],['familiers','Familiers','🐾'],['objectifs','Objectifs','🎯'],['autres','Autres','📌']];
+const PALIAS={identity:'identite',personnage:'identite',character:'identite',statistiques:'stats',statistics:'stats',stat:'stats',
+ equipment:'equipement',gear:'equipement',equipements:'equipement',stuff:'equipement',skills:'competences',competence:'competences',
+ competencesetstigmas:'competences',stigmas:'competences',stigma:'competences',stigmates:'competences',arcana:'arcanes',arcane:'arcanes',
+ pets:'familiers',pet:'familiers',familier:'familiers',goals:'objectifs',goal:'objectifs',objectif:'objectifs',other:'autres',autre:'autres',
+ progress:'progression',progres:'progression'};
+// champs mis en avant dans l'en-tête de la fiche
+const PTOP={nom:'name',name:'name',pseudo:'name',classe:'cls',class:'cls',niveau:'lvl',level:'lvl',lvl:'lvl',niv:'lvl',
+ puissancedecombat:'cp',puissance:'cp',combatpower:'cp',pc:'cp',cp:'cp',niveaudobjet:'il',niveaudequipement:'il',itemlevel:'il',ilvl:'il',gearscore:'il'};
+let PSHEET=null;
+function pKey(s){return normName(String(s||'')).replace(/[^a-z0-9]+/g,'')}
+function pSecKey(s){const k=pKey(s);return PALIAS[k]||k}
+function pLines(text){const out=[];(text||'').replace(/```perso[^\n]*\n([\s\S]*?)(?:```|$)/g,(m,b)=>{b.split('\n').forEach(l=>{l=l.replace(/^[-*•\s]+/,'').trim();if(l)out.push(l)})});return out}
+function pMerge(P,lines,replace){const today=new Date().toISOString().slice(0,10),lab=Object.fromEntries(PSECS.map(([k,n])=>[k,n]));
+ P={s:replace?[]:(P.s||[]).map(s=>Object.assign({},s,{r:s.r.map(r=>r.slice())})),log:(P.log||[]).slice()};
+ lines.forEach(line=>{const c=String(line).replace(/^[-*•\s]+/,'').split('|').map(x=>x.trim());if(c.length<2||!c[0])return;const k=pSecKey(c[0]);
+  if(k==='progression'){const t=c.slice(1).filter(Boolean).join(' | ').slice(0,300);if(t&&!P.log.some(([d,x])=>d===today&&x===t))P.log.push([today,t]);return}
+  const f=(c[1]||'').slice(0,80),v=c.slice(2).join(' | ').trim().slice(0,400),gone=!v||v==='-';if(c.length<3||!k||!f)return;
+  let s=P.s.find(x=>x.k===k);
+  if(!s){if(gone)return;s={k,n:lab[k]||c[0].slice(0,40),r:[],d:today};P.s.push(s)}
+  const i=s.r.findIndex(([x])=>pKey(x)===pKey(f));
+  if(gone){if(i>=0)s.r.splice(i,1)}else if(i>=0)s.r[i]=[f,v];else if(s.r.length<80)s.r.push([f,v]);
+  s.d=today});
+ P.s=P.s.filter(s=>s.r.length).slice(0,40);P.log=P.log.slice(-100);P.d=new Date().toISOString().slice(0,16).replace('T',' ');return P}
+function pGet(){if(!PSHEET){try{PSHEET=JSON.parse(localStorage.getItem('aiperso')||'null')}catch(e){}if(!PSHEET||!Array.isArray(PSHEET.s))PSHEET={s:[],log:[]}}return PSHEET}
+function pStore(P){PSHEET=P;try{localStorage.setItem('aiperso',JSON.stringify(P))}catch(e){}pRender()}
+async function pLoad(){if(aiMode()!=='server')return;try{const r=await fetch('api/perso',{cache:'no-store'});if(r.ok)pStore(await r.json())}catch(e){}}
+async function pApply(lines,replace,reset){
+ if(aiMode()!=='server')return pStore(pMerge(reset?{s:[],log:[]}:pGet(),lines,replace));
+ const r=await fetch('api/perso',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({lines,replace:!!replace,reset:!!reset})});
+ if(!r.ok)throw new Error('Serveur : erreur '+r.status);pStore(await r.json())}
+function pKeep(text){const L=pLines(text);if(L.length)pApply(L).catch(()=>{})}
+function pSecs(P){const o=PSECS.map(s=>s[0]),n=k=>o.indexOf(k)+1||99;return (P.s||[]).slice().sort((a,b)=>n(a.k)-n(b.k))}
+// la fiche telle que l'assistant la reçoit, à la fin de ses consignes
+function aiPersoPrompt(C){const P=pGet(),secs=pSecs(P),log=(P.log||[]).slice(-20);
+ let t=secs.length?'\n\nThe player\'s character sheet (their own Aion 2 character, kept from their screenshots and messages, updated '+(P.d||'?')+' UTC):\n'
+   +secs.map(s=>s.n+'\n'+s.r.map(([f,v])=>'- '+f+' : '+v).join('\n')).join('\n')
+   +(log.length?'\nProgress log (oldest first):\n'+log.map(([d,x])=>'- '+d+' : '+x).join('\n'):'')
+  :'\n\nThe player\'s character sheet is still empty: as soon as they share a screenshot or details of their character, fill it with a ```perso block.';
+ if(C&&C.id==='perso')t+='\n\nThis conversation is in the Character tab of the site: the player talks about their own character, sends screenshots '
+  +'to fill the sheet and asks how to progress. Base every answer on the sheet.';
+ return t.slice(0,16000)}
+function pRender(){const box=document.getElementById('psheet');if(!box)return;const P=pGet(),secs=pSecs(P),v=x=>aiInline(escH(x));
+ if(!secs.length&&!(P.log||[]).length){box.innerHTML='<div class="pempty"><div class="pav">🧙</div><h2>Ta fiche de personnage</h2>'
+   +'<p class="lead">Envoie des captures de ton perso dans la conversation : l’assistant les lit et remplit la fiche tout seul. '
+   +'Il la connaît ensuite dans toutes ses réponses, ici comme dans 💬 Assistant.</p><ul>'
+   +['La fenêtre du personnage (stats principales et détaillées)','Chaque pièce d’équipement (fiche au survol)','Les plateaux Daevanion',
+     'Compétences et stigmas','Arcanes, familiers, ailes, titres'].map(x=>'<li>'+x+'</li>').join('')
+   +'</ul><button class="pbtn" onclick="pPick()">📎 Ajouter des captures</button><div class="sub">ou glisse-les ici, ou colle-les (Ctrl + V)</div></div>';return}
+ const idr=(secs.find(s=>s.k==='identite')||{r:[]}).r,top={},tags=[];
+ idr.forEach(r=>{const t=PTOP[pKey(r[0])];if(t&&!top[t])top[t]=r[1];else tags.push(r)});
+ secs.forEach(s=>s.k==='stats'&&s.r.forEach(([f,x])=>{const t=PTOP[pKey(f)];if((t==='cp'||t==='il')&&!top[t])top[t]=x}));
+ const kpi=(l,x)=>x?'<div class="kpi"><div class="l">'+l+'</div><div class="v">'+escH(x)+'</div></div>':'';
+ box.innerHTML='<div class="phead"><div class="who"><div class="pav">'+escH((top.name||'?').trim().charAt(0).toUpperCase()||'?')+'</div>'
+   +'<div><h2>'+escH(top.name||'Mon personnage')+'</h2><div class="sub">'+escH([top.cls,top.lvl&&'niveau '+top.lvl.replace(/^\D+/,'')].filter(Boolean).join(' · ')
+    ||'Classe et niveau : envoie la fenêtre du personnage')+'</div></div>'
+   +'<button class="pbtn" onclick="pPick()" title="Ajouter des captures">📎 Captures</button></div>'
+   +(top.cp||top.il?'<div class="kpis">'+kpi('Puissance de combat',top.cp)+kpi('Niveau d’objet',top.il)+'</div>':'')
+   +(tags.length?'<div class="ptags">'+tags.map(([f,x])=>'<span>'+escH(f)+' <b>'+v(x)+'</b></span>').join('')+'</div>':'')
+   +'<button class="pmore" onclick="this.closest(\'.psheet\').classList.toggle(\'open\')"></button></div>'
+  +'<div class="pbody">'+secs.filter(s=>s.k!=='identite').map(s=>'<div class="pcard"><h4>'+(PSECS.find(x=>x[0]===s.k)||[0,0,'📌'])[2]+' '+escH(s.n)
+    +'<small>'+escH(s.d||'')+'</small></h4><div class="'+(s.k==='stats'?'pgrid':'prows')+'">'
+    +s.r.map(([f,x])=>'<div><span>'+escH(f)+'</span><b>'+v(x)+'</b></div>').join('')+'</div></div>').join('')
+  +((P.log||[]).length?'<div class="pcard"><h4>📈 Progression</h4><div class="plog">'+P.log.slice(-12).reverse()
+    .map(([d,x])=>'<div><span>'+escH(d)+'</span>'+v(x)+'</div>').join('')+'</div></div>':'')
+  +'<div class="ptools"><button class="pbtn" onclick="pEdit()">✎ Modifier</button><button class="pbtn" onclick="pReset()">🗑 Effacer</button>'
+  +'<span class="sub">'+(P.d?'Mise à jour le '+escH(new Date(P.d.replace(' ','T')+'Z').toLocaleString('fr-FR',{dateStyle:'short',timeStyle:'short'})):'')
+  +'</span></div><div id="pedit"></div></div>'}
+// modifier à la main : la fiche en lignes « section | champ | valeur », enregistrée à la place de l'ancienne (le journal reste)
+function pEdit(){const box=document.getElementById('pedit');if(!box)return;if(box.innerHTML){box.innerHTML='';return}
+ box.innerHTML='<div class="sub">Une ligne par champ : « section | champ | valeur ». Efface une ligne pour retirer le champ.</div>'
+  +'<textarea id="pedtxt" spellcheck="false">'+escH(pSecs(pGet()).map(s=>s.r.map(([f,x])=>s.n+' | '+f+' | '+x).join('\n')).join('\n'))+'</textarea>'
+  +'<button class="pbtn" onclick="pEditSave()">Enregistrer</button> <button class="pbtn" onclick="pEdit()">Annuler</button>';
+ document.getElementById('pedtxt').focus()}
+async function pEditSave(){const t=document.getElementById('pedtxt').value.split('\n').map(l=>l.trim()).filter(Boolean);
+ try{await pApply(t,true);toast('Fiche enregistrée')}catch(e){toast(e.message)}}
+async function pReset(){if(!confirm('Effacer toute la fiche du personnage, avec son journal de progression ?'))return;
+ try{await pApply([],true,true);toast('Fiche effacée')}catch(e){toast(e.message)}}
+function pPick(){const f=document.getElementById('aifile2');if(f)f.click()}
 
 // ======================================================================== chaines : acheter ou crafter
 // Chaines d'amelioration (CHAINS, chains.py) : palier t = recette de l'objet normal t.n, dont le combo (t.c) donne

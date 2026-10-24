@@ -184,6 +184,41 @@ code{background:var(--card2);padding:1px 6px;border-radius:5px}
  background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:14px}.aimemlist button{margin-left:auto;background:none;border:0;
  color:var(--mut);cursor:pointer}.aimemlist button:hover{color:var(--bad)}
 .aiopts{display:grid;gap:10px;margin-bottom:8px}.aiopt{border:1px solid var(--line);border-radius:10px;padding:10px 12px}.aiopt.on{border-color:var(--ok)}
+.aiperso{border:1px solid #f0c05055;background:#f0c05010;border-radius:12px;padding:10px 14px;margin:8px 0 12px;font-size:14px}
+.aiperso b{color:var(--acc)}.aiperso div{margin-top:3px}.aiperso .sub{margin:0}.aiperso button{background:none;border:0;color:var(--mut);font:inherit;
+ font-size:12.5px;cursor:pointer;padding:0;margin-top:6px}.aiperso button:hover{color:var(--acc)}
+.pz{display:grid;grid-template-columns:minmax(0,1fr);gap:20px;align-items:start}.pz .ai{width:100%}
+.psheet{display:flex;flex-direction:column;gap:12px;min-width:0}
+.pempty,.phead,.pcard{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+.pempty{border-style:dashed;text-align:center;padding:24px 20px}.pempty h2{margin:10px 0 6px}.pempty .lead{margin:0 auto 10px}
+.pempty ul{text-align:left;color:var(--mut);font-size:14px;margin:0 auto 14px;max-width:340px;padding-left:20px}.pempty .pav{margin:0 auto}
+.phead{background:linear-gradient(160deg,#211d14,var(--card) 60%);border-color:#f0c05040}
+.phead .who{display:flex;gap:12px;align-items:center}.phead h2{font-size:21px;margin:0;overflow-wrap:anywhere}.phead .sub{margin:0}
+.pav{width:50px;height:50px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;
+ color:#111;background:var(--acc)}
+.phead .kpis{margin:12px 0 0;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}.phead .kpi{background:var(--bg2);padding:10px 12px}
+.phead .kpi .v{font-size:21px}
+.ptags{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}.ptags span{background:var(--bg2);border:1px solid var(--line);border-radius:999px;
+ padding:2px 10px;font-size:12.5px;color:var(--mut)}.ptags b{color:var(--txt);font-weight:600}
+.pbtn{background:var(--card2);border:1px solid var(--line);border-radius:999px;color:var(--txt);padding:6px 12px;font:inherit;font-size:13px;cursor:pointer;flex:none}
+.pbtn:hover{border-color:var(--acc);color:var(--acc)}.phead .pbtn{margin-left:auto}
+.pbody{display:flex;flex-direction:column;gap:12px}
+.pcard h4{margin:0 0 8px;font-size:12.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;display:flex;gap:6px;align-items:baseline}
+.pcard h4 small{margin-left:auto;font-weight:500;text-transform:none;letter-spacing:0;font-size:11.5px}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(125px,1fr));gap:6px}
+.pgrid div{background:var(--bg2);border:1px solid var(--line2);border-radius:9px;padding:6px 9px;min-width:0}
+.pgrid span{display:block;color:var(--mut);font-size:11.5px}.pgrid b{font-size:14.5px;overflow-wrap:anywhere}
+.prows div{display:flex;gap:12px;padding:6px 0;border-top:1px solid var(--line2);font-size:14px}.prows div:first-child{border-top:0;padding-top:0}
+.prows span{color:var(--mut);flex:0 0 34%;max-width:150px;overflow-wrap:anywhere}.prows b{font-weight:600;min-width:0;overflow-wrap:anywhere}
+.plog div{display:flex;gap:10px;font-size:14px;padding:4px 0}.plog span{color:var(--mut);flex:none;font-variant-numeric:tabular-nums;font-size:12.5px;padding-top:1px}
+.ptools{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.ptools .sub{margin:0 0 0 auto}
+#pedit textarea{width:100%;min-height:240px;margin:8px 0;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg2);
+ color:var(--txt);font:13px/1.5 ui-monospace,Consolas,monospace}#pedit textarea:focus{outline:none;border-color:var(--acc)}
+.pmore{display:none}
+@media(min-width:1100px){.pz{grid-template-columns:minmax(340px,430px) minmax(0,1fr)}
+ .psheet{position:sticky;top:62px;max-height:calc(100vh - 76px);overflow:auto;scrollbar-width:thin;padding-right:2px}}
+@media(max-width:1099px){.pmore{display:block;margin:10px 0 0;background:none;border:0;color:var(--acc);font:inherit;font-size:13.5px;cursor:pointer;padding:0}
+ .pmore:after{content:"Voir toute la fiche ▾"}.psheet.open .pmore:after{content:"Masquer le détail ▴"}.psheet:not(.open) .pbody{display:none}}
 """
 
 

@@ -1,4 +1,4 @@
-"""Onglet 💬 Assistant : chat Claude sur Aion 2 (recherche web + données du tracker).
+"""Onglets 💬 Assistant et 🧙 Personnage : chat Claude sur Aion 2 (recherche web + données du tracker), fiche du personnage.
 
 Le catalogue que l'assistant consulte (objets, prix du serveur suivi, recettes, points de récolte) est écrit dans
 assist.js, hors de la page chiffrée et chargé seulement à l'ouverture du chat : ce sont des données du jeu et des prix
@@ -51,9 +51,23 @@ def write_assist_data(con, my, sname):
     return hashlib.sha1(text.encode("utf-8")).hexdigest()[:8]
 
 
+def _chat(sfx, hello, hint, foot, extra=""):
+    """Une conversation : messages, pièces jointes, barre de saisie, pied ; sfx : suffixe des id (une conversation par onglet,
+    site.js partie assistant)."""
+    return f"""<div id="aimsgs{sfx}" class="aimsgs">{hello}</div>{extra}
+<div class="aidock"><div id="aiatt{sfx}" class="aiatt" hidden></div>
+<form class="aibar" onsubmit="event.preventDefault();aiSend()">
+<label class="aiclip" title="Joindre une image, un PDF ou un fichier texte (ou coller une capture avec Ctrl + V)">📎<input id="aifile{sfx}" type="file"
+ multiple hidden accept="image/*,application/pdf,.txt,.md,.csv,.json,.log" onchange="aiAddFiles([...this.files]);this.value=''"></label>
+<textarea id="aiin{sfx}" rows="1" placeholder="{hint}" oninput="aiGrow(this)"
+ onkeydown="if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){{event.preventDefault();aiSend()}}"></textarea>
+<button id="aigo{sfx}" type="submit" title="Envoyer (Entrée)">➤</button></form></div>
+<div class="aifoot">{foot}</div>"""
+
+
 def assistant_tab(version):
     """version : empreinte de assist.js (?v=), pour que le navigateur ne garde pas un vieux catalogue."""
-    return f'<div id="ai" class="ai" data-v="{version}">' + """<div id="aimsgs" class="aimsgs"><div class="aihello">
+    hello = """<div class="aihello">
 <h2>Pose ta question sur Aion 2</h2>
 <p class="lead">Loot, donjons, crafts, builds, où récolter, prix à l’HDV… L’assistant cherche sur le web (wikis, bases de données,
 patch notes) et consulte les prix et recettes du tracker.</p>
@@ -62,15 +76,30 @@ patch notes) et consulte les prix et recettes du tracker.</p>
 <button onclick="aiAsk(this.textContent)">Comment crafter une Potion de soin supérieure, et est-ce rentable ?</button>
 <button onclick="aiAsk(this.textContent)">Quel équipement viser en priorité pour un Templier niveau max ?</button>
 <button onclick="aiAsk(this.textContent)">Où récolter du Bois d'Asvata ?</button>
-</div><div id="aihome" class="aihome"></div></div></div>
-<div id="aikey" class="aikey" hidden></div>
-<div class="aidock"><div id="aiatt" class="aiatt" hidden></div>
-<form class="aibar" onsubmit="event.preventDefault();aiSend()">
-<label class="aiclip" title="Joindre une image, un PDF ou un fichier texte (ou coller une capture avec Ctrl + V)">📎<input type="file" multiple hidden
- accept="image/*,application/pdf,.txt,.md,.csv,.json,.log" onchange="aiAddFiles([...this.files]);this.value=''"></label>
-<textarea id="aiin" rows="1" placeholder="Demande n’importe quoi sur Aion 2… (Ctrl + V pour coller une capture)" oninput="aiGrow(this)"
- onkeydown="if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();aiSend()}"></textarea>
-<button id="aigo" type="submit" title="Envoyer (Entrée)">➤</button></form></div>
-<div class="aifoot"><button onclick="aiNew()">＋ Nouvelle conversation</button><span id="aicost"></span>
+</div><div id="aihome" class="aihome"></div></div>"""
+    foot = """<button onclick="aiNew()">＋ Nouvelle conversation</button><span id="aicost"></span>
 <span><button id="airefresh" hidden onclick="aiRefresh(this)">↻ Actualiser les prix</button> <button onclick="aiMemForm()">🧠 Mémoire</button>
- <button id="aimode" onclick="aiKeyForm(true)">⚙ Réglages</button></span></div></div>"""
+ <button id="aimode" onclick="aiKeyForm(true)">⚙ Réglages</button></span>"""
+    return (f'<div id="ai" class="ai" data-v="{version}">'
+            + _chat("", hello, "Demande n’importe quoi sur Aion 2… (Ctrl + V pour coller une capture)", foot,
+                    '<div id="aikey" class="aikey" hidden></div>') + "</div>")
+
+
+def perso_tab():
+    """Onglet 🧙 Personnage : la fiche du personnage du joueur, que l'assistant remplit depuis ses captures (site.js, partie
+    fiche du personnage), à côté d'une conversation à part sur le personnage. La fiche est ajoutée aux consignes des deux
+    conversations."""
+    hello = """<div class="aihello">
+<h2>Parle de ton personnage</h2>
+<p class="lead">Envoie des captures de ton perso (fenêtre du personnage, équipement, stats, Daevanion, familiers…) : l’assistant remplit
+ta fiche tout seul, puis s’en sert dans toutes ses réponses.</p>
+<div class="aisugg">
+<button onclick="aiAsk(this.textContent)">Quelle pièce de mon équipement améliorer en priorité ?</button>
+<button onclick="aiAsk(this.textContent)">Comment monter ma puissance de combat le plus vite ?</button>
+<button onclick="aiAsk(this.textContent)">Mes statistiques sont-elles bonnes pour ma classe ?</button>
+<button onclick="aiAsk(this.textContent)">Quel est mon prochain objectif de progression ?</button>
+</div></div>"""
+    foot = ('<button onclick="aiNew()">＋ Nouvelle conversation</button>'
+            '<span>Ta fiche est jointe à chaque question, ici et dans 💬 Assistant.</span>')
+    return ('<div class="pz"><aside id="psheet" class="psheet"></aside><div id="ai2" class="ai">'
+            + _chat("2", hello, "Parle de ton perso, ou colle une capture (Ctrl + V)…", foot) + "</div></div>")

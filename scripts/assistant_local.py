@@ -209,7 +209,7 @@ class Handler(BaseHTTPRequestHandler):
         q = attach(q, body.get("files") or [])
         self._head(200, o, "application/x-ndjson")
         try:
-            self.ask(q, session)
+            self.ask(q, session, str(body.get("perso") or "")[:16000])     # fiche du personnage, tenue par la page
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             log("question interrompue depuis la page")
 
@@ -217,13 +217,13 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write((json.dumps(ev, ensure_ascii=False) + "\n").encode("utf-8"))
         self.wfile.flush()
 
-    def ask(self, q, session):
+    def ask(self, q, session, perso=""):
         meta = refresh()
         cmd = [CLAUDE, "-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--model", "opus",
                "--tools", ",".join(TOOLS), "--allowedTools", "WebSearch", "WebFetch", "--strict-mcp-config",
                "--setting-sources", "local",              # lecture (Read, Grep, Glob) : dossier de travail seulement, par défaut
                "--system-prompt", SYSTEM.format(server=meta.get("server", "?"), asof=meta.get("asof", "?"))
-               + ("\n\n" + meta["fmt"] if meta.get("fmt") else "") + memory_prompt()]
+               + ("\n\n" + meta["fmt"] if meta.get("fmt") else "") + memory_prompt() + perso]
         if re.fullmatch(r"[0-9a-f-]{36}", session):
             cmd += ["--resume", session]                                       # suite de la conversation
         log(f"question : {q[:80]}")

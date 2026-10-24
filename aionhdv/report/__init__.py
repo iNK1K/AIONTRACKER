@@ -8,7 +8,7 @@ from ..alerts import precision
 from ..collect import now_iso, paris
 from ..config import REPORT_DIR
 from .accueil import home
-from .assistant import assistant_tab, write_assist_data
+from .assistant import assistant_tab, perso_tab, write_assist_data
 from .base import CSS, Ctx, esc
 from .chaines import chains_tab
 from .fichiers import map_world_ids, write_map_data, write_price_data
@@ -20,7 +20,7 @@ from .tables import compare_ways, stock_calc, table_crafts, table_flips, table_p
 from .ventes import gains_tab
 
 # onglets toujours visibles, dans cet ordre ; les autres sont des outils (menu « Outils »)
-MAIN_TABS = ("chat", "home", "opps", "gains", "supply")
+MAIN_TABS = ("chat", "perso", "home", "opps", "gains", "supply")
 
 
 def build(con, cfg, results):
@@ -50,6 +50,7 @@ def build(con, cfg, results):
            "quand il est anormalement haut.")
     if my:
         add("chat", "💬 Assistant", assistant_tab(write_assist_data(con, my, sname)))
+        add("perso", "🧙 Personnage", perso_tab())
         add("home", "🏠 Aujourd’hui", home(con, cfg, ctx, my, sname))
         add("opps", "🎯 Opportunités", opportunities_tab(cfg, my, precision(con)))
         add("planning", "📅 Planning", planning_tab(cfg, my))

@@ -7,6 +7,7 @@ Une tâche par ligne. Claude les traite dans l'ordre et coche `[x]` quand c'est 
 
 
 ## Fait
+- [x] Onglet 🧙 Personnage : fiche du personnage remplie par l’assistant depuis les captures (équipement, stats, Daevanion…), jointe à chaque question, conversation à part ; conversations redessinées tour par tour au rechargement (une réponse ne reprend plus le texte des suivantes)
 - [x] Onglet 💬 Assistant : chat Claude sur Aion 2 (recherche web + catalogue du tracker), clé API dans le navigateur, ouvert par défaut
 - [x] Flip : garde-fou contre les prix aberrants (prix actuel hors de 50 % à 200 % de la médiane 3 j, ou fourchette erratique) : ni affiché ni alerté
 - [x] Journal sur une branche `journal` dédiée (le site n'écrit plus sur `main`, le workflow le lit depuis cette branche)
