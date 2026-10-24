@@ -699,7 +699,7 @@ function aiInit(C){C=C||aiC();const box=aiEl(C,'aimsgs');if(!box)return;
  if(C.hello==null){C.hello=box.innerHTML;try{C.h=JSON.parse(localStorage.getItem(aiLS(C,'aichat'))||'[]')}catch(e){C.h=[]}
   if(C.h.length)aiRenderAll(C);aiLoad().then(()=>{if(!C.busy)aiRenderAll(C);pRender()})}
  aiCostShow();
- aiServerProbe().then(()=>aiMode()==='server'?Promise.all([aiPull(C),pLoad()]):aiMode()==='local'?aiLocalProbe():0).then(()=>{aiModeShow();
+ aiServerProbe().then(()=>aiMode()==='server'?Promise.all([aiPull(C),pLoad(),aLoad()]):aiMode()==='local'?aiLocalProbe():0).then(()=>{aiModeShow();
   if(aiC()!==C)return;if(!aiReady()){if(C.id==='chat')aiKeyForm()}else setTimeout(()=>aiEl(C,'aiin').focus(),0)})}
 function aiKeyForm(on){if(on!==false&&aiC().id!=='chat')show('chat');                // réglages : dans l'onglet 💬 Assistant
  const box=document.getElementById('aikey');if(on===false){box.hidden=true;return}box.hidden=false;const m=aiMode(),
@@ -1117,6 +1117,8 @@ async function aiMemAdd(){const v=document.getElementById('aimemin').value.trim(
 // par champ vu, valeur - : champ retiré, « progression | texte » : journal daté), et la reçoit dans les consignes de chaque question,
 // dans les deux conversations. Serveur AION Helper : fiche gardée sur le serveur par nom d'utilisateur (la même sur le PC et le
 // téléphone, le serveur lit lui-même les blocs des réponses) ; sinon dans ce navigateur. pMerge() = perso_merge() du serveur (helper.py).
+// Avec le serveur, le joueur peut aussi relier son personnage officiel (armurerie de NCSOFT, plus bas) : la fiche montre alors
+// l'équipement exact sur un mannequin, avec une infobulle par objet, et les captures n'ajoutent que ce que l'armurerie n'a pas.
 const PSECS=[['identite','Identité','🪪'],['stats','Statistiques','📊'],['equipement','Équipement','⚔️'],['daevanion','Daevanion','✴️'],
  ['competences','Compétences et stigmas','📜'],['arcanes','Arcanes','🃏'],['familiers','Familiers','🐾'],['objectifs','Objectifs','🎯'],['autres','Autres','📌']];
 const PALIAS={identity:'identite',personnage:'identite',character:'identite',statistiques:'stats',statistics:'stats',stat:'stats',
@@ -1151,41 +1153,256 @@ async function pApply(lines,replace,reset){
  if(!r.ok)throw new Error('Serveur : erreur '+r.status);pStore(await r.json())}
 function pKeep(text){const L=pLines(text);if(L.length)pApply(L).catch(()=>{})}
 function pSecs(P){const o=PSECS.map(s=>s[0]),n=k=>o.indexOf(k)+1||99;return (P.s||[]).slice().sort((a,b)=>n(a.k)-n(b.k))}
-// la fiche telle que l'assistant la reçoit, à la fin de ses consignes
-function aiPersoPrompt(C){const P=pGet(),secs=pSecs(P),log=(P.log||[]).slice(-20);
- let t=secs.length?'\n\nThe player\'s character sheet (their own Aion 2 character, kept from their screenshots and messages, updated '+(P.d||'?')+' UTC):\n'
-   +secs.map(s=>s.n+'\n'+s.r.map(([f,v])=>'- '+f+' : '+v).join('\n')).join('\n')
-   +(log.length?'\nProgress log (oldest first):\n'+log.map(([d,x])=>'- '+d+' : '+x).join('\n'):'')
-  :'\n\nThe player\'s character sheet is still empty: as soon as they share a screenshot or details of their character, fill it with a ```perso block.';
+// la fiche telle que l'assistant la reçoit, à la fin de ses consignes : l'armurerie officielle (exacte), puis ce que les captures ajoutent
+function aiPersoPrompt(C){const P=pGet(),arm=aArmText(PARM),secs=pSecs(P).filter(s=>!(arm&&PARMSECS.includes(s.k))),log=(P.log||[]).slice(-20);
+ let t=arm;
+ if(secs.length||log.length)t+='\n\nThe player\'s character sheet ('+(arm?'what their screenshots and messages add to the armory data':'their own Aion 2 character, kept from their screenshots and messages')
+   +', updated '+(P.d||'?')+' UTC):\n'+secs.map(s=>s.n+'\n'+s.r.map(([f,v])=>'- '+f+' : '+v).join('\n')).join('\n')
+   +(log.length?'\nProgress log (oldest first):\n'+log.map(([d,x])=>'- '+d+' : '+x).join('\n'):'');
+ else if(!arm)t+='\n\nThe player\'s character sheet is still empty: as soon as they share a screenshot or details of their character, fill it with a ```perso block.';
  if(C&&C.id==='perso')t+='\n\nThis conversation is in the Character tab of the site: the player talks about their own character, sends screenshots '
   +'to fill the sheet and asks how to progress. Base every answer on the sheet.';
- return t.slice(0,16000)}
-function pRender(){const box=document.getElementById('psheet');if(!box)return;const P=pGet(),secs=pSecs(P),v=x=>aiInline(escH(x));
- if(!secs.length&&!(P.log||[]).length){box.innerHTML='<div class="pempty"><div class="pav">🧙</div><h2>Ta fiche de personnage</h2>'
-   +'<p class="lead">Envoie des captures de ton perso dans la conversation : l’assistant les lit et remplit la fiche tout seul. '
-   +'Il la connaît ensuite dans toutes ses réponses, ici comme dans 💬 Assistant.</p><ul>'
-   +['La fenêtre du personnage (stats principales et détaillées)','Chaque pièce d’équipement (fiche au survol)','Les plateaux Daevanion',
-     'Compétences et stigmas','Arcanes, familiers, ailes, titres'].map(x=>'<li>'+x+'</li>').join('')
-   +'</ul><button class="pbtn" onclick="pPick()">📎 Ajouter des captures</button><div class="sub">ou glisse-les ici, ou colle-les (Ctrl + V)</div></div>';return}
+ return t.slice(0,30000)}
+
+// ---------------------------------------------------------------- armurerie officielle (serveur AION Helper : api/armory)
+// Le serveur lit le personnage relié sur l'armurerie officielle de NCSOFT (aion2.plaync.com, la source de shugo.gg) : équipement exact
+// avec la fiche de chaque objet (stats, bonus, pierres de mana, pierre divine), Arcanes, familier, ailes, attributs et divinités,
+// Daevanion, compétences, titres. Relue à l'ouverture de l'onglet si elle date de plus de 30 min, et avec ↻ ; ce qui a progressé entre
+// deux lectures va dans le journal de la fiche (côté serveur). Sans serveur (page GitHub), la fiche vient des seules captures.
+let PARM=null,PTAB=null,PTIPS=[];
+const PARMSECS=['identite','equipement','daevanion','arcanes','familiers'];          // sections de la fiche que l'armurerie remplace
+const PSLOT={MainHand:'Arme',SubHand:'Garde-bras',Helmet:'Casque',Shoulder:'Épaulettes',Torso:'Torse',Gloves:'Gants',Belt:'Ceinture',
+ Pants:'Bas',Boots:'Chaussures',Cape:'Cape',Necklace:'Collier',Amulet:'Amulette',Earring1:'Boucle d’oreille 1',Earring2:'Boucle d’oreille 2',
+ Ring1:'Anneau 1',Ring2:'Anneau 2',Bracelet1:'Bracelet 1',Bracelet2:'Bracelet 2',Rune1:'Rune 1',Rune2:'Rune 2'};
+// mannequin : armures à gauche, bijoux à droite, armes et runes en bas
+const PDOLL=[['Helmet','Shoulder','Torso','Gloves','Belt','Pants','Boots','Cape'],
+ ['Necklace','Amulet','Earring1','Earring2','Ring1','Ring2','Bracelet1','Bracelet2'],['MainHand','SubHand','Rune1','Rune2']];
+// fiche sans armurerie : champs « equipement | Casque | nom | +N | rareté | détails » écrits par l'assistant (assistant_format.md)
+const PSLOTW={arme:'MainHand',armeprincipale:'MainHand',gardebras:'SubHand',armesecondaire:'SubHand',bouclier:'SubHand',casque:'Helmet',
+ epaulettes:'Shoulder',epaulieres:'Shoulder',torse:'Torso',cuirasse:'Torso',plastron:'Torso',tunique:'Torso',robe:'Torso',gants:'Gloves',
+ ceinture:'Belt',bas:'Pants',greves:'Pants',jambieres:'Pants',pantalon:'Pants',chaussures:'Boots',bottes:'Boots',cape:'Cape',collier:'Necklace',
+ amulette:'Amulet',boucledoreille:'Earring',bouclesdoreille:'Earring',boucledoreilles:'Earring',bouclesdoreilles:'Earring',anneau:'Ring',
+ bague:'Ring',bracelet:'Bracelet',rune:'Rune'};
+const PGRADEW={gris:'Common',grise:'Common',blanc:'Common',blanche:'Common',commun:'Common',vert:'Rare',verte:'Rare',rare:'Rare',
+ bleu:'Legend',bleue:'Legend',epique:'Legend',dore:'Unique',doree:'Unique',or:'Unique',jaune:'Unique',unique:'Unique',orange:'Epic',
+ heroique:'Epic',turquoise:'Special',special:'Special',speciale:'Special'};
+const PATTR=['STR','DEX','INT','CON','AGI','WIS'],PATTRN=['force','dexterite','intelligence','sante','exactitude','volonte'];
+const PMAIN=['atq','def','precision','esquive','crit','resauxcrit','pv','pm','vitdecombat','vitdedeplacement'];
+const PTABS=[['gear','⚔️ Équipement'],['stats','📊 Stats'],['daev','✴️ Daevanion'],['skills','📜 Compétences'],['more','🏷️ Titres et notes']];
+function aGear(A){const G={};((((A||{}).equipment||{}).equipment||{}).equipmentList||[]).forEach(x=>{if(x.slotPosName)G[x.slotPosName]=
+ {k:x.slotPosName,n:x.name,e:x.enchantLevel||0,g:x.grade,gn:(x.detail||{}).gradeName||'',icon:x.icon,d:x.detail||null}});return G}
+function pSlotOf(f){const m=pKey(f).match(/^(.*?)(\d?)$/),s=PSLOTW[m[1]];return !s?null:/^(Earring|Ring|Bracelet|Rune)$/.test(s)?s+(m[2]==='2'?2:1):s}
+function pSlotVal(k,v){const it={k,n:'',e:0,g:'',gn:'',x:[]};
+ String(v).split('|').map(s=>s.trim()).filter(Boolean).forEach(p=>{const e=p.match(/^\+(\d+)$/),g=PGRADEW[pKey(p)];
+  if(e)it.e=+e[1];else if(g){it.g=g;it.gn=p}else if(!it.n){const m=p.match(/^(.*?)\s*\+(\d+)\s*(?:\(([^)]*)\))?$/);
+   if(m){it.n=m[1];it.e=+m[2];if(m[3]&&PGRADEW[pKey(m[3])]){it.g=PGRADEW[pKey(m[3])];it.gn=m[3]}}else it.n=p}else it.x.push(p)});
+ const r=it.n&&aiFind(it.n);if(r){it.icon=r[9];it.g=it.g||r[3]}return it}
+function pGearP(secs){const G={},rest=[];((secs.find(s=>s.k==='equipement')||{}).r||[]).forEach(([f,v])=>{const k=pSlotOf(f);if(k&&!G[k])G[k]=pSlotVal(k,v);else rest.push([f,v])});
+ return [G,rest]}
+function pTipAdd(h){PTIPS.push(h);return PTIPS.length-1}
+function pGradeNames(G){const o={};Object.values(G).forEach(x=>{if(x.g&&x.gn)o[x.g]=x.gn});return o}
+function pSlot(it,k){if(!it||!(it.n||it.e||it.g))return '<div class="pslot empty" title="'+escH(PSLOT[k])+'"><span>'+escH(PSLOT[k])+'</span></div>';
+ return '<button class="pslot" style="--g:'+(AIGRADE[it.g]||'#596275')+'" data-tip="'+pTipAdd(pItemTip(it))+'" aria-label="'+escH(PSLOT[k]+' : '+(it.n||'?'))+'">'
+  +(it.icon?'<img src="'+escH(it.icon)+'" alt="" loading="lazy">':'<span>'+escH(PSLOT[k])+'</span>')+(it.e?'<i>+'+it.e+'</i>':'')+'</button>'}
+function pItemTip(it){const d=it.d,g=AIGRADE[it.g]||'var(--txt)',ln=(a,b)=>'<div class="ptl"><span>'+escH(a)+'</span><b>'+escH(b)+'</b></div>',
+  sec=(t,rows)=>rows.length?'<h5>'+t+'</h5>'+rows.join(''):'',xs=s=>s.extra&&!/^0(\.0+)?%?$/.test(s.extra)?' (+'+s.extra+')':'';
+ let h='<div class="pth">'+(it.icon?'<img src="'+escH(it.icon)+'" alt="" style="--g:'+g+'">':'')+'<div><b style="color:'+g+'">'+escH(it.n||PSLOT[it.k])+(it.e?' +'+it.e:'')+'</b>'
+  +'<div class="sub">'+escH([it.gn,d&&d.categoryName||PSLOT[it.k]].filter(Boolean).join(' · '))+'</div></div></div>';
+ if(d)h+=(d.level?ln('Niveau d’objet',d.level):'')+(d.maxEnchantLevel?ln('Renforcement','+'+(it.e||0)+' / '+d.maxEnchantLevel):'')
+  +(d.equipLevel>1?ln('Niveau requis',d.equipLevel):'')
+  +sec('Stats',(d.mainStats||[]).map(s=>ln(s.name,s.value+xs(s))))
+  +sec('Bonus',(d.subStats||[]).map(s=>ln(s.name,'+'+s.value)))
+  +sec('Compétences',(d.subSkills||[]).map(s=>ln(s.name,'+'+s.level)))
+  +sec('Pierres de mana',(d.magicStoneStat||[]).map(s=>'<div class="ptl"><span style="color:'+(AIGRADE[s.grade]||'inherit')+'">'+escH(s.name)+'</span><b>'+escH(s.value)+'</b></div>'))
+  +sec('Pierre divine',(d.godStoneStat||[]).map(s=>'<div class="ptx"><b style="color:'+(AIGRADE[s.grade]||'inherit')+'">'+escH(s.name)+'</b><br>'
+   +escH(s.desc||'').replace(/\n/g,'<br>')+'</div>'))
+  +(d.set&&d.set.name?sec('Ensemble',[ln(d.set.name,(d.set.equippedCount||0)+' équipé'+((d.set.equippedCount||0)>1?'s':''))]):'')
+  +(d.sources&&d.sources.length?'<div class="ptx">Obtention : '+escH(d.sources.join(', '))+'</div>':'');
+ else if(it.x&&it.x.length)h+='<div class="ptx">'+it.x.map(escH).join('<br>')+'</div>';
+ else h+='<div class="ptx">Survole l’objet en jeu et envoie sa fiche en capture pour voir ses stats ici.</div>';
+ const r=aiFind(it.n);if(r&&r[6])h+=ln('Prix le plus bas à l’HDV',kf(r[6]));
+ return h}
+function pDoll(G,A){const col=ks=>'<div class="pcol">'+ks.map(k=>pSlot(G[k],k)).join('')+'</div>',p=((A||{}).info||{}).profile||{};
+ const items=Object.keys(PSLOT).map(k=>G[k]).filter(x=>x&&(x.n||x.e||x.g)),gn=pGradeNames(G),cnt={};items.forEach(x=>{if(x.g)cnt[x.g]=(cnt[x.g]||0)+1});
+ const avg=items.length?items.reduce((s,x)=>s+(x.e||0),0)/items.length:0;
+ return '<div class="pdoll">'+col(PDOLL[0])+'<div class="pfig">'+(p.profileImage?'<img src="'+escH(p.profileImage)+'" alt="Portrait de '+escH(p.characterName||'')+'">':'<div class="pfig0">🧙</div>')
+  +(items.length?'<div class="pfigb"><b>+'+avg.toFixed(1).replace('.',',')+'</b> de renforcement moyen<div>'
+   +Object.entries(cnt).sort((a,b)=>b[1]-a[1]).map(([g,c])=>'<span style="color:'+(AIGRADE[g]||'inherit')+'">'+c+' '+escH(gn[g]||g)+'</span>').join(' · ')+'</div></div>':'')
+  +'</div>'+col(PDOLL[1])+'<div class="prow">'+PDOLL[2].map(k=>pSlot(G[k],k)).join('')+'</div></div>'}
+function pCard(s,title){return '<div class="pcard"><h4>'+(title||(PSECS.find(x=>x[0]===s.k)||[0,0,'📌'])[2]+' '+escH(s.n))+'<small>'+escH(s.d||'')+'</small></h4><div class="prows">'
+ +s.r.map(([f,x])=>'<div><span>'+escH(f)+'</span><b>'+aiInline(escH(x))+'</b></div>').join('')+'</div></div>'}
+function pAge(iso){const m=Math.round((Date.now()-Date.parse(iso+'Z'))/6e4);
+ return !isFinite(m)?'':m<2?'à l’instant':m<60?'il y a '+m+' min':m<1440?'il y a '+Math.round(m/60)+' h':new Date(iso+'Z').toLocaleDateString('fr-FR')}
+
+// en-tête : portrait, nom, classe, niveau, serveur, titre, puissance de combat et niveau d'objet
+function pHead(A,P,secs){const kpi=(l,x)=>x?'<div class="kpi"><div class="l">'+l+'</div><div class="v">'+escH(x)+'</div></div>':'',
+  more='<button class="pmore" onclick="this.closest(\'.psheet\').classList.toggle(\'open\')"></button>';
+ if(A){const p=A.info.profile||{},il=(((A.info.stat||{}).statList||[]).find(s=>s.type==='ItemLevel')||{}).value;
+  return '<div class="phead"><div class="who"><div class="pav">'+(p.profileImage?'<img src="'+escH(p.profileImage)+'" alt="">':escH((p.characterName||'?').charAt(0)))+'</div>'
+   +'<div><h2>'+escH(p.characterName||'')+'</h2><div class="sub">'+escH([p.className,p.characterLevel&&'niveau '+p.characterLevel,p.raceName,p.serverName].filter(Boolean).join(' · '))+'</div>'
+   +(p.titleName?'<div class="ptitle" style="color:'+(AIGRADE[p.titleGrade]||'var(--mut)')+'">« '+escH(p.titleName)+' »</div>':'')+'</div>'
+   +'<div class="pacts"><button class="pbtn" id="pref" onclick="aRefresh()" title="Relire l’armurerie officielle">↻ '+escH(pAge(A.fetched))+'</button>'
+   +'<button class="pbtn" onclick="pPick()" title="Ajouter des captures">📎</button></div></div>'
+   +'<div class="kpis">'+kpi('Puissance de combat',p.combatPower!=null?NF.format(p.combatPower):'')+kpi('Niveau d’objet',il!=null?NF.format(il):'')+'</div>'+more+'</div>'}
  const idr=(secs.find(s=>s.k==='identite')||{r:[]}).r,top={},tags=[];
  idr.forEach(r=>{const t=PTOP[pKey(r[0])];if(t&&!top[t])top[t]=r[1];else tags.push(r)});
  secs.forEach(s=>s.k==='stats'&&s.r.forEach(([f,x])=>{const t=PTOP[pKey(f)];if((t==='cp'||t==='il')&&!top[t])top[t]=x}));
- const kpi=(l,x)=>x?'<div class="kpi"><div class="l">'+l+'</div><div class="v">'+escH(x)+'</div></div>':'';
- box.innerHTML='<div class="phead"><div class="who"><div class="pav">'+escH((top.name||'?').trim().charAt(0).toUpperCase()||'?')+'</div>'
+ return '<div class="phead"><div class="who"><div class="pav">'+escH((top.name||'?').trim().charAt(0).toUpperCase()||'?')+'</div>'
    +'<div><h2>'+escH(top.name||'Mon personnage')+'</h2><div class="sub">'+escH([top.cls,top.lvl&&'niveau '+top.lvl.replace(/^\D+/,'')].filter(Boolean).join(' · ')
     ||'Classe et niveau : envoie la fenêtre du personnage')+'</div></div>'
-   +'<button class="pbtn" onclick="pPick()" title="Ajouter des captures">📎 Captures</button></div>'
+   +'<div class="pacts"><button class="pbtn" onclick="pPick()" title="Ajouter des captures">📎 Captures</button></div></div>'
    +(top.cp||top.il?'<div class="kpis">'+kpi('Puissance de combat',top.cp)+kpi('Niveau d’objet',top.il)+'</div>':'')
-   +(tags.length?'<div class="ptags">'+tags.map(([f,x])=>'<span>'+escH(f)+' <b>'+v(x)+'</b></span>').join('')+'</div>':'')
-   +'<button class="pmore" onclick="this.closest(\'.psheet\').classList.toggle(\'open\')"></button></div>'
-  +'<div class="pbody">'+secs.filter(s=>s.k!=='identite').map(s=>'<div class="pcard"><h4>'+(PSECS.find(x=>x[0]===s.k)||[0,0,'📌'])[2]+' '+escH(s.n)
-    +'<small>'+escH(s.d||'')+'</small></h4><div class="'+(s.k==='stats'?'pgrid':'prows')+'">'
-    +s.r.map(([f,x])=>'<div><span>'+escH(f)+'</span><b>'+v(x)+'</b></div>').join('')+'</div></div>').join('')
-  +((P.log||[]).length?'<div class="pcard"><h4>📈 Progression</h4><div class="plog">'+P.log.slice(-12).reverse()
-    .map(([d,x])=>'<div><span>'+escH(d)+'</span>'+v(x)+'</div>').join('')+'</div></div>':'')
-  +'<div class="ptools"><button class="pbtn" onclick="pEdit()">✎ Modifier</button><button class="pbtn" onclick="pReset()">🗑 Effacer</button>'
-  +'<span class="sub">'+(P.d?'Mise à jour le '+escH(new Date(P.d.replace(' ','T')+'Z').toLocaleString('fr-FR',{dateStyle:'short',timeStyle:'short'})):'')
-  +'</span></div><div id="pedit"></div></div>'}
+   +(tags.length?'<div class="ptags">'+tags.map(([f,x])=>'<span>'+escH(f)+' <b>'+aiInline(escH(x))+'</b></span>').join('')+'</div>':'')+more+'</div>'}
+function pLinkCard(){return '<div class="plink"><b>🔗 Relie ton personnage officiel</b><div class="sub">Équipement exact avec la fiche de chaque objet, stats, Daevanion, '
+ +'compétences et titres, lus sur l’armurerie officielle de NCSOFT (la même source que shugo.gg), puis relus tout seuls.</div>'
+ +'<form onsubmit="aSearch(event)"><input id="plq" class="search" placeholder="Nom du personnage" value="'+escH(AIUSER||'')+'" autocomplete="off">'
+ +'<button class="pbtn">Chercher</button></form><div id="plres"></div></div>'}
+function pRender(){const box=document.getElementById('psheet');if(!box)return;const P=pGet(),A=PARM&&PARM.info?PARM:null,secs=pSecs(P);pTipHide();
+ if(!A&&!secs.length&&!(P.log||[]).length){box.innerHTML=(aiMode()==='server'?pLinkCard():'')+'<div class="pempty"><div class="pav">🧙</div><h2>Ta fiche de personnage</h2>'
+   +'<p class="lead">Envoie des captures de ton perso dans la conversation : l’assistant les lit et remplit la fiche tout seul. '
+   +'Il la connaît ensuite dans toutes ses réponses, ici comme dans 💬 Assistant.</p><ul>'
+   +['La fenêtre d’équipement (les 20 emplacements)','Chaque pièce d’équipement (fiche au survol)','Infos sur les stats (principales et détaillées)',
+     'Les plateaux Daevanion','Compétences, Arcanes, familiers, ailes, titres'].map(x=>'<li>'+x+'</li>').join('')
+   +'</ul><button class="pbtn" onclick="pPick()">📎 Ajouter des captures</button><div class="sub">ou glisse-les ici, ou colle-les (Ctrl + V)</div></div>';return}
+ PTIPS=[];if(!PTAB){try{PTAB=localStorage.getItem('ptab')}catch(e){}}if(!PTABS.some(t=>t[0]===PTAB))PTAB='gear';
+ const body={gear:pTabGear,stats:pTabStats,daev:pTabDaev,skills:pTabSkills,more:pTabMore}[PTAB](A,P,secs);
+ box.innerHTML=pHead(A,P,secs)+'<div class="pbody"><div class="ptabs" role="tablist">'+PTABS.map(([k,l])=>'<button role="tab" aria-selected="'+(k===PTAB)+'"'
+  +(k===PTAB?' class="on"':'')+' onclick="pTab(\''+k+'\')">'+l+'</button>').join('')+'</div><div class="ptab">'+body+'</div></div>';
+ pTipBind(box)}
+function pTab(k){PTAB=k;try{localStorage.setItem('ptab',k)}catch(e){}pRender()}
+
+function pTabGear(A,P,secs){const [G,rest]=A?[aGear(A),[]]:pGearP(secs),pw=A?((A.equipment||{}).petwing||{}):{};
+ let h=(!A&&aiMode()==='server'?pLinkCard():'')+pDoll(G,A);
+ if(!A&&!Object.keys(G).length)h+='<p class="sub">Envoie la fenêtre d’équipement (touche I) et la fiche de chaque objet : l’assistant place chaque pièce dans son emplacement.</p>';
+ const arc=[1,2,3,4,5].map(i=>G['Arcana'+i]).filter(Boolean),set=arc.map(x=>x.d&&x.d.set).find(s=>s&&s.name);
+ if(arc.length)h+='<h5 class="ph5">🃏 Arcanes'+(set?' <small>ensemble '+escH(set.name)+' · '+(set.equippedCount||0)+' équipées</small>':'')+'</h5><div class="parc">'
+  +arc.map(it=>'<button style="--g:'+(AIGRADE[it.g]||'#596275')+'" data-tip="'+pTipAdd(pItemTip(it))+'" aria-label="'+escH(it.n)+'"><img src="'+escH(it.icon)+'" alt="" loading="lazy">'
+   +'<i>+'+(it.e||0)+'</i></button>').join('')+'</div>';
+ const mini=(icon,n,sub,g)=>'<div class="pminic" style="--g:'+(AIGRADE[g]||'var(--line)')+'" data-tip="'+pTipAdd('<b style="color:'+(AIGRADE[g]||'inherit')+'">'+escH(n)+'</b><div class="sub">'+escH(sub)+'</div>')+'">'
+  +(icon?'<img src="'+escH(icon)+'" alt="" loading="lazy">':'')+'<span><b>'+escH(n)+'</b><span class="sub">'+escH(sub)+'</span></span></div>';
+ if(pw.pet&&pw.pet.name||pw.wing&&pw.wing.name)h+='<div class="pmini">'+(pw.pet&&pw.pet.name?mini(pw.pet.icon,pw.pet.name,'Familier · niveau '+pw.pet.level,''):'')
+  +(pw.wing&&pw.wing.name?mini(pw.wing.icon,pw.wing.name,'Ailes · +'+(pw.wing.enchantLevel||0),pw.wing.grade):'')+'</div>';
+ if(!A)['arcanes','familiers'].forEach(k=>{const s=secs.find(x=>x.k===k);if(s)h+=pCard(s)});
+ if(rest.length)h+=pCard({k:'equipement',n:'Équipement : autres infos',r:rest,d:(secs.find(s=>s.k==='equipement')||{}).d});
+ return h}
+function pTabStats(A,P,secs){const st=A?((A.info.stat||{}).statList||[]):[],S=secs.find(s=>s.k==='stats')||{r:[],d:''},h=[];
+ const isA=f=>PATTRN.includes(pKey(f)),isM=f=>PMAIN.includes(pKey(f)),attr=st.filter(s=>PATTR.includes(s.type)),gods=st.filter(s=>!PATTR.includes(s.type)&&s.type!=='ItemLevel');
+ const main=S.r.filter(([f])=>isM(f)),attrP=S.r.filter(([f])=>isA(f)),rest=S.r.filter(([f])=>!isM(f)&&!isA(f)),cap=S.d?' <small>capture du '+escH(S.d)+'</small>':'';
+ const cell=(f,v,tip)=>'<div'+(tip?' data-tip="'+pTipAdd(tip)+'"':'')+(/^0( ?%)?$/.test(String(v).trim())?' class="z"':'')+'><span>'+escH(f)+'</span><b>'+escH(v)+'</b></div>';
+ if(main.length)h.push('<h5 class="ph5">Principales'+cap+'</h5><div class="pmain">'+main.map(([f,v])=>cell(f,v)).join('')+'</div>');
+ if(attr.length)h.push('<h5 class="ph5">Attributs <small>armurerie officielle</small></h5><div class="pattr">'
+  +attr.map(s=>cell(s.name,s.value,s.statSecondList?'<b>'+escH(s.name)+' '+s.value+'</b><div class="ptx">'+s.statSecondList.map(escH).join('<br>')+'</div>':'')).join('')+'</div>');
+ else if(attrP.length)h.push('<h5 class="ph5">Attributs'+cap+'</h5><div class="pattr">'+attrP.map(([f,v])=>cell(f,v)).join('')+'</div>');
+ if(gods.length)h.push('<h5 class="ph5">Divinités <small>armurerie officielle</small></h5><div class="pgods">'+gods.map(s=>{const m=s.name.match(/^(.*?)\s*\[(.*)\]$/);
+  return '<div'+(s.value?'':' class="z"')+'><b>'+s.value+'</b><span>'+escH(m?m[2]:s.name)+(m?' <em>'+escH(m[1])+'</em>':'')+'<small>'+escH((s.statSecondList||[]).join(' · '))+'</small></span></div>'}).join('')+'</div>');
+ if(rest.length)h.push('<h5 class="ph5">Détaillées'+cap+'</h5><div class="pdet">'+rest.map(([f,v])=>cell(f,v)).join('')+'</div>');
+ if(!main.length&&!rest.length)h.push('<p class="sub">ATQ, DÉF, CRIT et les stats détaillées ne sont pas sur l’armurerie officielle : envoie la fenêtre « Infos sur les stats » '
+  +'(Stats principales et Stats détaillées) dans la conversation pour les voir ici.</p>');
+ return h.join('')}
+function pTabDaev(A,P,secs){const B=A?(((A.info.daevanion||{}).boardList)||[]):[],S=!A&&secs.find(s=>s.k==='daevanion');
+ const ring=(n,p,sub)=>'<div class="pdv"><div class="pring" style="--p:'+Math.max(0,Math.min(100,p))+'"><b>'+p+' %</b></div><div><b>'+escH(n)+'</b>'+(sub?'<div class="sub">'+escH(sub)+'</div>':'')+'</div></div>';
+ if(B.length)return '<div class="pdaev">'+B.map(b=>ring(b.name,b.openPercent||0,(b.openNodeCount||0)+' / '+(b.totalNodeCount||0)+' nœuds')).join('')+'</div>'
+  +'<p class="sub">Les plateaux encore à 0 % n’apparaissent pas sur l’armurerie officielle.</p>';
+ if(S)return '<div class="pdaev">'+S.r.map(([f,v])=>{const m=String(v).match(/(\d+(?:[.,]\d+)?)\s*%/);
+  return m?ring(f,Math.round(parseFloat(m[1].replace(',','.'))),''):'<div class="pdv"><div><b>'+escH(f)+'</b><div class="sub">'+escH(v)+'</div></div></div>'}).join('')+'</div>';
+ return '<p class="sub">Pas encore de plateau : envoie tes plateaux Daevanion en capture'+(aiMode()==='server'?', ou relie ton personnage officiel (onglet Équipement)':'')+'.</p>'}
+function pTabSkills(A,P,secs){const S=A?((((A.equipment||{}).skill||{}).skillList)||[]):[],C=secs.find(s=>s.k==='competences');let h='';
+ [['Active','Compétences actives','Compétence active'],['Passive','Compétences passives','Compétence passive'],
+  ['Dp','Compétences de spécialisation','Compétence de spécialisation']].forEach(([c,l,one])=>{
+  const x=S.filter(s=>s.category===c).sort((a,b)=>(b.equip-a.equip)||(b.acquired-a.acquired)||(a.needLevel-b.needLevel));if(!x.length)return;
+  h+='<h5 class="ph5">'+l+' <small>'+x.filter(s=>s.acquired).length+' apprises sur '+x.length+'</small></h5><div class="pskills">'+x.map(s=>{const eq=s.equip&&c!=='Passive';
+   return '<button class="'+(eq?'eq':'')+(s.acquired?'':' off')+'" data-tip="'+pTipAdd('<b>'+escH(s.name)+'</b><div class="sub">'+one+'</div>'
+    +'<div class="ptl"><span>Niveau</span><b>'+(s.skillLevel||0)+'</b></div><div class="ptl"><span>Niveau requis</span><b>'+s.needLevel+'</b></div>'
+    +'<div class="ptx">'+(s.acquired?eq?'Équipée':c==='Passive'?'Apprise':'Apprise, pas équipée':'Pas encore apprise')+'</div>')+'" aria-label="'+escH(s.name)+'">'
+    +'<img src="'+escH(s.icon)+'" alt="" loading="lazy">'+(s.skillLevel?'<i>'+s.skillLevel+'</i>':'')+'</button>'}).join('')+'</div>'});
+ if(C)h+=pCard(C);
+ return h||'<p class="sub">Envoie la fenêtre des compétences et des stigmas en capture'+(aiMode()==='server'?', ou relie ton personnage officiel (onglet Équipement)':'')+'.</p>'}
+function pTabMore(A,P,secs){const T=A?((A.info.title||{}).titleList||[]):[],TT=A?(A.info.title||{}):{};let h='';
+ if(T.length)h+='<h5 class="ph5">🏷️ Titres équipés <small>'+(TT.ownedCount||0)+' obtenus sur '+(TT.totalCount||0)+'</small></h5><div class="ptitles">'
+  +T.map(t=>'<div><b style="color:'+(AIGRADE[t.grade]||'inherit')+'">'+escH(t.name)+'</b><div class="sub">'
+   +escH([...(t.statList||[]),...(t.equipStatList||[])].map(x=>x.desc).join(' · '))+'</div></div>').join('')+'</div>';
+ secs.filter(s=>!['stats','equipement','daevanion','competences','arcanes','familiers'].includes(s.k)&&!(A&&s.k==='identite')).forEach(s=>h+=pCard(s));
+ if((P.log||[]).length)h+='<div class="pcard"><h4>📈 Progression</h4><div class="plog">'+P.log.slice(-15).reverse()
+  .map(([d,x])=>'<div><span>'+escH(d)+'</span>'+aiInline(escH(x))+'</div>').join('')+'</div></div>';
+ h+='<div class="ptools"><button class="pbtn" onclick="pEdit()">✎ Modifier les notes</button><button class="pbtn" onclick="pReset()">🗑 Effacer les notes</button>'
+  +(A?'<button class="pbtn" onclick="aUnlink()">Délier le personnage</button>':'')
+  +'<span class="sub">'+(P.d?'Notes mises à jour le '+escH(new Date(P.d.replace(' ','T')+'Z').toLocaleString('fr-FR',{dateStyle:'short',timeStyle:'short'})):'')
+  +'</span></div><div id="pedit"></div>'+(!A&&aiMode()==='server'?pLinkCard():'');
+ return h}
+
+// infobulles : survol (souris), focus (clavier) ou toucher (téléphone)
+function pTipBind(box){if(box.dataset.tips)return;box.dataset.tips='1';
+ const el=e=>e.target.closest&&e.target.closest('[data-tip]');
+ box.addEventListener('mouseover',e=>{const t=el(e);if(t)pTipShow(t)});
+ box.addEventListener('mouseout',e=>{const t=el(e),to=e.relatedTarget;if(t&&!(to&&to.closest&&to.closest('[data-tip]')===t))pTipHide()});
+ box.addEventListener('focusin',e=>{const t=el(e);if(t)pTipShow(t)});box.addEventListener('focusout',pTipHide);
+ box.addEventListener('click',e=>{const t=el(e);if(t){pTipShow(t);e.stopPropagation()}});
+ document.addEventListener('click',pTipHide);window.addEventListener('scroll',pTipHide,true)}
+function pTipShow(t){let tip=document.getElementById('ptip');if(!tip){tip=document.createElement('div');tip.id='ptip';tip.setAttribute('role','tooltip');document.body.appendChild(tip)}
+ const h=PTIPS[+t.dataset.tip];if(!h)return pTipHide();tip.innerHTML=h;tip.style.setProperty('--g',t.style.getPropertyValue('--g')||'var(--line)');tip.classList.add('on');
+ const r=t.getBoundingClientRect(),w=tip.offsetWidth,ht=tip.offsetHeight,vw=innerWidth,vh=innerHeight;
+ let x=r.right+10,y=r.top;if(x+w>vw-8)x=r.left-w-10;
+ if(x<8){x=Math.max(8,Math.min(vw-w-8,r.left+r.width/2-w/2));y=r.bottom+8;if(y+ht>vh-8)y=r.top-ht-8}
+ tip.style.left=x+'px';tip.style.top=Math.max(8,Math.min(vh-ht-8,y))+'px'}
+function pTipHide(){const t=document.getElementById('ptip');if(t)t.classList.remove('on')}
+
+// relier, relire, délier
+async function aSearch(e){e.preventDefault();const q=document.getElementById('plq').value.trim(),box=document.getElementById('plres');if(q.length<2)return;
+ box.innerHTML='<div class="sub">Recherche sur l’armurerie officielle…</div>';
+ try{const r=await fetch('api/armory/search?q='+encodeURIComponent(q),{cache:'no-store'});if(!r.ok)throw new Error(await r.text());
+  const L=(await r.json()).list||[],srv=(window.ASSIST||{}).server||'',n=normName(q);
+  L.sort((a,b)=>((b.server===srv)-(a.server===srv))||((normName(b.name)===n)-(normName(a.name)===n))||(b.level-a.level));
+  box.innerHTML=L.length?L.slice(0,12).map(c=>'<button class="plc" data-id="'+escH(c.id)+'" onclick="aLink(this.dataset.id,'+(+c.serverId)+')">'
+   +(c.img?'<img src="'+escH(c.img)+'" alt="">':'')+'<span><b>'+escH(c.name)+'</b><span class="sub">'
+   +escH([c.cls,'niveau '+c.level,c.server,c.race].filter(Boolean).join(' · '))+'</span></span></button>').join('')
+   :'<div class="sub">Aucun personnage à ce nom sur les serveurs mondiaux.</div>'}
+ catch(err){box.innerHTML='<div class="sub neg">'+escH(err.message||'Erreur')+'</div>'}}
+async function aLink(id,sid){const box=document.getElementById('plres');if(box)box.innerHTML='<div class="sub">Lecture de l’armurerie officielle (une dizaine de secondes)…</div>';
+ try{const r=await fetch('api/armory',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id,serverId:sid})});
+  if(!r.ok)throw new Error(await r.text());PARM=await r.json();PTAB='gear';pRender();toast('Personnage relié : '+(((PARM.info||{}).profile||{}).characterName||''))}
+ catch(e){if(box)box.innerHTML='<div class="sub neg">'+escH(e.message)+'</div>'}}
+async function aLoad(){if(aiMode()!=='server')return;
+ try{const r=await fetch('api/armory',{cache:'no-store'});if(!r.ok)return;const a=await r.json();PARM=a&&a.id?a:null;pRender();
+  if(PARM&&!(Date.now()-Date.parse(PARM.fetched+'Z')<18e5))aRefresh(true)}catch(e){}}
+async function aRefresh(quiet){if(aRefresh.busy)return;aRefresh.busy=true;const b=document.getElementById('pref');if(b)b.textContent='↻ lecture…';
+ try{const r=await fetch('api/armory',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});if(!r.ok)throw new Error(await r.text());
+  PARM=await r.json();await pLoad();pRender();if(!quiet)toast('Personnage relu sur l’armurerie officielle')}
+ catch(e){pRender();if(!quiet)toast(e.message||'Armurerie officielle injoignable')}finally{aRefresh.busy=false}}
+async function aUnlink(){if(!confirm('Délier ce personnage ? Les notes de la fiche restent.'))return;
+ try{await fetch('api/armory',{method:'POST',headers:{'content-type':'application/json'},body:'{"unlink":true}'});PARM=null;pRender()}catch(e){toast('Serveur injoignable')}}
+// l'armurerie telle que l'assistant la reçoit
+function aItemText(it){const d=it.d||{},x=[it.n+' +'+(it.e||0)+(d.maxEnchantLevel?'/'+d.maxEnchantLevel:'')+', '+(it.gn||it.g)+(d.level?', item level '+d.level:'')];
+ const v=s=>s.name+' '+s.value+(s.extra&&!/^0(\.0+)?%?$/.test(s.extra)?' (+'+s.extra+')':'');
+ if((d.mainStats||[]).length)x.push(d.mainStats.map(v).join(', '));
+ if((d.subStats||[]).length)x.push('bonus '+d.subStats.map(s=>s.name+' +'+s.value).join(', '));
+ if((d.subSkills||[]).length)x.push('skills '+d.subSkills.map(s=>s.name+' +'+s.level).join(', '));
+ if((d.magicStoneStat||[]).length)x.push('manastones '+d.magicStoneStat.map(s=>s.name+' '+s.value).join(', '));
+ if((d.godStoneStat||[]).length)x.push('godstone '+d.godStoneStat.map(s=>s.name).join(', '));
+ if(d.set&&d.set.name)x.push('set '+d.set.name+' ('+(d.set.equippedCount||0)+' equipped)');
+ return x.join('; ')}
+function aArmText(A){if(!A||!A.info)return '';const p=A.info.profile||{},st=(A.info.stat||{}).statList||[],G=aGear(A),E=A.equipment||{},pw=E.petwing||{};
+ const il=(st.find(s=>s.type==='ItemLevel')||{}).value,num=n=>n==null?'?':NF.format(n);
+ const L=['\n\nOfficial armory data (NCSOFT\'s official character page, read '+(A.fetched||'?')+' UTC). It is exact: trust it over screenshots and over '
+  +'your memory, use its exact item names, and do not write ```perso lines for anything it covers. If the player says something changed since then, '
+  +'tell them to press ↻ in the Personnage tab.',
+  'Character: '+p.characterName+', '+p.className+' level '+p.characterLevel+', '+p.raceName+', server '+p.serverName+'. Combat power '+num(p.combatPower)
+   +'. Item level '+num(il)+'.'+(p.titleName?' Title shown: '+p.titleName+'.':''),
+  'Attributes: '+st.filter(s=>PATTR.includes(s.type)).map(s=>s.name+' '+s.value).join(', ')+'.',
+  'Gods (Daevanion stats): '+st.filter(s=>!PATTR.includes(s.type)&&s.type!=='ItemLevel').map(s=>s.name+' '+s.value
+   +((s.statSecondList||[]).length?' ('+s.statSecondList.join(', ')+')':'')).join('; ')+'.',
+  'Equipment (slot: item +enchant/max, grade, item level; stats with the enhancement part in brackets; bonus; manastones; godstone):'];
+ Object.keys(PSLOT).forEach(k=>L.push('- '+PSLOT[k]+': '+(G[k]?aItemText(G[k]):'empty')));
+ const arc=[1,2,3,4,5].map(i=>G['Arcana'+i]).filter(Boolean);if(arc.length)L.push('Arcana: '+arc.map(aItemText).join(' | '));
+ if(pw.pet&&pw.pet.name)L.push('Pet: '+pw.pet.name+', level '+pw.pet.level+'.');
+ if(pw.wing&&pw.wing.name)L.push('Wings: '+pw.wing.name+' +'+(pw.wing.enchantLevel||0)+', '+pw.wing.grade+'.');
+ const B=(A.info.daevanion||{}).boardList||[];
+ if(B.length)L.push('Daevanion boards: '+B.map(b=>b.name+' '+b.openPercent+' % ('+b.openNodeCount+'/'+b.totalNodeCount+' nodes)').join(', ')+' (boards at 0 % are not listed).');
+ const S=(E.skill||{}).skillList||[];
+ [['Active','Active skills'],['Passive','Passive skills'],['Dp','Specialty skills']].forEach(([c,l])=>{const x=S.filter(s=>s.category===c&&s.acquired);
+  if(x.length)L.push(l+' (level): '+x.map(s=>s.name+' '+s.skillLevel+(s.equip&&c!=='Passive'?' equipped':'')).join(', ')+'.')});
+ const T=(A.info.title||{}).titleList||[];
+ if(T.length)L.push('Equipped titles: '+T.map(t=>t.name+' ('+[...(t.statList||[]),...(t.equipStatList||[])].map(x=>x.desc).join(', ')+')').join('; ')+'.');
+ return L.join('\n')}
 // modifier à la main : la fiche en lignes « section | champ | valeur », enregistrée à la place de l'ancienne (le journal reste)
 function pEdit(){const box=document.getElementById('pedit');if(!box)return;if(box.innerHTML){box.innerHTML='';return}
  box.innerHTML='<div class="sub">Une ligne par champ : « section | champ | valeur ». Efface une ligne pour retirer le champ.</div>'

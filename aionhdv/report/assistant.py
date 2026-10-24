@@ -91,8 +91,8 @@ def perso_tab():
     conversations."""
     hello = """<div class="aihello">
 <h2>Parle de ton personnage</h2>
-<p class="lead">Envoie des captures de ton perso (fenêtre du personnage, équipement, stats, Daevanion, familiers…) : l’assistant remplit
-ta fiche tout seul, puis s’en sert dans toutes ses réponses.</p>
+<p class="lead">L’assistant connaît ta fiche (à côté) : ton personnage officiel relié, et ce que tes captures ajoutent (stats
+détaillées, objectifs…). Il s’en sert dans toutes ses réponses.</p>
 <div class="aisugg">
 <button onclick="aiAsk(this.textContent)">Quelle pièce de mon équipement améliorer en priorité ?</button>
 <button onclick="aiAsk(this.textContent)">Comment monter ma puissance de combat le plus vite ?</button>
