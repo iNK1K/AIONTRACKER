@@ -178,6 +178,11 @@ code{background:var(--card2);padding:1px 6px;border-radius:5px}
 .ai.drop .aibar{border-color:var(--acc);box-shadow:0 0 0 3px #f0c05033}
 .aiuatt{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}.aiuatt img{max-width:180px;max-height:140px;border-radius:8px;border:1px solid var(--line)}
 .aiuatt span{font-size:13px;color:var(--mut)}
+.aimemo{border:1px solid #b48cff55;background:#b48cff12;border-radius:12px;padding:10px 14px;margin:8px 0 12px;font-size:14px}
+.aimemo b{color:#c9a8ff}.aimemo div{margin-top:3px}.aimemo button{background:none;border:0;color:var(--mut);font:inherit;font-size:12.5px;cursor:pointer;padding:0;margin-top:6px}
+.aimemo button:hover{color:var(--acc)}.aimemlist{display:flex;flex-direction:column;gap:6px;margin:10px 0}.aimemlist>div{display:flex;gap:8px;align-items:baseline;
+ background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:14px}.aimemlist button{margin-left:auto;background:none;border:0;
+ color:var(--mut);cursor:pointer}.aimemlist button:hover{color:var(--bad)}
 .aiopts{display:grid;gap:10px;margin-bottom:8px}.aiopt{border:1px solid var(--line);border-radius:10px;padding:10px 12px}.aiopt.on{border-color:var(--ok)}
 """
 

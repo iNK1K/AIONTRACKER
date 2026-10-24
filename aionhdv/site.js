@@ -748,7 +748,7 @@ function aiSystem(){const A=window.ASSIST;
   +'name in brackets when it helps.\n\n'
   +'Answer in the language of the question. Lead with the direct answer, then the details that matter: short sections, lists, '
   +'and a table when comparing options. Bold key item names and numbers. Be concrete (names, numbers, where, how many), skip filler.'
-  +(A&&A.fmt?'\n\n'+A.fmt:'')}
+  +(A&&A.fmt?'\n\n'+A.fmt:'')+aiMemPrompt(aiMemLocal())}
 async function aiStream(signal,draw){
  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',signal,headers:{'content-type':'application/json',
    'x-api-key':aiKey(),'anthropic-version':'2023-06-01','anthropic-beta':'server-side-fallback-2026-07-01',
@@ -795,6 +795,7 @@ async function aiSend(){const inp=document.getElementById('aiin'),q=inp.value.tr
   if(H===AIH)aiSave()}
  catch(e){if(H===AIH){AIH.length=start;aiSave()}                              // tour annule : l'historique reste valide pour la suite
   note=e.name==='AbortError'?'Interrompu.':e.message;if(e.status===401)aiKeyForm()}
+ if(!note&&H===AIH)aiMemKeep(H.slice(start+1).filter(m=>m.role==='assistant').map(m=>m.content.filter(b=>b.type==='text').map(b=>b.text).join('')).join('\n'));
  aiPaint.live=null;AIBUSY=null;aiBusy(false);aiDraw(turn,start,null,true,note)}
 function aiBusy(on){const b=document.getElementById('aigo');b.textContent=on?'■':'➤';b.title=on?'Arrêter':'Envoyer (Entrée)'}
 
@@ -874,6 +875,8 @@ function aiWidget(kind,raw){const rows=raw.map(l=>l.trim()).filter(Boolean),cols
   const max=Math.max(...bars.map(b=>Math.abs(b[1])),1);
   return '<div class="aichart">'+(title?'<div class="t">'+aiInline(escH(title))+'</div>':'')+bars.map(([a,v])=>'<div class="r"><span>'+aiInline(escH(a))
    +'</span><i><b style="width:'+Math.max(2,Math.abs(v)/max*100)+'%"'+(v<0?' class="neg"':'')+'></b></i><em>'+kf(v)+'</em></div>').join('')+'</div>'}
+ if(kind==='memo')return '<div class="aimemo">🧠 <b>Retenu pour la suite</b>'+rows.map(l=>'<div>'+aiInline(escH(l.replace(/^[-*•]\s*/,'')))+'</div>').join('')
+  +'<button onclick="aiMemForm()">Voir la mémoire</button></div>';
  if(kind==='suggest')return '<div class="aifollow">'+rows.map(l=>{const q=l.replace(/^[-*•\d.)\s]+/,'');
   return '<button data-q="'+escH(q)+'" onclick="aiAsk(this.dataset.q)">'+escH(q)+'</button>'}).join('')+'</div>';
  return '<pre><code>'+raw.map(escH).join('\n')+'</code></pre>'}
@@ -1038,3 +1041,31 @@ document.addEventListener('DOMContentLoaded',()=>{const ai=document.getElementBy
  ai.addEventListener('dragover',e=>{if([...e.dataTransfer.types].includes('Files')){e.preventDefault();ai.classList.add('drop')}});
  ai.addEventListener('dragleave',e=>{if(!ai.contains(e.relatedTarget))ai.classList.remove('drop')});
  ai.addEventListener('drop',e=>{ai.classList.remove('drop');if(e.dataTransfer.files.length){e.preventDefault();aiAddFiles([...e.dataTransfer.files])}})});
+
+// ---------------------------------------------------------------- mémoire des corrections
+// Quand le joueur corrige l'assistant (ou lui dit quoi retenir), la réponse contient un bloc ```memo : le serveur ou le pont local
+// le garde (memory.json) et le remet dans les consignes de chaque question ; en mode clé API, il est gardé dans ce navigateur.
+// Le panneau 🧠 liste ce qui est retenu, pour retirer une erreur ou ajouter un fait à la main.
+function aiMemos(text){const out=[];(text||'').replace(/```memo[^\n]*\n([\s\S]*?)(?:```|$)/g,(m,b)=>{b.split('\n').forEach(l=>{l=l.replace(/^[-*•\s]+/,'').trim();if(l)out.push(l)})});return out}
+function aiMemLocal(){try{return JSON.parse(localStorage.getItem('aimemo')||'[]')}catch(e){return []}}
+function aiMemLocalSet(v){try{localStorage.setItem('aimemo',JSON.stringify(v.slice(-200)))}catch(e){}}
+function aiMemKeep(text){const add=aiMemos(text);if(!add.length)return;const L=aiMemLocal(),seen=new Set(L.map(i=>i.t.toLowerCase()));
+ add.forEach(t=>{if(!seen.has(t.toLowerCase()))L.push({t:t.slice(0,500),d:new Date().toISOString().slice(0,10)})});aiMemLocalSet(L)}
+function aiMemPrompt(L){return L&&L.length?'\n\nWhat the player taught you (corrections and facts from his own game: trust them over web sources and '
+ +'your built-in knowledge, and use them whenever relevant):\n'+L.map(i=>'- '+i.d+': '+i.t).join('\n'):''}
+function aiMemBase(){const m=aiMode();return m==='server'?'api':m==='local'?AILOCALURL:null}
+async function aiMemGet(){const b=aiMemBase();if(!b)return aiMemLocal();
+ const r=await fetch(b+'/memory',{cache:'no-store'});return r.ok?(await r.json()).items:[]}
+async function aiMemPost(body){const b=aiMemBase();
+ if(!b){const L=aiMemLocal();if(body.del!=null)L.splice(body.del,1);if(body.add)L.push({t:body.add.slice(0,500),d:new Date().toISOString().slice(0,10)});aiMemLocalSet(L);return}
+ await fetch(b+'/memory',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)})}
+async function aiMemForm(){const box=document.getElementById('aikey');box.hidden=false;box.innerHTML='<b>🧠 Ce que l’assistant a retenu</b><div class="sub">Chargement…</div>';
+ box.scrollIntoView({block:'nearest'});let L=[];try{L=await aiMemGet()}catch(e){}
+ box.innerHTML='<b>🧠 Ce que l’assistant a retenu</b><div class="sub">Tes corrections, ajoutées à chaque question. Quand tu le reprends dans le chat, il '
+  +'les retient tout seul ; retire ici ce qui est faux.</div><div class="aimemlist">'
+  +(L.length?L.map((i,k)=>'<div><span class="sub">'+escH(i.d||'')+'</span> '+escH(i.t)+'<button title="Oublier" onclick="aiMemDel('+k+')">✕</button></div>').join('')
+   :'<div class="mut">Rien pour l’instant.</div>')+'</div>'
+  +'<input id="aimemin" placeholder="Ajouter un fait à retenir, ex. « La Calendula fraîche tombe aussi à Morheim »">'
+  +'<button onclick="aiMemAdd()">Ajouter</button><button class="sec" onclick="aiKeyForm(false)">Fermer</button>'}
+async function aiMemDel(k){await aiMemPost({del:k});aiMemForm()}
+async function aiMemAdd(){const v=document.getElementById('aimemin').value.trim();if(!v)return;await aiMemPost({add:v});toast('Retenu');aiMemForm()}

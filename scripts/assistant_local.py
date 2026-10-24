@@ -104,6 +104,38 @@ def attach(q, files):
             + ". Read each one with the Read tool before answering.]")
 
 
+MEMO_RE = re.compile(r"```memo[^\n]*\n(.*?)(?:```|$)", re.S)
+
+
+def memory():
+    f = WORK / "memory.json"
+    return json.loads(f.read_text(encoding="utf-8")) if f.exists() else []
+
+
+def remember(items=None, add=(), drop=None):
+    """Mémoire des corrections du joueur (memory.json) : ajout (sans doublon), retrait par position."""
+    items = memory() if items is None else items
+    if drop is not None and 0 <= drop < len(items):
+        items.pop(drop)
+    seen = {i["t"].lower() for i in items}
+    for t in add:
+        t = t.strip(" -*•\t")[:500]
+        if t and t.lower() not in seen:
+            items.append({"t": t, "d": time.strftime("%Y-%m-%d")})
+            seen.add(t.lower())
+    (WORK / "memory.json").write_text(json.dumps(items[-200:], ensure_ascii=False), encoding="utf-8")
+
+
+def memos(text):
+    return [l.strip(" -*•\t") for b in MEMO_RE.findall(text or "") for l in b.splitlines() if l.strip(" -*•\t")]
+
+
+def memory_prompt():
+    items = memory()
+    return ("\n\nWhat the player taught you (corrections and facts from his own game: trust them over web sources and your "
+            "built-in knowledge, and use them whenever relevant):\n" + "\n".join(f"- {i['d']}: {i['t']}" for i in items)) if items else ""
+
+
 def refresh():
     """tracker-data.md depuis le site publié (assist.js), sinon depuis reports/ ; garde l'ancien en cas d'échec."""
     path = WORK / "tracker-data.md"
@@ -153,19 +185,24 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         o = self._origin()
-        if self.path != "/health" or not o:
-            return self.send_error(403 if self.path == "/health" else 404)
+        if self.path not in ("/health", "/memory") or not o:
+            return self.send_error(403 if self.path in ("/health", "/memory") else 404)
         self._head(200, o)
-        self.wfile.write(json.dumps({"ok": bool(CLAUDE)}).encode())
+        self.wfile.write(json.dumps({"ok": bool(CLAUDE)} if self.path == "/health" else {"items": memory()},
+                                    ensure_ascii=False).encode("utf-8"))
 
     def do_POST(self):
         o = self._origin()
-        if self.path != "/ask" or not o:
+        if self.path not in ("/ask", "/memory") or not o:
             return self.send_error(403)
         try:
             body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
         except ValueError:
             return self.send_error(400)
+        if self.path == "/memory":                                       # panneau 🧠 : ajouter ou oublier un fait
+            remember(add=[str(body["add"])] if body.get("add") else (), drop=body.get("del"))
+            self._head(200, o)
+            return self.wfile.write(b'{"ok": true}')
         q, session = str(body.get("q") or "").strip(), str(body.get("session") or "")
         if not q:
             return self.send_error(400)
@@ -186,7 +223,7 @@ class Handler(BaseHTTPRequestHandler):
                "--tools", ",".join(TOOLS), "--allowedTools", "WebSearch", "WebFetch", "--strict-mcp-config",
                "--setting-sources", "local",              # lecture (Read, Grep, Glob) : dossier de travail seulement, par défaut
                "--system-prompt", SYSTEM.format(server=meta.get("server", "?"), asof=meta.get("asof", "?"))
-               + ("\n\n" + meta["fmt"] if meta.get("fmt") else "")]
+               + ("\n\n" + meta["fmt"] if meta.get("fmt") else "") + memory_prompt()]
         if re.fullmatch(r"[0-9a-f-]{36}", session):
             cmd += ["--resume", session]                                       # suite de la conversation
         log(f"question : {q[:80]}")
@@ -220,6 +257,7 @@ class Handler(BaseHTTPRequestHandler):
                     if x.get("is_error"):
                         self.send_ev(t="error", v=str(x.get("result") or x.get("subtype") or "erreur de Claude Code"))
                     else:
+                        remember(add=memos(x.get("result")))                 # le joueur a corrigé : retenu pour la suite
                         self.send_ev(t="done", text=x.get("result") or "", session=x.get("session_id"),
                                      sources=list(dict.fromkeys(sources)))
             p.wait()

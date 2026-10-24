@@ -72,4 +72,5 @@ patch notes) et consulte les prix et recettes du tracker.</p>
  onkeydown="if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();aiSend()}"></textarea>
 <button id="aigo" type="submit" title="Envoyer (Entrée)">➤</button></form></div>
 <div class="aifoot"><button onclick="aiNew()">＋ Nouvelle conversation</button><span id="aicost"></span>
-<span><button id="airefresh" hidden onclick="aiRefresh(this)">↻ Actualiser les prix</button> <button id="aimode" onclick="aiKeyForm(true)">⚙ Réglages</button></span></div></div>"""
+<span><button id="airefresh" hidden onclick="aiRefresh(this)">↻ Actualiser les prix</button> <button onclick="aiMemForm()">🧠 Mémoire</button>
+ <button id="aimode" onclick="aiKeyForm(true)">⚙ Réglages</button></span></div></div>"""
