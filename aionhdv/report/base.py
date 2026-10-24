@@ -322,9 +322,9 @@ def craft_attrs(e):
 
 
 def use_name(u):
-    """Usage d'une ressource : un craft, ou la vente du brut (apres transmutation de l'Od le cas echeant)."""
+    """Usage d'une ressource : un craft, ou la vente du brut (jamais apres transmutation : la ressource obtenue est liee)."""
     if u.get("brut"):
-        return "💰 Vendre brut" + (f" (après transmutation en {u['via']})" if u.get("via") else "")
+        return "💰 Vendre brut"
     return u["objet"]
 
 

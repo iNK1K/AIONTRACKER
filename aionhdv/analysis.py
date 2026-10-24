@@ -57,7 +57,8 @@ class Market:
         self.ingredients = {}
         for ri in con.execute("SELECT * FROM recipe_ingredients ORDER BY recipe_id, slot, is_alternative"):
             self.ingredients.setdefault(ri["recipe_id"], {}).setdefault(ri["slot"], []).append(dict(ri))
-        # transmutation : 1 Od -> 1 ressource de meme rarete, gratuite, sans echec, non liee (verifie en jeu)
+        # transmutation : 1 Od -> 1 ressource de meme rarete, gratuite, sans echec, mais LIEE (verifie en jeu) : elle ne se
+        # revend pas, elle ne sert qu'a crafter un objet vendable
         self.transmute = {}                                   # ressource (nom de base) -> id de l'Od source
         for r in con.execute("SELECT r.faction, i.base_name AS target, j.id AS src FROM recipes r "
                              "JOIN items i ON i.id = r.item_id JOIN recipe_ingredients ri ON ri.recipe_id = r.id "
@@ -741,8 +742,8 @@ class Market:
         for target, src in self.transmute.items():
             sname = self.items.get(src, {}).get("base_name")
             if sname and target in targets:
-                targets.setdefault(sname, []).extend(
-                    dict(u, objet=f"{u['objet']} (Od → {target})", via=target) for u in targets[target])
+                targets.setdefault(sname, []).extend(           # ressource transmutee liee : crafts seulement, pas la vente brute
+                    dict(u, objet=f"{u['objet']} (Od → {target})", via=target) for u in targets[target] if not u["brut"])
         out = []
         for res, uses in targets.items():
             uses.sort(key=lambda u: (not u["fiable"], -u["net_par_ressource"]))

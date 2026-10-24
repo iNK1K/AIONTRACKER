@@ -254,8 +254,10 @@ class Brut(unittest.TestCase):
         uses = [(u["objet"], u["net_par_ressource"], u["brut"]) for u in targets["Bois"]["usages"]]
         self.assertIn(("Bois", 90, True), uses)
         self.assertIn(("Planche", 450, False), uses)
-        # l'Od se vend brut, ou se transmute en Bois vendu brut
-        self.assertTrue(any(u["brut"] and u.get("via") == "Bois" for u in targets["Od commun"]["usages"]))
+        # l'Od se transmute en Bois pour un craft, jamais pour vendre le Bois brut (la ressource transmutee est liee)
+        od = targets["Od commun"]["usages"]
+        self.assertTrue(any(u.get("via") == "Bois" and not u["brut"] for u in od))
+        self.assertFalse(any(u["brut"] and u.get("via") for u in od))
 
 
 class NouvelItem(unittest.TestCase):

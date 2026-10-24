@@ -33,7 +33,7 @@ Une tâche par ligne. Claude les traite dans l'ordre et coche `[x]` quand c'est 
 - [x] Suivi des vrais gains : onglet 💰 Mes gains (capture de l'historique des ventes → mes_ventes.json, réel vs estimé, part de marché réelle, ventes à perte)
 - [x] Alertes plus calmes : alerts.types (par défaut annonces, achat-craft au vert, notes, restriction) + option alerts.resume_seul
 - [x] Code consolidé : JavaScript dans aionhdv/site.js + tests automatiques (python -m unittest discover tests)
-- [x] Transmutation intégrée (Od → ressource de même rareté, gratuite, sans échec, non liée) : Quoi récolter, Achat → craft (Od si moins cher), Mon stock, Planning safe (marchés partagés)
+- [x] Transmutation intégrée (Od → ressource de même rareté, gratuite, sans échec, liée : sert seulement aux crafts, ne se revend pas brute) : Quoi récolter, Achat → craft (Od si moins cher), Mon stock, Planning safe (marchés partagés)
 - [x] Onglet 📅 Planning : plan safe (temps de jeu → quoi récolter, quoi crafter, combien d'annonces, gain) et plan gamble (chaînes blanc → vert → bleu → unique : réussite selon les niveaux, combo 24 %, perte si échec, gain du proc, vendre ou continuer, jackpot)
 - [x] Volumes de vente mesurés sur le serveur (annonces disparues × taille des annonces) au lieu de l'extrapolation Kaisinel
 - [x] Quoi récolter : kinah par heure de récolte (100/h par défaut) et heures avant saturation
