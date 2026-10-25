@@ -992,8 +992,9 @@ async function aiSendLocal(C,q,base){base=base||AILOCALURL;const srv=base!==AILO
  const turn=aiTurn(C,qt,aiAttMeta(att)),ctl=C.busy=new AbortController();aiBusy(C,true);
  let text='',note='',fin=null;const steps=[];
  try{const session=aiSession(C);
+  if(srv&&PARM&&!(Date.now()-Date.parse(PARM.fetched+'Z')<6e5))await aRefresh(true);   // équipement d'il y a plus de 10 min : relu avant
   const r=await fetch(base+'/ask',{method:'POST',signal:ctl.signal,headers:{'content-type':'application/json'},
-   body:JSON.stringify({q:qt,session,perso:aiPersoPrompt(C),files:att.map(a=>({name:a.name,kind:a.kind,data:a.data}))})});
+   body:JSON.stringify({q:aArmNote()+qt,session,perso:aiPersoPrompt(C),files:att.map(a=>({name:a.name,kind:a.kind,data:a.data}))})});
   if(!r.ok)throw new Error(r.status===401?'Mot de passe demandé : recharge la page.':r.status===413?'Pièces jointes trop lourdes.'
    :(srv?'Serveur':'Pont local')+' : erreur '+r.status);
   const rd=r.body.getReader(),dec=new TextDecoder();let buf='';
@@ -1163,7 +1164,8 @@ function pSecs(P){const o=PSECS.map(s=>s[0]),n=k=>o.indexOf(k)+1||99;return (P.s
 // la fiche telle que l'assistant la reçoit, à la fin de ses consignes : l'armurerie officielle (exacte), puis ce que les captures ajoutent
 function aiPersoPrompt(C){const P=pGet(),arm=aArmText(PARM),secs=pSecs(P).filter(s=>!(arm&&PARMSECS.includes(s.k))),log=(P.log||[]).slice(-20);
  let t=arm;
- if(secs.length||log.length)t+='\n\nThe player\'s character sheet ('+(arm?'what their screenshots and messages add to the armory data':'their own Aion 2 character, kept from their screenshots and messages')
+ if(secs.length||log.length)t+='\n\nThe player\'s character sheet ('+(arm?'what their screenshots and messages add to the armory data; where a figure here disagrees with the armory, '
+   +'the armory is right':'their own Aion 2 character, kept from their screenshots and messages')
    +', updated '+(P.d||'?')+' UTC):\n'+secs.map(s=>s.n+'\n'+s.r.map(([f,v])=>'- '+f+' : '+v).join('\n')).join('\n')
    +(log.length?'\nProgress log (oldest first):\n'+log.map(([d,x])=>'- '+d+' : '+x).join('\n'):'');
  else if(!arm)t+='\n\nThe player\'s character sheet is still empty: as soon as they share a screenshot or details of their character, fill it with a ```perso block.';
@@ -1175,7 +1177,7 @@ function aiPersoPrompt(C){const P=pGet(),arm=aArmText(PARM),secs=pSecs(P).filter
 // ---------------------------------------------------------------- armurerie officielle (serveur AION Helper : api/armory)
 // Le serveur lit le personnage relié sur l'armurerie officielle de NCSOFT (aion2.plaync.com, la source de shugo.gg) : équipement exact
 // avec la fiche de chaque objet (stats, bonus, pierres de mana, pierre divine), Arcanes, familier, ailes, attributs et divinités,
-// Daevanion, compétences, titres. Relue à l'ouverture de l'onglet si elle date de plus de 30 min, et avec ↻ ; ce qui a progressé entre
+// Daevanion, compétences, titres. Relue à l'ouverture de l'onglet si elle date de plus de 30 min, avant une question si elle date de plus de 10 min, et avec ↻ ; ce qui a progressé entre
 // deux lectures va dans le journal de la fiche (côté serveur). Sans serveur (page GitHub), la fiche vient des seules captures.
 let PARM=null,PVIEW=null,PFIND=false,PTAB=null,PTIPS=[];   // PVIEW : un autre joueur ouvert depuis 🔍 (lu, pas gardé)
 const PARMSECS=['identite','equipement','daevanion','arcanes','familiers'];          // sections de la fiche que l'armurerie remplace
@@ -1426,6 +1428,7 @@ function aArmText(A,other){if(!A||!A.info)return '';const p=A.info.profile||{},s
    +((s.statSecondList||[]).length?' ('+s.statSecondList.join(', ')+')':'')).join('; ')+'.',
   'Equipment (slot: item +enchant/max, grade, item level; stats with the enhancement part in brackets; bonus; manastones; godstone):'];
  Object.keys(PSLOT).forEach(k=>L.push('- '+PSLOT[k]+': '+(G[k]?aItemText(G[k]):'empty')));
+ L.push('Below Unique (the weakest pieces): '+(aLow(G).join('; ')||'none, every equipped piece is Unique or higher')+'.');
  const arc=[1,2,3,4,5].map(i=>G['Arcana'+i]).filter(Boolean);if(arc.length)L.push('Arcana: '+arc.map(aItemText).join(' | '));
  if(pw.pet&&pw.pet.name)L.push('Pet: '+pw.pet.name+', level '+pw.pet.level+'.');
  if(pw.wing&&pw.wing.name)L.push('Wings: '+pw.wing.name+' +'+(pw.wing.enchantLevel||0)+', '+pw.wing.grade+'.');
@@ -1437,6 +1440,15 @@ function aArmText(A,other){if(!A||!A.info)return '';const p=A.info.profile||{},s
  const T=(A.info.title||{}).titleList||[];
  if(T.length)L.push('Equipped titles: '+T.map(t=>t.name+' ('+[...(t.statList||[]),...(t.equipStatList||[])].map(x=>x.desc).join(', ')+')').join('; ')+'.');
  return L.join('\n')}
+function aLow(G){return Object.keys(PSLOT).filter(k=>G[k]&&['Common','Rare','Legend'].includes(G[k].g))
+ .map(k=>PSLOT[k]+': '+G[k].n+' +'+G[k].e+' ('+(G[k].gn||G[k].g)+((G[k].d||{}).level?', item level '+G[k].d.level:'')+')')}
+// en tête de chaque question : l'équipement actuel, plus fort que ce que la conversation disait avant (captures, anciennes réponses)
+function aArmNote(){if(!PARM||!PARM.info)return '';const p=PARM.info.profile||{},G=aGear(PARM),
+  il=(((PARM.info.stat||{}).statList||[]).find(s=>s.type==='ItemLevel')||{}).value,low=aLow(G),empty=Object.keys(PSLOT).filter(k=>!G[k]).map(k=>PSLOT[k]);
+ return '[Site note, not typed by the player. Their character right now (official armory, read '+(PARM.fetched||'?')+' UTC): item level '
+  +(il==null?'?':NF.format(il))+', combat power '+(p.combatPower==null?'?':NF.format(p.combatPower))+'. Below Unique: '
+  +(low.join('; ')||'nothing')+(empty.length?'. Empty: '+empty.join(', '):'')+'. Every other piece is Unique or higher; the full list is in '
+  +'your instructions. This overrides anything said earlier in this conversation (older screenshots, earlier answers).]\n\n'}
 // modifier à la main : la fiche en lignes « section | champ | valeur », enregistrée à la place de l'ancienne (le journal reste)
 function pEdit(){const box=document.getElementById('pedit');if(!box)return;if(box.innerHTML){box.innerHTML='';return}
  box.innerHTML='<div class="sub">Une ligne par champ : « section | champ | valeur ». Efface une ligne pour retirer le champ.</div>'
