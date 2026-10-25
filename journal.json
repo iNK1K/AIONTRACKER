@@ -54,6 +54,7 @@
   {"id":"mvmqve10wkj9k","objet":"Bois d'Asvata pur","src":"brut","qte":9,"prix":209999,"cout":0,"ev":[{"id":"mvmqve10qtedx","t":"2026-10-24 20:40","type":"poste","prix":209999,"qte":9},{"id":"mvmqvm2d5b0kt","t":"2026-10-24 20:41","type":"vendu","prix":209999,"qte":9,"recu":1700991}]},
   {"id":"mvn1z25epm7xv","objet":"Pièce de bois d'Asvata","src":"recolte","qte":53,"prix":19497,"ev":[{"id":"mvn1z25e568s6","t":"2026-10-25 01:51","type":"poste","prix":19497,"qte":53},{"id":"mvn1z5876w54n","t":"2026-10-25 01:51","type":"vendu","prix":19497,"qte":53,"recu":930006}]},
   {"id":"mvo0tidrie029","objet":"Pièce de bois d'Asvata","src":"recolte","qte":86,"prix":18998,"cout":0,"ev":[{"id":"mvo0tidrf94yn","t":"2026-10-25 17:07","type":"poste","prix":18998,"qte":86},{"id":"mvo54kr2b7zd1","t":"2026-10-25 19:07","type":"vendu","prix":18998,"qte":86,"recu":1470445}]},
-  {"id":"mvo550c3qt18c","objet":"Élixir du vent","src":"recolte","qte":52,"prix":9998,"ev":[{"id":"mvo550c3spyff","t":"2026-10-25 19:08","type":"poste","prix":9998,"qte":52},{"id":"mvo6stbomjc2u","t":"2026-10-25 19:54","type":"vendu","prix":9998,"qte":52,"recu":467906}]}
+  {"id":"mvo550c3qt18c","objet":"Élixir du vent","src":"recolte","qte":52,"prix":9998,"ev":[{"id":"mvo550c3spyff","t":"2026-10-25 19:08","type":"poste","prix":9998,"qte":52},{"id":"mvo6stbomjc2u","t":"2026-10-25 19:54","type":"vendu","prix":9998,"qte":52,"recu":467906}]},
+  {"id":"mvo6t1b6uf43d","objet":"Élixir du vent supérieur","src":"recolte","qte":24,"prix":20998,"cout":0,"ev":[{"id":"mvo6t1b6iwwyc","t":"2026-10-25 19:54","type":"poste","prix":20998,"qte":24}]}
  ]
 }
