@@ -1,7 +1,7 @@
 {
  "_": "Journal de mes annonces, rempli depuis l'onglet 💰 Mes ventes du site (ne pas modifier à la main). Une annonce = un lot posté ; ses événements : poste, reliste (nouveau prix, nouveaux frais), vendu (quantité, prix, reçu après taxe), retire. « avant » = annonce antérieure au journal (date de mise en vente et frais inconnus).",
  "debut": "2026-10-19 02:35",
- "maj": "2026-10-25 17:07",
+ "maj": "2026-10-25 19:07",
  "lots": [
   {"id":"mvej81biqpfnu","objet":"Corne dure de Balaur raffinée","src":"achat","qte":33,"prix":65000,"cout":48196,"ev":[{"id":"mvej81bi9708r","t":"2026-10-19 02:44","type":"poste","prix":65000,"qte":33},{"id":"mvejqri9s067c","t":"2026-10-19 02:59","type":"src","src":"achat"},{"id":"mvejqri9hezu9","t":"2026-10-19 02:59","type":"cout","cout":35500},{"id":"mvfakymlripxk","t":"2026-10-19 15:30","type":"reliste","prix":54443,"qte":33,"frais":214500},{"id":"mvi8uwy5qz7l7","t":"2026-10-21 17:05","type":"reliste","prix":32886,"qte":33,"frais":179661},{"id":"mvijymgskrsqe","t":"2026-10-21 22:16","type":"vendu","prix":32886,"qte":33,"recu":976714}]},
   {"id":"mvej81biwm19w","objet":"Lingot d'orichalque","src":"recolte","qte":64,"prix":14990,"cout":0,"ev":[{"id":"mvej81bi0hmo8","t":"2026-10-19 02:44","type":"poste","prix":14990,"qte":64},{"id":"mvekmypofgcwj","t":"2026-10-19 03:24","type":"reliste","prix":3999,"qte":64,"frais":95936},{"id":"mvf97y6khsw8b","t":"2026-10-19 14:52","type":"vendu","prix":3999,"qte":64,"recu":230342}]},
@@ -53,6 +53,6 @@
   {"id":"mvmquh9mzuxyo","objet":"Bois d'Asvata d'une grande pureté","src":"brut","qte":98,"prix":18886,"ev":[{"id":"mvmquh9m057ho","t":"2026-10-24 20:40","type":"poste","prix":18886,"qte":98},{"id":"mvmqukzamx9qt","t":"2026-10-24 20:40","type":"vendu","prix":18886,"qte":98,"recu":1665745}]},
   {"id":"mvmqve10wkj9k","objet":"Bois d'Asvata pur","src":"brut","qte":9,"prix":209999,"cout":0,"ev":[{"id":"mvmqve10qtedx","t":"2026-10-24 20:40","type":"poste","prix":209999,"qte":9},{"id":"mvmqvm2d5b0kt","t":"2026-10-24 20:41","type":"vendu","prix":209999,"qte":9,"recu":1700991}]},
   {"id":"mvn1z25epm7xv","objet":"Pièce de bois d'Asvata","src":"recolte","qte":53,"prix":19497,"ev":[{"id":"mvn1z25e568s6","t":"2026-10-25 01:51","type":"poste","prix":19497,"qte":53},{"id":"mvn1z5876w54n","t":"2026-10-25 01:51","type":"vendu","prix":19497,"qte":53,"recu":930006}]},
-  {"id":"mvo0tidrie029","objet":"Pièce de bois d'Asvata","src":"recolte","qte":86,"prix":18998,"cout":0,"ev":[{"id":"mvo0tidrf94yn","t":"2026-10-25 17:07","type":"poste","prix":18998,"qte":86}]}
+  {"id":"mvo0tidrie029","objet":"Pièce de bois d'Asvata","src":"recolte","qte":86,"prix":18998,"cout":0,"ev":[{"id":"mvo0tidrf94yn","t":"2026-10-25 17:07","type":"poste","prix":18998,"qte":86},{"id":"mvo54kr2b7zd1","t":"2026-10-25 19:07","type":"vendu","prix":18998,"qte":86,"recu":1470445}]}
  ]
 }
