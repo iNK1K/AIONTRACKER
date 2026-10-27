@@ -61,6 +61,6 @@
   {"id":"mvp9wmeuzzjpr","objet":"Pièce de bois d'Asvata","src":"achat","qte":32,"prix":17999,"cout":9500,"ev":[{"id":"mvp9wmeu68je0","t":"2026-10-26 14:09","type":"poste","prix":17999,"qte":32},{"id":"mvpli9e4hm32y","t":"2026-10-26 19:33","type":"vendu","prix":17999,"qte":32,"recu":518371}]},
   {"id":"mvp9wmeu788bo","objet":"Pièce de bois d'Asvata","src":"achat","qte":32,"prix":17999,"cout":9500,"ev":[{"id":"mvp9wmeurpigm","t":"2026-10-26 14:09","type":"poste","prix":17999,"qte":32},{"id":"mvplidx9g3tgh","t":"2026-10-26 19:34","type":"vendu","prix":17999,"qte":32,"recu":518371}]},
   {"id":"mvpciyr0pi2oe","objet":"Parchemin de courage supérieur","src":"achat","qte":56,"prix":13999,"cout":7250,"ev":[{"id":"mvpciyr1hlbfv","t":"2026-10-26 15:22","type":"poste","prix":13999,"qte":56},{"id":"mvpf5co0i0yr8","t":"2026-10-26 16:36","type":"reliste","prix":13499,"qte":56},{"id":"mvpq23fenq0d8","t":"2026-10-26 21:41","type":"vendu","prix":13499,"qte":56,"recu":680349}]},
-  {"id":"mvqzi8diezg6v","objet":"Pièce de bois d'Asvata","src":"achat","qte":50,"prix":14999,"cout":11506,"ev":[{"id":"mvqzi8diboqul","t":"2026-10-27 18:53","type":"poste","prix":14999,"qte":50}]}
+  {"id":"mvqzi8diezg6v","objet":"Pièce de bois d'Asvata","src":"achat","qte":50,"prix":14999,"cout":11506,"ev":[{"id":"mvqzi8diboqul","t":"2026-10-27 18:53","type":"poste","prix":14999,"qte":50},{"id":"mvqziec8ljiup","t":"2026-10-27 18:53","type":"vendu","prix":14999,"qte":50,"recu":674955}]}
  ]
 }
