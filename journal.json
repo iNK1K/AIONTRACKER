@@ -78,6 +78,7 @@
   {"id":"mvshehq3d6nrs","objet":"Élixir du vent supérieur","src":"recolte","qte":10,"prix":39994,"ev":[{"id":"mvshehq3awmnt","t":"2026-10-28 20:02","type":"poste","prix":39994,"qte":10}]},
   {"id":"mvshehq3trfir","objet":"Élixir du vent supérieur","src":"recolte","qte":10,"prix":39994,"ev":[{"id":"mvshehq3k4zbc","t":"2026-10-28 20:02","type":"poste","prix":39994,"qte":10}]},
   {"id":"mvshehq3ul2gz","objet":"Élixir du vent supérieur","src":"recolte","qte":10,"prix":39994,"ev":[{"id":"mvshehq37ao8f","t":"2026-10-28 20:02","type":"poste","prix":39994,"qte":10}]},
-  {"id":"mvshehq3mmsl4","objet":"Élixir du vent supérieur","src":"recolte","qte":10,"prix":39994,"ev":[{"id":"mvshehq3qy7wa","t":"2026-10-28 20:02","type":"poste","prix":39994,"qte":10},{"id":"mvshev9iszr5w","t":"2026-10-28 20:02","type":"vendu","prix":39994,"qte":10,"recu":359946}]}
+  {"id":"mvshehq3mmsl4","objet":"Élixir du vent supérieur","src":"recolte","qte":10,"prix":39994,"ev":[{"id":"mvshehq3qy7wa","t":"2026-10-28 20:02","type":"poste","prix":39994,"qte":10},{"id":"mvshev9iszr5w","t":"2026-10-28 20:02","type":"vendu","prix":39994,"qte":10,"recu":359946}]},
+  {"id":"mvshf5tqcly0i","objet":"Élixir du vent supérieur","src":"recolte","qte":20,"prix":48500,"ev":[{"id":"mvshf5tqfqmjm","t":"2026-10-28 20:02","type":"poste","prix":48500,"qte":20}]}
  ]
 }
