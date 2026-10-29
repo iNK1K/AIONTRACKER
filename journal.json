@@ -96,6 +96,7 @@
   {"id":"mvsxxnpjz5hpj","objet":"Potion de soin supérieure","src":"achat","qte":20,"prix":15000,"cout":5830,"ev":[{"id":"mvsxxnpjpndw1","t":"2026-10-29 03:45","type":"poste","prix":15000,"qte":20}]},
   {"id":"mvsxxnpjkrp0a","objet":"Potion de soin supérieure","src":"achat","qte":20,"prix":15000,"cout":5830,"ev":[{"id":"mvsxxnpjc0whf","t":"2026-10-29 03:45","type":"poste","prix":15000,"qte":20}]},
   {"id":"mvsxxnpjgjspn","objet":"Potion de soin supérieure","src":"achat","qte":20,"prix":15000,"cout":5830,"ev":[{"id":"mvsxxnpjxijzl","t":"2026-10-29 03:45","type":"poste","prix":15000,"qte":20}]},
-  {"id":"mvtg9ir6vc3vr","objet":"Parchemin de sprint supérieur","src":"recolte","qte":20,"prix":50000,"cout":0,"ev":[{"id":"mvtg9ir6gvrq9","t":"2026-10-29 12:18","type":"poste","prix":50000,"qte":20}]}
+  {"id":"mvtg9ir6vc3vr","objet":"Parchemin de sprint supérieur","src":"recolte","qte":20,"prix":50000,"cout":0,"ev":[{"id":"mvtg9ir6gvrq9","t":"2026-10-29 12:18","type":"poste","prix":50000,"qte":20}]},
+  {"id":"mvtga3nshwbme","objet":"Parchemin de courage supérieur","src":"recolte","qte":20,"prix":20000,"cout":2000,"ev":[{"id":"mvtga3nsmmk88","t":"2026-10-29 12:18","type":"poste","prix":20000,"qte":20}]}
  ]
 }
