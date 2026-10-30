@@ -157,21 +157,55 @@ def activity_from_history(h):
                 points=len(obs), recorded=recorded)
 
 
+# a2-tracker (releve toutes les ~12 min) bloque l'acces automatique depuis le 30/10/2026 : l'activite vient de
+# l'historique aion2.exchange, un releve par heure. Les ventes et remises en vente d'une meme heure s'y compensent :
+# compare le 29/10 sur 141 items, il voit ~45 % des mouvements (ordre des items conserve, rang 0,92), d'ou ce facteur
+# (erreur typique x1,4 ; peu fiable sous 0,2 vente/h mesuree).
+AX_ACTIVITY_FACTOR = 2.2
+
+
+def ax_server(con, server):
+    r = con.execute("SELECT ax_id FROM servers WHERE id = ?", (str(server),)).fetchone()
+    return r["ax_id"] if r else None
+
+
+def ax_history(ax, item_id, hours=24):
+    """Historique aion2.exchange au format des observations a2-tracker (listings, price, fetchedAt)."""
+    if not ax:
+        return None
+    since = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    p = aion2exchange.prices(item_id, ax, since)
+    if not p:
+        return None
+    obs = [dict(listings=pt["listings"], price=pt.get("close"), fetchedAt=pt["ts"])
+           for pt in p.get("points", []) if pt.get("listings") is not None]
+    return {"observations": obs, "period": {"recordedObservations": sum(pt.get("samples") or 1 for pt in p["points"])}}
+
+
+def ax_activity(h):
+    a = activity_from_history(h)
+    if a:
+        for k in ("drops_h", "adds_h", "floor_up_drops_h"):
+            a[k] *= AX_ACTIVITY_FACTOR
+    return a
+
+
 def recent_activity(con, server, item_ids, hours=3):
     """Activite recente des items a surveiller (opportunites, mes annonces) : nouvelles annonces et ventes par heure
     sur les dernieres heures (repli sur 24 h si trop peu de releves). L'activite 24 h est aussi enregistree."""
     ts, out = now_iso(), {}
     since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()[:19]
-    hist = fetch_all(lambda iid: a2tracker.history(iid, server, 1), dict.fromkeys(item_ids))
+    ax = ax_server(con, server)
+    hist = fetch_all(lambda iid: ax_history(ax, iid), dict.fromkeys(item_ids))
     for iid, h in hist.items():
-        a24 = activity_from_history(h)
+        a24 = ax_activity(h)
         if not a24:
             continue
         con.execute("INSERT OR REPLACE INTO activity VALUES (?,?,?,?,?,?,?,?,?)",
                     (str(server), iid, ts, a24["hours"], a24["drops_h"], a24["adds_h"], a24["floor_up_drops_h"],
                      a24["points"], a24["recorded"]))
         obs = [o for o in h.get("observations", []) if (o.get("fetchedAt") or "")[:19] >= since]
-        a3 = activity_from_history({"observations": obs})
+        a3 = ax_activity({"observations": obs})
         out[iid] = dict(a3 if a3 and a3["points"] >= 4 else a24, window=f"{hours} h" if a3 and a3["points"] >= 4 else "24 h")
     con.commit()
     return out
@@ -180,9 +214,10 @@ def recent_activity(con, server, item_ids, hours=3):
 def collect_activity(con, server, item_ids):
     ts = now_iso()
     n = 0
-    hist = fetch_all(lambda iid: a2tracker.history(iid, server, 1), item_ids)
+    ax = ax_server(con, server)
+    hist = fetch_all(lambda iid: ax_history(ax, iid), item_ids, workers=2)
     for iid, h in hist.items():
-        a = activity_from_history(h)
+        a = ax_activity(h)
         if a:
             con.execute("INSERT OR REPLACE INTO activity VALUES (?,?,?,?,?,?,?,?,?)",
                         (str(server), iid, ts, a["hours"], a["drops_h"], a["adds_h"], a["floor_up_drops_h"],

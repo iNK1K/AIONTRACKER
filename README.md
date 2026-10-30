@@ -68,8 +68,8 @@ Python est **portable** (`.runtime\python`) : rien n'est installé sur le systè
 ## Sources
 | Source | Utilisation |
 |---|---|
-| a2-tracker.com | catalogue complet FR/EN + images, recettes, prix plancher de tout le marché, mouvements d'annonces 24 h |
-| aion2.exchange | complément des prix (items qu'a2-tracker ne voit pas), historique de prix horaire |
+| a2-tracker.com | catalogue complet FR/EN + images, recettes : **accès automatique bloqué depuis le 30/10/2026** (autorisation écrite exigée, https://a2-tracker.com/data-use) ; la base garde les recettes, le catalogue et les images déjà récupérés |
+| aion2.exchange | prix plancher de tout le marché (toutes les heures), historique de prix horaire, mouvements d'annonces 24 h (un relevé par heure, corrigé ×2,2 pour retrouver le niveau mesuré par a2-tracker) |
 | questlog.gg | points de récolte (noms FR) et fonds de carte |
 | aion2.plaync.com | notes de version et avis officiels (API publique du tableau d'annonces) |
 | reddit.com/r/aion2 | posts dont le titre contient un mot-clé (au mieux : Reddit limite souvent les serveurs) |
@@ -98,7 +98,7 @@ logs/           run.log, alerts.log
 
 Le workflow `.github/workflows/hdv.yml` tourne sur GitHub. Il est déclenché par **cron-job.org** (les créneaux planifiés de GitHub prenaient des heures de retard) :
 - tâche « HDV hourly », toutes les heures : relevé des prix, analyses, alertes Discord, annonces officielles, mise à jour du site ;
-- tâche « HDV daily », chaque jour à 17h40 : recettes, prix, activité, purge de la base, résumé Discord (+ tendances le dimanche), sauvegarde de la base.
+- tâche « HDV daily », chaque jour à 17h40 : prix, activité, purge de la base, résumé Discord (+ tendances le dimanche), sauvegarde de la base.
 
 Chaque tâche appelle `POST https://api.github.com/repos/<pseudo>/<depot>/actions/workflows/hdv.yml/dispatches` avec les en-têtes `Accept: application/vnd.github+json`, `Authorization: Bearer <token>` (token fine-grained, permission Actions : lecture et écriture) et `X-GitHub-Api-Version: 2022-11-28`, et le corps `{"ref":"main","inputs":{"job":"hourly"}}` (ou `daily`).
 

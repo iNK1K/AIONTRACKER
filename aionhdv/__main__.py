@@ -1,16 +1,16 @@
 """Point d'entree : python -m aionhdv <commande>
 
 Commandes :
-  init        serveurs, recettes, catalogue complet (FR/EN), carte questlog, controle des noms
-  icons       telecharge les images des items vus sur le marche ou dans les recettes
+  init        serveurs, recettes, catalogue complet (FR/EN), carte questlog, controle des noms (a2-tracker : bloque)
+  icons       telecharge les images des items vus sur le marche ou dans les recettes (a2-tracker : bloque)
   snapshot    prix de tout le marche des serveurs suivis (toutes les heures)
-  activity    mouvements d'annonces sur 24 h (serveur suivi)
+  activity    mouvements d'annonces sur 24 h (serveur suivi, historique horaire aion2.exchange)
   backfill    historique de prix aion2.exchange depuis le 5 octobre
   purge       retire de la base les serveurs non suivis et les vieilles analyses
   analyze     calculs + rapport HTML
   news        annonces officielles (site officiel, Reddit) -> Discord
   hourly      snapshot + analyze + alertes + annonces officielles
-  daily       marche + activity + purge + resume du jour (+ tendances le dimanche)
+  daily       marche + activity + purge + resume du jour (+ tendances le dimanche) ; les recettes restent celles de la base
   report      regenere seulement le rapport HTML
 
 Option :
@@ -49,8 +49,8 @@ def cmd_init(con, cfg):
 
 def cmd_snapshot(con, cfg):
     for s in cfg["watch_servers"]:
-        log(f"marche {s} : {catalog.snapshot_market(con, s)} items cotes (a2-tracker), "
-            f"complement aion2.exchange (ajoutes, nouveaux items) : {catalog.snapshot_market_ax(con, s)}")
+        # a2-tracker bloque l'acces automatique depuis le 30/10/2026 : tout le marche vient d'aion2.exchange
+        log(f"marche {s} (aion2.exchange, cotes et nouveaux items) : {catalog.snapshot_market_ax(con, s)}")
 
 
 def cmd_activity(con, cfg):
@@ -181,12 +181,11 @@ def main(argv):
                 step("analyse", lambda: cmd_analyze(con, cfg, send_alerts=True), errors)
                 step("annonces", lambda: cmd_news(con, cfg), errors)
             else:
-                step("recettes", lambda: log(f"recettes : {collect.sync_recipes(con, cfg['locale'])}"), errors)
+                # recettes et images venaient d'a2-tracker (acces automatique bloque) : on garde celles de la base
                 step("marche", lambda: cmd_snapshot(con, cfg), errors)    # le daily peut remplacer un passage horaire
                 step("fraicheur", lambda: cmd_freshness(con, cfg), errors)
                 step("activite", lambda: cmd_activity(con, cfg), errors)
                 step("purge", lambda: (log(f"purge : {collect.purge(con, servers(cfg))} lignes"), con.execute("VACUUM")), errors)
-                step("images", lambda: catalog.download_icons(con), errors)
                 step("analyse", lambda: cmd_analyze(con, cfg, send_alerts=True, send_digest=True), errors)
             if "analyse" in errors:
                 raise RuntimeError("analyse impossible : rapport non produit")
