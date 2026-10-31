@@ -105,7 +105,7 @@
   {"id":"mvtvv8ehkmokv","objet":"Élixir du vent supérieur","src":"achat","qte":10,"prix":55000,"cout":39200,"ev":[{"id":"mvtvv8ehdhlvv","t":"2026-10-29 19:35","type":"poste","prix":55000,"qte":10},{"id":"mvtx42ocl9vyt","t":"2026-10-29 20:09","type":"reliste","prix":49999,"qte":10},{"id":"mvvq9ck4kw3qt","t":"2026-10-31 02:33","type":"vendu","prix":49999,"qte":10,"recu":449991}]},
   {"id":"mvtvv8eh6c0wx","objet":"Élixir du vent supérieur","src":"achat","qte":10,"prix":55000,"cout":39200,"ev":[{"id":"mvtvv8ehydipo","t":"2026-10-29 19:35","type":"poste","prix":55000,"qte":10},{"id":"mvtx3zsc5goce","t":"2026-10-29 20:09","type":"reliste","prix":49999,"qte":10},{"id":"mvvq9fn00hydq","t":"2026-10-31 02:33","type":"vendu","prix":49999,"qte":10,"recu":449991}]},
   {"id":"mvvq9wn6juf9q","objet":"Œuvre d'art : Draupnir","src":"achat","qte":1,"prix":1900000,"ev":[{"id":"mvvq9wn6i9px9","t":"2026-10-31 02:34","type":"poste","prix":1900000,"qte":1}]},
-  {"id":"mvvq9wn6qrelx","objet":"Œuvre d'art : Draupnir","src":"achat","qte":1,"prix":1900000,"ev":[{"id":"mvvq9wn6ghinh","t":"2026-10-31 02:34","type":"poste","prix":1900000,"qte":1}]},
+  {"id":"mvvq9wn6qrelx","objet":"Œuvre d'art : Draupnir","src":"achat","qte":1,"prix":1900000,"ev":[{"id":"mvvq9wn6ghinh","t":"2026-10-31 02:34","type":"poste","prix":1900000,"qte":1},{"id":"mvwc1hlirm6gx","t":"2026-10-31 12:43","type":"vendu","prix":1900000,"qte":1,"recu":1710000}]},
   {"id":"mvvq9wn6eo62c","objet":"Œuvre d'art : Draupnir","src":"achat","qte":1,"prix":1900000,"ev":[{"id":"mvvq9wn6kfwpx","t":"2026-10-31 02:34","type":"poste","prix":1900000,"qte":1},{"id":"mvwc1exatru2d","t":"2026-10-31 12:43","type":"vendu","prix":1900000,"qte":1,"recu":1710000}]}
  ]
 }
